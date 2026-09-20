@@ -75,8 +75,32 @@ function drawPrimitive(page: PDFPage, prim: Primitive, sheet: Page['sheet'], fon
   }
 }
 
-export function downloadPdf(bytes: Uint8Array, filename: string) {
+interface HostDownloads {
+  save(request: { filename: string; data: Blob }): Promise<unknown>;
+}
+
+// A published preview runs in a sandboxed frame, where clicking an anchor is
+// ignored and the host offers its own save prompt instead. Everywhere else
+// this resolves to nothing and the ordinary download runs.
+async function hostDownloads(): Promise<HostDownloads | null> {
+  try {
+    const use = (window as { claude?: { use?: (n: string) => Promise<unknown> } }).claude?.use;
+    return use ? ((await use('downloads')) as HostDownloads | null) : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function downloadPdf(bytes: Uint8Array, filename: string) {
   const blob = new Blob([new Uint8Array(bytes)], { type: 'application/pdf' });
+
+  const host = await hostDownloads();
+  if (host) {
+    // A rejection here is the viewer declining, so there is nothing to retry.
+    await host.save({ filename, data: blob }).catch(() => {});
+    return;
+  }
+
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
