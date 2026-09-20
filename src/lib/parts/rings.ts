@@ -1,28 +1,39 @@
-import type { SizeSpec } from '../../types';
 import type { Primitive } from '../draw';
 import { GRAY } from '../draw';
 
-// Approximate 6-ring positions (system-planner style). MVP numbers only —
-// firm values belong in a per-size spec table in the detailed design phase.
-export function ringGuides(size: SizeSpec, side: 'left' | 'right'): Primitive[] {
-  const holeCount = size.id === 'A5' ? 6 : 6;
-  const guides: Primitive[] = [];
-  const margin = size.ringMarginMm;
-  const bandX = side === 'right' ? 0 : size.widthMm - margin;
-  const bandW = margin;
-  // Gray band showing the ring zone
-  guides.push({
-    type: 'rect', x: bandX, y: 0, w: bandW, h: size.heightMm,
-    fill: [0.94, 0.94, 0.94],
-  });
-  // Punch-hole dots evenly spaced vertically, centered in the band
-  const cx = bandX + bandW / 2;
-  const step = size.heightMm / (holeCount + 1);
-  const dotR = 1.8;
-  for (let i = 1; i <= holeCount; i++) {
-    const cy = step * i;
+// Which edge of the reading-space page the binding runs along.
+//   single portrait  -> 'left'   (rings at the side)
+//   single landscape -> 'top'    (planner turned a quarter turn)
+//   spread portrait  -> 'right' on the left page, 'left' on the right page
+//   spread landscape -> 'bottom' on the top page, 'top' on the bottom page
+// In every spread the two bands meet at the gutter between the pages.
+export type RingEdge = 'left' | 'right' | 'top' | 'bottom';
+
+const HOLE_COUNT = 6;
+const HOLE_RADIUS_MM = 1.8;
+
+// Non-printing guides marking the zone the rings occupy. Callers must keep
+// content out of this band: nothing may sit under a punch hole.
+export function ringGuides(edge: RingEdge, pageW: number, pageH: number, bandMm: number): Primitive[] {
+  const vertical = edge === 'left' || edge === 'right';
+  const band = vertical
+    ? { x: edge === 'left' ? 0 : pageW - bandMm, y: 0, w: bandMm, h: pageH }
+    : { x: 0, y: edge === 'top' ? 0 : pageH - bandMm, w: pageW, h: bandMm };
+
+  const guides: Primitive[] = [
+    { type: 'rect', ...band, fill: [0.94, 0.94, 0.94] },
+  ];
+
+  const span = vertical ? pageH : pageW;
+  const step = span / (HOLE_COUNT + 1);
+  const across = vertical ? band.x + bandMm / 2 : band.y + bandMm / 2;
+  for (let i = 1; i <= HOLE_COUNT; i++) {
+    const along = step * i;
     guides.push({
-      type: 'rect', x: cx - dotR, y: cy - dotR, w: dotR * 2, h: dotR * 2,
+      type: 'circle',
+      cx: vertical ? across : along,
+      cy: vertical ? along : across,
+      r: HOLE_RADIUS_MM,
       fill: GRAY,
     });
   }

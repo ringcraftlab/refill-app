@@ -21,6 +21,17 @@ function Primitives({ items }: { items: Primitive[] }) {
             />
           );
         }
+        if (p.type === 'circle') {
+          return (
+            <circle
+              key={i}
+              cx={p.cx} cy={p.cy} r={p.r}
+              fill={p.fill ? rgb(p.fill) : 'none'}
+              stroke={p.stroke ? rgb(p.stroke) : 'none'}
+              strokeWidth={p.strokeMm ?? 0}
+            />
+          );
+        }
         if (p.type === 'line') {
           return (
             <line

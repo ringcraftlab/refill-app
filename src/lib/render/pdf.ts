@@ -1,5 +1,5 @@
-import { PDFDocument, StandardFonts, rgb, PDFFont, PDFPage } from 'pdf-lib';
-import type { Page } from '../draw';
+import { PDFDocument, StandardFonts, rgb, PDFFont, PDFPage, degrees } from 'pdf-lib';
+import type { Page, Primitive } from '../draw';
 import { mmToPt } from '../sizes';
 
 // Renders `pages` to a PDF at exact mm dimensions. Guides are omitted.
@@ -12,54 +12,71 @@ export async function pagesToPdf(pages: Page[], title: string): Promise<Uint8Arr
   const font = await doc.embedFont(StandardFonts.Helvetica);
 
   for (const p of pages) {
-    const wPt = mmToPt(p.widthMm);
-    const hPt = mmToPt(p.heightMm);
-    const page = doc.addPage([wPt, hPt]);
-    for (const prim of p.primitives) drawPrimitive(page, prim, hPt, font);
+    // Pages are built in reading space, but what gets printed is the physical
+    // punched sheet, so a landscape page is given a quarter turn here. The
+    // sheet stays portrait and its holes stay on the long edge.
+    const page = doc.addPage([mmToPt(p.sheet.widthMm), mmToPt(p.sheet.heightMm)]);
+    for (const prim of p.primitives) drawPrimitive(page, prim, p.sheet, font);
   }
 
   return doc.save();
 }
 
-function drawPrimitive(page: PDFPage, prim: any, hPt: number, font: PDFFont) {
+function drawPrimitive(page: PDFPage, prim: Primitive, sheet: Page['sheet'], font: PDFFont) {
+  const turned = sheet.rotation === 90;
+  // Reading space has a top-left origin; PDF has a bottom-left one. On a turned
+  // sheet the reading x-axis runs up the sheet and the reading y-axis across it.
+  const pt = (x: number, y: number) =>
+    turned
+      ? { x: mmToPt(y), y: mmToPt(x) }
+      : { x: mmToPt(x), y: mmToPt(sheet.heightMm - y) };
+
   if (prim.type === 'rect') {
-    const x = mmToPt(prim.x);
-    const y = hPt - mmToPt(prim.y + prim.h);
-    const w = mmToPt(prim.w);
-    const h = mmToPt(prim.h);
+    const origin = turned ? pt(prim.x, prim.y) : pt(prim.x, prim.y + prim.h);
     page.drawRectangle({
-      x, y, width: w, height: h,
-      color: prim.fill ? rgb(prim.fill[0], prim.fill[1], prim.fill[2]) : undefined,
-      borderColor: prim.stroke ? rgb(prim.stroke[0], prim.stroke[1], prim.stroke[2]) : undefined,
+      x: origin.x, y: origin.y,
+      width: mmToPt(turned ? prim.h : prim.w),
+      height: mmToPt(turned ? prim.w : prim.h),
+      color: prim.fill ? rgb(...prim.fill) : undefined,
+      borderColor: prim.stroke ? rgb(...prim.stroke) : undefined,
       borderWidth: prim.strokeMm ? mmToPt(prim.strokeMm) : 0,
     });
   } else if (prim.type === 'line') {
     page.drawLine({
-      start: { x: mmToPt(prim.x1), y: hPt - mmToPt(prim.y1) },
-      end:   { x: mmToPt(prim.x2), y: hPt - mmToPt(prim.y2) },
+      start: pt(prim.x1, prim.y1),
+      end: pt(prim.x2, prim.y2),
       thickness: mmToPt(prim.strokeMm ?? 0.2),
-      color: rgb(prim.stroke[0], prim.stroke[1], prim.stroke[2]),
+      color: rgb(...prim.stroke),
     });
-  } else if (prim.type === 'text') {
+  } else if (prim.type === 'circle') {
+    const c = pt(prim.cx, prim.cy);
+    page.drawCircle({
+      x: c.x, y: c.y, size: mmToPt(prim.r),
+      color: prim.fill ? rgb(...prim.fill) : undefined,
+      borderColor: prim.stroke ? rgb(...prim.stroke) : undefined,
+      borderWidth: prim.strokeMm ? mmToPt(prim.strokeMm) : 0,
+    });
+  } else {
     // Strip non-WinAnsi characters so Helvetica does not throw. Follow-up:
     // embed a CJK-capable font via fontkit.
     const safe = prim.text.replace(/[^\x20-\x7E]/g, '');
-    const size = prim.sizePt;
-    const width = font.widthOfTextAtSize(safe, size);
-    let dx = 0;
-    if (prim.align === 'center') dx = -width / 2;
-    else if (prim.align === 'right') dx = -width;
-    const x = mmToPt(prim.x) + dx;
-    const y = hPt - mmToPt(prim.y);
+    const width = font.widthOfTextAtSize(safe, prim.sizePt);
+    const dx = prim.align === 'center' ? -width / 2 : prim.align === 'right' ? -width : 0;
+    const at = pt(prim.x, prim.y);
     page.drawText(safe, {
-      x, y, size, font,
-      color: prim.color ? rgb(prim.color[0], prim.color[1], prim.color[2]) : rgb(0,0,0),
+      // dx runs along the reading x-axis, which the turn maps onto PDF +Y.
+      x: turned ? at.x : at.x + dx,
+      y: turned ? at.y + dx : at.y,
+      size: prim.sizePt,
+      font,
+      rotate: degrees(turned ? 90 : 0),
+      color: prim.color ? rgb(...prim.color) : rgb(0, 0, 0),
     });
   }
 }
 
 export function downloadPdf(bytes: Uint8Array, filename: string) {
-  const blob = new Blob([bytes], { type: 'application/pdf' });
+  const blob = new Blob([new Uint8Array(bytes)], { type: 'application/pdf' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;

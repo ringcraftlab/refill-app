@@ -106,6 +106,7 @@ export function buildHabitTrackerPages(part: HabitTrackerPart, size: SizeSpec): 
   return [{
     widthMm: W, heightMm: H,
     primitives,
-    guides: ringGuides(size, 'right'), // rings on left edge
+    guides: ringGuides('left', W, H, ringMargin),
+    sheet: { widthMm: W, heightMm: H, rotation: 0 },
   }];
 }

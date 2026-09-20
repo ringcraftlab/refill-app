@@ -29,15 +29,31 @@ export interface DrawText {
   // Horizontal alignment relative to (x, y). y is the baseline.
   align?: 'left' | 'center' | 'right';
 }
+export interface DrawCircle {
+  type: 'circle';
+  cx: number; cy: number; r: number;
+  fill?: Color;
+  stroke?: Color;
+  strokeMm?: number;
+}
 
-export type Primitive = DrawRect | DrawLine | DrawText;
+export type Primitive = DrawRect | DrawLine | DrawText | DrawCircle;
+
+// A landscape refill is the same punched sheet held sideways, so its content
+// is rotated a quarter turn onto a portrait sheet whose holes stay on the long
+// edge. Preview works in reading space; the PDF exporter applies the rotation.
+export type SheetRotation = 0 | 90;
 
 export interface Page {
+  // Reading space: the page as the user holds and reads it. For landscape
+  // variants this is the sheet turned on its side, so width > height.
   widthMm: number;
   heightMm: number;
   primitives: Primitive[];
   // Non-printing guides for on-screen only (rings, punch holes).
   guides: Primitive[];
+  // The physical punched sheet this reading-space canvas prints onto.
+  sheet: { widthMm: number; heightMm: number; rotation: SheetRotation };
 }
 
 export const BLACK: Color = [0, 0, 0];

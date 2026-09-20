@@ -18,9 +18,14 @@ function load(): Store {
 }
 
 function migrate(l: Layout): Layout {
-  // Currently only v1 exists. Add up-conversions here on future bumps.
   if (l.version === SCHEMA_VERSION) return l;
-  return { ...l, version: SCHEMA_VERSION };
+  let part = l.part;
+  if ((l.version ?? 1) < 2 && part.kind === 'monthly-calendar') {
+    // v1 stored a `spread` boolean; v2 names the four confirmed variants.
+    const { spread, ...rest } = part as typeof part & { spread?: boolean };
+    part = { ...rest, variant: spread ? 'spread-weekday' : 'single-portrait' };
+  }
+  return { ...l, part, version: SCHEMA_VERSION };
 }
 
 function save(store: Store) {

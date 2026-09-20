@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { Layout, Part, RefillSize } from './types';
+import type { Layout, MonthlyVariant, Part, RefillSize } from './types';
 import { SCHEMA_VERSION } from './types';
 import { SIZES } from './lib/sizes';
 import { PageSvg } from './lib/render/svg';
 import { pagesToPdf, downloadPdf } from './lib/render/pdf';
 import { buildHabitTrackerPages } from './lib/parts/habitTracker';
-import { buildMonthlyCalendarPages } from './lib/parts/monthlyCalendar';
+import { buildMonthlyCalendarPages, monthlyPageFlow } from './lib/parts/monthlyCalendar';
 import { deleteLayout, listLayouts, newId, saveLayout } from './lib/storage';
 
 type Tab = 'habit' | 'monthly';
@@ -31,7 +31,7 @@ function defaultPart(tab: Tab): Part {
     month: today.getMonth() + 1,
     weekStart: 1,
     weekdayFormat: 'en-short',
-    spread: true,
+    variant: 'spread-weekday',
   };
 }
 
@@ -66,6 +66,11 @@ export function App() {
     if (layout.part.kind === 'habit-tracker') return buildHabitTrackerPages(layout.part, size);
     return buildMonthlyCalendarPages(layout.part, size);
   }, [layout, size]);
+
+  // A landscape spread stacks its pages: the gutter runs between them.
+  const flow = layout.part.kind === 'monthly-calendar'
+    ? monthlyPageFlow(layout.part.variant)
+    : 'row';
 
   const refreshSaved = () => setSaved(listLayouts());
 
@@ -136,7 +141,7 @@ export function App() {
         <div style={{ fontSize: 13, color: '#666' }}>
           {size.label} · プレビューは実寸の約3倍で表示
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div className="pages" style={{ display: 'flex', flexDirection: flow, gap: pages.length > 1 ? 0 : 8 }}>
           {pages.map((p, i) => (
             <PageSvg key={i} page={p} scale={3} showGuides={showGuides} />
           ))}
@@ -210,10 +215,13 @@ function MonthlyControls({ layout, onChange }: { layout: Layout; onChange: (l: L
         <option value="jp-long">日 月 火 ...</option>
       </select>
 
-      <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        <input type="checkbox" style={{ width: 'auto' }} checked={p.spread} onChange={e => set({ spread: e.target.checked })} />
-        見開き2ページ（M5推奨）
-      </label>
+      <label>レイアウト</label>
+      <select value={p.variant} onChange={e => set({ variant: e.target.value as MonthlyVariant })}>
+        <option value="spread-weekday">見開き・曜日分割（月火水／木金土日）</option>
+        <option value="spread-week">見開き・週分割（横向き・上下）</option>
+        <option value="single-portrait">片側・縦</option>
+        <option value="single-landscape">片側・横（回転）</option>
+      </select>
     </>
   );
 }
