@@ -29,6 +29,8 @@ function inset(area: Rect) {
 export const weekCount = (layout: Layout): number =>
   monthGrid(layout.year, layout.month, layout.weekStart).length;
 
+const EN_MONTH = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
 interface MonthlySlice {
   // Slice of the seven weekday columns. The grid is always seven columns; a
   // spread just gives each page some of them.
@@ -36,13 +38,20 @@ interface MonthlySlice {
   rows: [number, number];
   // 'reserve' keeps the band empty so a facing page's grid starts level.
   monthLabel: 'show' | 'reserve' | 'none';
+  // The three-weekday page of a spread gets one extra column, so all seven
+  // weekday columns come out the same width across the spread instead of the
+  // three-column side being fatter. Printed refills do the same and use that
+  // column for the month block and a free cell per week.
+  indexColumn?: boolean;
 }
 
 export function drawMonthly(area: Rect, layout: Layout, slice: MonthlySlice): Primitive[] {
   const [colStart, colEnd] = slice.cols;
   const weeks = monthGrid(layout.year, layout.month, layout.weekStart).slice(slice.rows[0], slice.rows[1]);
-  const nCols = colEnd - colStart;
-  if (nCols <= 0 || weeks.length === 0) return [];
+  const dayCols = colEnd - colStart;
+  const lead = slice.indexColumn ? 1 : 0;
+  const nCols = lead + dayCols;
+  if (dayCols <= 0 || weeks.length === 0) return [];
 
   const { left, right, top, bottom } = inset(area);
   const width = right - left;
@@ -63,11 +72,31 @@ export function drawMonthly(area: Rect, layout: Layout, slice: MonthlySlice): Pr
 
   out.push({ type: 'rect', x: left, y: gridTop, w: width, h: DOW_HEADER_H, fill: LABEL_BG });
   const dows = orderedWeekdays(layout.weekStart);
-  for (let c = 0; c < nCols; c++) {
+  if (lead) {
+    out.push({
+      type: 'text', x: left + colW * 0.5, y: gridTop + DOW_HEADER_H - 1.1,
+      text: String(layout.year), sizePt: 5, color: INK_SOFT, align: 'center',
+    });
+  }
+  for (let c = 0; c < dayCols; c++) {
     const dow = dows[colStart + c];
     out.push({
-      type: 'text', x: left + colW * (c + 0.5), y: gridTop + DOW_HEADER_H - 1.1,
+      type: 'text', x: left + colW * (lead + c + 0.5), y: gridTop + DOW_HEADER_H - 1.1,
       text: weekdayLabel(dow), sizePt: 5, color: dowColor(dow), align: 'center',
+    });
+  }
+
+  if (lead) {
+    // The month block sits in the first free cell; the cells below it stay
+    // empty, which is the per-week memo space.
+    const cx = left + colW * 0.5;
+    out.push({
+      type: 'text', x: cx, y: bodyTop + Math.min(rowH * 0.55, 9),
+      text: String(layout.month), sizePt: Math.min(20, rowH * 1.4), color: INK, align: 'center',
+    });
+    out.push({
+      type: 'text', x: cx, y: bodyTop + Math.min(rowH * 0.8, 13),
+      text: EN_MONTH[layout.month - 1], sizePt: 6, color: INK_SOFT, align: 'center',
     });
   }
 
@@ -86,10 +115,10 @@ export function drawMonthly(area: Rect, layout: Layout, slice: MonthlySlice): Pr
 
   const roomForRokuyo = rowH >= 6 && colW >= 7;
   for (let r = 0; r < weeks.length; r++) {
-    for (let c = 0; c < nCols; c++) {
+    for (let c = 0; c < dayCols; c++) {
       const cell = weeks[r][colStart + c];
       if (!cell) continue;
-      const x = left + colW * c + 0.9;
+      const x = left + colW * (lead + c) + 0.9;
       const y = bodyTop + rowH * r;
       out.push({
         type: 'text', x, y: y + 2.6, text: String(cell.getDate()),
@@ -112,10 +141,13 @@ export function drawSpanningMonthly(area: Rect, page: PageKey, layout: Layout): 
       monthLabel: page === 'left' ? 'show' : 'none',
     });
   }
+  // The month lives in the left page's index column, so neither page needs a
+  // label band on top and both grids start level across the gutter.
   return drawMonthly(area, layout, {
     cols: page === 'left' ? [0, 3] : [3, 7],
     rows: [0, rows],
-    monthLabel: page === 'left' ? 'show' : 'reserve',
+    monthLabel: 'none',
+    indexColumn: page === 'left',
   });
 }
 
