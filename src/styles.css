@@ -42,6 +42,41 @@ h2 { font-size: 14px; margin: 0; }
 
 .link { border: none; background: none; color: var(--muted); font-size: 12px; padding: 0; align-self: flex-start; }
 
+/* Drawn to one scale, bottom aligned, so the row reads as a size comparison.
+   The holes come from the same spec the refill is punched to. */
+.sizerow {
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  overflow-x: auto;
+  /* Full bleed, so five sizes fit without the outer page padding eating into
+     the comparison. */
+  margin: 0 -14px;
+  padding: 0 14px 4px;
+  /* Centring a scrolling row cuts off the leading card and puts it out of
+     reach, so the row starts at the left and scrolls. */
+  justify-content: flex-start;
+}
+.sizecard {
+  flex-shrink: 0;
+  width: max-content;
+  max-width: 96px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 4px;
+  border: 1.5px solid transparent;
+  border-radius: 10px;
+  background: none;
+}
+.sizecard.on { border-color: var(--ink); background: #fff; }
+.sizecard .art { display: flex; align-items: flex-end; }
+.sizecard svg { display: block; }
+.sizecard strong { font-size: 11px; margin-top: 4px; }
+.sizecard small { font-size: 8.5px; color: var(--faint); text-align: center; line-height: 1.35; }
+.sizecard .note { color: var(--accent); }
+
 .cards { display: flex; flex-direction: column; gap: 10px; }
 .card {
   display: flex; align-items: center; gap: 14px;
@@ -52,8 +87,7 @@ h2 { font-size: 14px; margin: 0; }
 .card-text { display: flex; flex-direction: column; gap: 2px; }
 .card-text strong { font-size: 14px; }
 .card-text small { font-size: 11px; color: var(--faint); }
-.swatch, .mini-single { background: var(--bg); border: 1px solid var(--line-strong); border-radius: 2px; flex-shrink: 0; }
-.mini-single { width: 34px; height: 52px; background: #fff; }
+.mini-single { width: 34px; height: 52px; background: #fff; border: 1px solid var(--line-strong); border-radius: 2px; flex-shrink: 0; }
 .mini-spread { display: flex; gap: 3px; flex-shrink: 0; }
 .mini-spread i { width: 34px; height: 52px; background: #fff; border: 1px solid var(--line-strong); border-radius: 2px; }
 

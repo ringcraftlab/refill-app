@@ -40,7 +40,7 @@ const stamp = (label) => page.locator('.stamp', { hasText: label });
 await page.goto(BASE);
 await shot('01-サイズ選択');
 
-await page.locator('.card', { hasText: 'M6' }).click();
+await page.locator('.sizecard', { hasText: 'ミニ6' }).click();
 await shot('02-ページ構成');
 
 await page.locator('.card', { hasText: '見開き' }).click();

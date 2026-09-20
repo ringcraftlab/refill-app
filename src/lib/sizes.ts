@@ -11,11 +11,11 @@ import type { HoleSpec, RefillSize, SizeSpec } from '../types';
 //   Micro 5 14.5×2 + 19×4 = 105        (five holes, not six)
 export const SIZES: Record<RefillSize, SizeSpec> = {
   M5: {
-    id: 'M5', label: 'マイクロ5（M5）', widthMm: 62, heightMm: 105, ringMarginMm: 8,
+    id: 'M5', label: 'マイクロ5', widthMm: 62, heightMm: 105, ringMarginMm: 8,
     holes: { count: 5, diameterMm: 4, pitchMm: 19, marginMm: 14.5 },
   },
   M6: {
-    id: 'M6', label: 'ミニ6（M6）', widthMm: 80, heightMm: 127, ringMarginMm: 9,
+    id: 'M6', label: 'ミニ6', widthMm: 80, heightMm: 127, ringMarginMm: 9,
     holes: { count: 6, diameterMm: 4, pitchMm: 19, marginMm: 16 },
   },
   NARROW: {

@@ -1,7 +1,7 @@
 import { useLayoutEffect, useMemo, useRef, useState } from 'react';
-import type { Layout, PartKind, RefillSize, SpanPattern } from './types';
+import type { Layout, PartKind, RefillSize, SizeSpec, SpanPattern } from './types';
 import { MAX_PARTS, SCHEMA_VERSION } from './types';
-import { SIZES } from './lib/sizes';
+import { holeCentres, SIZES } from './lib/sizes';
 import { buildGeometry, MAX_RATIO, MIN_RATIO, regionAt, splitFor } from './lib/layout';
 import type { Divider } from './lib/layout';
 import { buildPages } from './lib/render/pages';
@@ -70,21 +70,60 @@ export function App() {
   return <CanvasScreen layout={layout} setLayout={setLayout} onBack={() => setStage('sides')} />;
 }
 
+// Largest to smallest, drawn to one scale so the row itself shows how the
+// sizes compare.
+const SIZE_ORDER: RefillSize[] = ['A5', 'BIBLE', 'NARROW', 'M6', 'M5'];
+const SIZE_NOTE: Record<RefillSize, string> = {
+  A5: '書き込み重視',
+  BIBLE: '王道サイズ',
+  NARROW: '細身で軽い',
+  M6: '携帯性重視',
+  M5: 'メモ帳サイズ',
+};
+// Millimetres to pixels for the picker. The whole row has to fit a phone.
+const PICKER_SCALE = 0.56;
+
+function SizeIcon({ size }: { size: SizeSpec }) {
+  return (
+    <svg
+      width={size.widthMm * PICKER_SCALE}
+      height={size.heightMm * PICKER_SCALE}
+      viewBox={`0 0 ${size.widthMm} ${size.heightMm}`}
+      aria-hidden="true"
+    >
+      <rect
+        x={0.4} y={0.4} width={size.widthMm - 0.8} height={size.heightMm - 0.8}
+        rx={1.5} fill="#fff" stroke="#C9C2B2" strokeWidth={0.8}
+      />
+      {holeCentres(size.holes).map((cy, i) => (
+        <circle
+          key={i}
+          cx={size.ringMarginMm / 2} cy={cy} r={size.holes.diameterMm / 2}
+          fill="none" stroke="#A8A192" strokeWidth={0.7}
+        />
+      ))}
+    </svg>
+  );
+}
+
 function SizeScreen({ selected, onPick }: { selected: RefillSize; onPick: (s: RefillSize) => void }) {
+  const tallest = Math.max(...SIZE_ORDER.map(id => SIZES[id].heightMm)) * PICKER_SCALE;
   return (
     <div className="screen pad">
       <div className="brand">RingCraftLab</div>
       <h1>手帳のサイズを選ぶ</h1>
-      <div className="cards">
-        {Object.values(SIZES).map(s => (
-          <button key={s.id} className={`card${selected === s.id ? ' on' : ''}`} onClick={() => onPick(s.id)}>
-            <span className="swatch" style={{ width: 18 + (s.widthMm / s.heightMm) * 34, height: 44 }} />
-            <span className="card-text">
+      <div className="sizerow">
+        {SIZE_ORDER.map(id => {
+          const s = SIZES[id];
+          return (
+            <button key={id} className={`sizecard${selected === id ? ' on' : ''}`} onClick={() => onPick(id)}>
+              <span className="art" style={{ height: tallest }}><SizeIcon size={s} /></span>
               <strong>{s.label}</strong>
               <small>{s.widthMm}×{s.heightMm}mm</small>
-            </span>
-          </button>
-        ))}
+              <small className="note">{SIZE_NOTE[id]}</small>
+            </button>
+          );
+        })}
       </div>
     </div>
   );

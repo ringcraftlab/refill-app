@@ -20,7 +20,7 @@ const page = await ctx.newPage();
 await page.setViewportSize({ width: 390, height: 844 });
 await page.goto(BASE);
 
-await page.locator('.card', { hasText: 'M6' }).click();
+await page.locator('.sizecard', { hasText: 'ミニ6' }).click();
 await page.locator('.card', { hasText: '見開き' }).click();
 await page.getByRole('button', { name: 'この構成で作る' }).click();
 await page.locator('.page').first().waitFor();
