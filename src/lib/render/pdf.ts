@@ -1,4 +1,5 @@
-import { PDFDocument, StandardFonts, rgb, PDFFont, PDFPage, degrees } from 'pdf-lib';
+import { PDFDocument, rgb, PDFFont, PDFPage, degrees } from 'pdf-lib';
+import fontkit from '@pdf-lib/fontkit';
 import type { Primitive } from '../draw';
 import { mmToPt } from '../sizes';
 import type { SheetContent } from './impose';
@@ -6,13 +7,26 @@ import type { SheetContent } from './impose';
 // Pages arrive already flattened onto the paper they print on — either the
 // punched sheet itself, or a sheet of A4 with refills imposed on it — so this
 // only has to turn millimetres into points.
-//
-// NOTE: Helvetica for now, so Japanese text does not come out. A CJK font
-// subset via @pdf-lib/fontkit is the follow-up.
+
+// The embedded face carries a fixed set of characters, so what can be drawn
+// travels with it.
+interface PrintFont { font: PDFFont; chars: string }
+
+// A hundred-odd kilobytes that only a download needs, so it is fetched when
+// one is asked for rather than carried by the editor.
+async function printFont(doc: PDFDocument): Promise<PrintFont> {
+  const { PRINT_FONT_BASE64, PRINT_FONT_CHARS } = await import('./printfont');
+  doc.registerFontkit(fontkit);
+  // Subsetting again on the way out keeps the PDF to the glyphs it uses,
+  // which matters when a year of refills is one file.
+  const font = await doc.embedFont(PRINT_FONT_BASE64, { subset: true });
+  return { font, chars: PRINT_FONT_CHARS };
+}
+
 export async function sheetsToPdf(sheets: SheetContent[], title: string): Promise<Uint8Array> {
   const doc = await PDFDocument.create();
   doc.setTitle(title);
-  const font = await doc.embedFont(StandardFonts.Helvetica);
+  const font = await printFont(doc);
 
   for (const sheet of sheets) {
     const page = doc.addPage([mmToPt(sheet.widthMm), mmToPt(sheet.heightMm)]);
@@ -21,7 +35,7 @@ export async function sheetsToPdf(sheets: SheetContent[], title: string): Promis
   return doc.save();
 }
 
-function drawPrimitive(page: PDFPage, prim: Primitive, sheetH: number, font: PDFFont) {
+function drawPrimitive(page: PDFPage, prim: Primitive, sheetH: number, pf: PrintFont) {
   // Millimetres run down the sheet; PDF points run up it.
   const pt = (x: number, y: number) => ({ x: mmToPt(x), y: mmToPt(sheetH - y) });
 
@@ -52,10 +66,11 @@ function drawPrimitive(page: PDFPage, prim: Primitive, sheetH: number, font: PDF
       borderWidth: prim.strokeMm ? mmToPt(prim.strokeMm) : 0,
     });
   } else {
-    // Strip non-WinAnsi characters so Helvetica does not throw.
-    const safe = prim.text.replace(/[^\x20-\x7E]/g, '');
+    // A character the subset does not carry has no glyph to draw, so it is
+    // dropped rather than left to come out as a blank box.
+    const safe = [...prim.text].filter(c => pf.chars.includes(c)).join('');
     if (!safe) return;
-    const width = font.widthOfTextAtSize(safe, prim.sizePt);
+    const width = pf.font.widthOfTextAtSize(safe, prim.sizePt);
     const dx = prim.align === 'center' ? -width / 2 : prim.align === 'right' ? -width : 0;
     const at = pt(prim.x, prim.y);
     const turned = prim.rotateDeg === 90;
@@ -65,7 +80,7 @@ function drawPrimitive(page: PDFPage, prim: Primitive, sheetH: number, font: PDF
       x: turned ? at.x : at.x + dx,
       y: turned ? at.y + dx : at.y,
       size: prim.sizePt,
-      font,
+      font: pf.font,
       rotate: degrees(turned ? 90 : 0),
       color: prim.color ? rgb(...prim.color) : rgb(0, 0, 0),
     });
