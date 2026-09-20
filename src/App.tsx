@@ -669,13 +669,11 @@ function PartSheet({ target, layout, setLayout, onClose, onRemove, onLoad, size,
               </div>
             </div>
             <div className="field">
-              <span className="field-label">
-                何ヶ月分つくる（{lastMonth.year}年{lastMonth.month}月まで）
-              </span>
+              <span className="field-label">終了月（{layout.monthCount}ヶ月分）</span>
               <div className="stepper">
                 <button onClick={() => setLayout(l => ({ ...l, monthCount: Math.max(1, l.monthCount - 1) }))}>−</button>
-                <strong>{layout.monthCount}ヶ月</strong>
-                <button onClick={() => setLayout(l => ({ ...l, monthCount: Math.min(24, l.monthCount + 1) }))}>＋</button>
+                <strong>{lastMonth.year}年{lastMonth.month}月</strong>
+                <button onClick={() => setLayout(l => ({ ...l, monthCount: Math.min(36, l.monthCount + 1) }))}>＋</button>
               </div>
             </div>
           </>

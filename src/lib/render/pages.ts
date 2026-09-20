@@ -10,8 +10,8 @@ import type { SheetContent } from './impose';
 
 // Turns the editor's layout into printable pages. The on-screen preview and
 // the PDF both consume these, so what you arrange is what comes out.
-export function buildPages(layout: Layout, size: SizeSpec): Page[] {
-  const geo = buildGeometry(layout, size);
+export function buildPages(layout: Layout, size: SizeSpec, flipBinding = false): Page[] {
+  const geo = buildGeometry(layout, size, flipBinding);
 
   return geo.pages.map(pg => {
     const primitives: Primitive[] = [];
@@ -101,51 +101,59 @@ function fillerFace(size: SizeSpec, fill: BackFill, side: Side): Primitive[] {
 }
 
 interface Duplexed { front: SheetContent; back: SheetContent }
-
-function sheetsForMonth(layout: Layout, size: SizeSpec, opts: PrintOptions): Duplexed[] {
-  const designed = buildPages(layout, size).map(p => flattenToSheet(p));
-  // A spread's left page binds on its right, because it is the back of a sheet.
-  const sideOf = (i: number): Side => (layout.spread && i === 0 ? 'right' : 'left');
-
-  const face = (primitives: Primitive[], side: Side): SheetContent => ({
-    widthMm: size.widthMm,
-    heightMm: size.heightMm,
-    primitives: opts.punchGuides ? [...punchGuide(size, side), ...primitives] : primitives,
-  });
-
-  // One entry per physical sheet. A spread lives on two of them: its left page
-  // is the back of one and its right page the front of the next, which is how
-  // they come to face each other once the sheets are bound.
-  if (!opts.duplex) {
-    return designed.map((d, i) => ({
-      front: face(d, sideOf(i)),
-      back: face([], mirror(sideOf(i))),
-    }));
-  }
-  if (designed.length === 2) {
-    return [
-      { front: face(fillerFace(size, opts.backFill, 'left'), 'left'), back: face(designed[0], 'right') },
-      { front: face(designed[1], 'left'), back: face(fillerFace(size, opts.backFill, 'right'), 'right') },
-    ];
-  }
-  return [{
-    front: face(designed[0], 'left'),
-    back: face(fillerFace(size, opts.backFill, 'right'), 'right'),
-  }];
-}
+interface Face { primitives: Primitive[]; side: Side }
 
 export const hasDatedPart = (layout: Layout): boolean =>
   !!layout.spanning || layout.surface.placed.includes('monthly');
 
-// The refills as they will print: every month in the range, flattened onto
-// their punched sheets, paired front to back, then laid out on paper.
-export function buildPrintSheets(layout: Layout, size: SizeSpec, opts: PrintOptions): SheetContent[] {
+// Every printable face in binder order, month after month.
+function facesInOrder(layout: Layout, size: SizeSpec, duplex: boolean): Face[] {
   const months = hasDatedPart(layout) ? Math.max(1, layout.monthCount) : 1;
+  const faces: Face[] = [];
+
+  for (let i = 0; i < months; i++) {
+    const monthly = { ...layout, ...addMonths(layout.year, layout.month, i) };
+    if (layout.spread) {
+      // A spread is the back of one sheet facing the front of the next, so its
+      // left page always lands on a back and its right page on a front.
+      const pages = buildPages(monthly, size);
+      faces.push({ primitives: flattenToSheet(pages[0]), side: 'right' });
+      faces.push({ primitives: flattenToSheet(pages[1]), side: 'left' });
+    } else {
+      // Single pages run front, back, front, back down the stack, and a page
+      // on a back binds on the other side.
+      const onBack = duplex && faces.length % 2 === 1;
+      const page = buildPages(monthly, size, onBack)[0];
+      faces.push({ primitives: flattenToSheet(page), side: onBack ? 'right' : 'left' });
+    }
+  }
+  return faces;
+}
+
+// The refills as they will print: every month in the range, flattened onto
+// their punched sheets, chained front to back, then laid out on paper.
+export function buildPrintSheets(layout: Layout, size: SizeSpec, opts: PrintOptions): SheetContent[] {
+  const faces = facesInOrder(layout, size, opts.duplex);
+  const spec = { ...DEFAULT_IMPOSE, cutLines: opts.cutLines, scalePercent: opts.scalePercent };
+
+  const asSheet = (f: Face): SheetContent => ({
+    widthMm: size.widthMm,
+    heightMm: size.heightMm,
+    primitives: opts.punchGuides ? [...punchGuide(size, f.side), ...f.primitives] : f.primitives,
+  });
+  const spare = (side: Side) => asSheet({ primitives: fillerFace(size, opts.backFill, side), side });
 
   const sheets: Duplexed[] = [];
-  for (let i = 0; i < months; i++) {
-    const at = addMonths(layout.year, layout.month, i);
-    sheets.push(...sheetsForMonth({ ...layout, ...at }, size, opts));
+  if (opts.duplex) {
+    let i = 0;
+    // A spread begins on a back, so only the very first front is spare.
+    if (layout.spread) sheets.push({ front: spare('left'), back: asSheet(faces[i++]) });
+    while (i < faces.length) {
+      const front = asSheet(faces[i++]);
+      sheets.push({ front, back: i < faces.length ? asSheet(faces[i++]) : spare('right') });
+    }
+  } else {
+    faces.forEach(f => sheets.push({ front: asSheet(f), back: spare(mirror(f.side)) }));
   }
 
   const all = Array.from({ length: Math.max(1, opts.copies) }, () => sheets).flat();
@@ -154,7 +162,6 @@ export function buildPrintSheets(layout: Layout, size: SizeSpec, opts: PrintOpti
     return opts.duplex ? all.flatMap(s => [s.front, s.back]) : all.map(s => s.front);
   }
 
-  const spec = { ...DEFAULT_IMPOSE, cutLines: opts.cutLines, scalePercent: opts.scalePercent };
   const fronts = impose(all.map(s => s.front), spec);
   if (!opts.duplex) return fronts;
 

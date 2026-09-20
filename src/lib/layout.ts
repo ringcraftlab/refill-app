@@ -94,10 +94,16 @@ export function isLandscape(layout: Layout): boolean {
   return layout.surface.placed.includes('monthly') && layout.monthlyOrientation === 'landscape';
 }
 
-function ringEdgeFor(spread: boolean, landscape: boolean, key: PageKey): RingEdge {
+function ringEdgeFor(spread: boolean, landscape: boolean, key: PageKey, flip: boolean): RingEdge {
   // A single sheet binds on its outer edge. In a spread the binding is always
   // the seam between the two pages, whichever way the pages sit.
-  if (!spread) return landscape ? 'top' : 'left';
+  //
+  // `flip` is for a single page printed on the back of a sheet: turning the
+  // paper over puts the binding on the other side.
+  if (!spread) {
+    if (landscape) return flip ? 'bottom' : 'top';
+    return flip ? 'right' : 'left';
+  }
   if (landscape) return key === 'left' ? 'bottom' : 'top';
   return key === 'left' ? 'right' : 'left';
 }
@@ -154,8 +160,8 @@ interface PageBox {
   usableW: number; usableH: number;
 }
 
-function pageBox(spread: boolean, landscape: boolean, key: PageKey, W: number, H: number, ring: number): PageBox {
-  const edge = ringEdgeFor(spread, landscape, key);
+function pageBox(spread: boolean, landscape: boolean, key: PageKey, W: number, H: number, ring: number, flip: boolean): PageBox {
+  const edge = ringEdgeFor(spread, landscape, key, flip);
   const vertical = edge === 'left' || edge === 'right';
   const O = OUTER_MM;
   // The ring strip is the margin on the binding edge; the other three get the
@@ -188,7 +194,9 @@ function punchHoles(box: PageBox, size: SizeSpec) {
   }));
 }
 
-export function buildGeometry(layout: Layout, size: SizeSpec): Geometry {
+// `flipBinding` mirrors a single page's binding edge, for when that page is
+// printed on the back of a sheet.
+export function buildGeometry(layout: Layout, size: SizeSpec, flipBinding = false): Geometry {
   const landscape = isLandscape(layout);
   const W = landscape ? size.heightMm : size.widthMm;
   const H = landscape ? size.widthMm : size.heightMm;
@@ -200,7 +208,7 @@ export function buildGeometry(layout: Layout, size: SizeSpec): Geometry {
   };
 
   const keys: PageKey[] = layout.spread ? ['left', 'right'] : ['single'];
-  const boxes = keys.map(key => ({ key, box: pageBox(layout.spread, landscape, key, W, H, ring) }));
+  const boxes = keys.map(key => ({ key, box: pageBox(layout.spread, landscape, key, W, H, ring, flipBinding) }));
   const usableH = boxes[0].box.usableH;
   const usableW = boxes[0].box.usableW;
 
