@@ -109,4 +109,18 @@ await page.getByRole('button', { name: '週で分ける（横向き）' }).click
 await page.locator('.scrim').click();
 await shot('10-横向きの週分割');
 
+// Parts share the calendar's page while they are there; take them away and
+// the calendar has to take the whole page back.
+// Stacked pages: the writable leftover is on the second one.
+const bottom3 = await page.locator('.page').last().boundingBox();
+await drag(await centerOf(await stamp('メモ')), { x: bottom3.x + bottom3.width * 0.5, y: bottom3.y + bottom3.height * 0.85 });
+await drag(await centerOf(await stamp('TODO')), { x: bottom3.x + bottom3.width * 0.2, y: bottom3.y + bottom3.height * 0.85 });
+await shot('11-横向きにメモとTODO');
+
+for (let i = 0; i < 2; i++) {
+  await page.locator('.part').first().click();
+  await page.getByRole('button', { name: 'このパーツを外す' }).click();
+}
+await shot('12-2つ外してマンスリーだけ');
+
 await browser.close();

@@ -268,10 +268,18 @@ function CanvasScreen({ layout, setLayout, onBack }: {
   };
 
   const removePart = (slot: number) => {
-    setLayout(prev => ({
-      ...prev,
-      surface: { ...prev.surface, placed: prev.surface.placed.filter((_, i) => i !== slot), ratios: {} },
-    }));
+    setLayout(prev => {
+      const placed = prev.surface.placed.filter((_, i) => i !== slot);
+      return {
+        ...prev,
+        // With nothing left beside it the calendar takes the page back, rather
+        // than holding on to space it was only sharing.
+        spanning: prev.spanning && placed.length === 0
+          ? { ...prev.spanning, ratio: 1 }
+          : prev.spanning,
+        surface: { ...prev.surface, placed, ratios: {} },
+      };
+    });
     setSheet(null);
   };
 
@@ -554,9 +562,15 @@ function PartSheet({ target, layout, setLayout, onClose, onRemove, onLoad }: {
             label="見開きの分け方"
             options={[{ v: 1, label: '曜日で分ける' }, { v: 2, label: '週で分ける（横向き）' }]}
             value={layout.spanning.pattern}
+            // The two patterns leave different amounts of room, so the band
+            // resets to what this one would have taken.
             onPick={v => setLayout(l => ({
               ...l,
-              spanning: l.spanning ? { ...l.spanning, pattern: v as SpanPattern } : null,
+              spanning: l.spanning ? {
+                ...l.spanning,
+                pattern: v as SpanPattern,
+                ratio: l.surface.placed.length === 0 ? 1 : (v === 2 ? 0.48 : 0.72),
+              } : null,
             }))}
           />
         )}
