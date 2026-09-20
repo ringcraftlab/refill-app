@@ -1,30 +1,30 @@
 import { useLayoutEffect, useMemo, useRef, useState } from 'react';
-import type { Layout, PageKey, PartKind, RefillSize, SpanPattern } from './types';
-import { MAX_PARTS_PER_PAGE, SCHEMA_VERSION } from './types';
+import type { Layout, PartKind, RefillSize, SpanPattern } from './types';
+import { MAX_PARTS, SCHEMA_VERSION } from './types';
 import { SIZES } from './lib/sizes';
-import { buildGeometry, MAX_RATIO, MIN_RATIO } from './lib/layout';
-import type { Divider, PageGeometry } from './lib/layout';
+import { buildGeometry, MAX_RATIO, MIN_RATIO, regionAt } from './lib/layout';
+import type { Divider } from './lib/layout';
 import { buildPages } from './lib/render/pages';
 import { PageSvg } from './lib/render/svg';
 import { downloadPdf, pagesToPdf } from './lib/render/pdf';
 import { deleteLayout, listLayouts, newId, saveLayout } from './lib/storage';
 
 type Stage = 'size' | 'sides' | 'canvas';
-type SheetTarget = { page: PageKey; slot: number } | 'spanning' | 'load' | null;
+type SheetTarget = { slot: number } | 'spanning' | 'load' | null;
+
+const GAP = 6;
 
 const TRAY: { kind: PartKind; label: string; glyph: string }[] = [
   { kind: 'monthly', label: 'マンスリー', glyph: '31' },
   { kind: 'habit', label: 'ハビット', glyph: '✓' },
   { kind: 'grid', label: '方眼', glyph: '#' },
-  { kind: 'lines', label: '罫線', glyph: '#' },
+  { kind: 'lines', label: '罫線', glyph: '≡' },
   { kind: 'memo', label: 'メモ', glyph: '✎' },
 ];
 
 const PART_LABEL: Record<PartKind, string> = {
   monthly: 'マンスリー', habit: 'ハビットトラッカー', grid: '方眼', lines: '罫線', memo: 'メモ',
 };
-
-const emptyPage = () => ({ placed: [] as PartKind[], ratios: {} });
 
 function createLayout(): Layout {
   const now = new Date();
@@ -35,7 +35,7 @@ function createLayout(): Layout {
     size: 'M6',
     spread: true,
     spanning: null,
-    pages: { single: emptyPage(), left: emptyPage(), right: emptyPage() },
+    surface: { placed: [], ratios: {}, split: 'h' },
     year: now.getFullYear(),
     month: now.getMonth() + 1,
     weekStart: 1,
@@ -78,10 +78,7 @@ function SizeScreen({ selected, onPick }: { selected: RefillSize; onPick: (s: Re
       <div className="cards">
         {Object.values(SIZES).map(s => (
           <button key={s.id} className={`card${selected === s.id ? ' on' : ''}`} onClick={() => onPick(s.id)}>
-            <span
-              className="swatch"
-              style={{ width: 18 + (s.widthMm / s.heightMm) * 34, height: 44 }}
-            />
+            <span className="swatch" style={{ width: 18 + (s.widthMm / s.heightMm) * 34, height: 44 }} />
             <span className="card-text">
               <strong>{s.label}</strong>
               <small>{s.widthMm}×{s.heightMm}mm</small>
@@ -117,7 +114,7 @@ function SidesScreen({ spread, onPick, onBack, onConfirm }: {
 
 interface DragState {
   kinds: PartKind[];
-  from: { page: PageKey; slot: number } | null;
+  fromSlot: number | null;
   moved: boolean;
   startX: number;
   startY: number;
@@ -133,11 +130,11 @@ function CanvasScreen({ layout, setLayout, onBack }: {
   const [traySelected, setTraySelected] = useState<PartKind[]>([]);
   const [sheet, setSheet] = useState<SheetTarget>(null);
   const [toast, setToast] = useState('');
-  const [drag, setDrag] = useState<{ x: number; y: number; kinds: PartKind[] } | null>(null);
+  const [ghost, setGhost] = useState<{ x: number; y: number; kinds: PartKind[] } | null>(null);
 
   const dragRef = useRef<DragState | null>(null);
   const dividerRef = useRef<{ d: Divider; startX: number; startY: number; extentPx: number } | null>(null);
-  const pageEls = useRef(new Map<PageKey, HTMLDivElement>());
+  const setRef = useRef<HTMLDivElement>(null);
   const toastTimer = useRef<number>();
 
   const boxRef = useRef<HTMLDivElement>(null);
@@ -152,16 +149,21 @@ function CanvasScreen({ layout, setLayout, onBack }: {
     return () => ro.disconnect();
   }, []);
 
-  const GAP = 6;
   const first = geo.pages[0];
   const n = geo.pages.length;
-  const acrossMm = geo.flow === 'row' ? first.widthMm * n : first.widthMm;
-  const downMm = geo.flow === 'row' ? first.heightMm : first.heightMm * n;
   const gapPx = (n - 1) * GAP;
   const scale = Math.max(0.1, Math.min(
-    (box.w - (geo.flow === 'row' ? gapPx : 0)) / acrossMm,
-    (box.h - (geo.flow === 'column' ? gapPx : 0)) / downMm,
+    (box.w - (geo.flow === 'row' ? gapPx : 0)) / (geo.flow === 'row' ? first.widthMm * n : first.widthMm),
+    (box.h - (geo.flow === 'column' ? gapPx : 0)) / (geo.flow === 'row' ? first.heightMm : first.heightMm * n),
   ));
+  const pw = first.widthMm * scale;
+  const ph = first.heightMm * scale;
+  const pageOrigin = (i: number) => geo.flow === 'row'
+    ? { x: i * (pw + GAP), y: 0 }
+    : { x: 0, y: i * (ph + GAP) };
+
+  const surfaceW = geo.surface.widthMm;
+  const surfaceH = geo.surface.heightMm;
 
   const say = (text: string) => {
     setToast(text);
@@ -169,12 +171,39 @@ function CanvasScreen({ layout, setLayout, onBack }: {
     toastTimer.current = window.setTimeout(() => setToast(''), 1800);
   };
 
-  const addParts = (page: PageKey, kinds: PartKind[]) => {
+  // Client point → surface millimetres, or null when the point is off the
+  // pages or on a page the calendar has filled.
+  const toSurface = (cx: number, cy: number): { sx: number; sy: number } | null => {
+    const el = setRef.current;
+    if (!el) return null;
+    const r = el.getBoundingClientRect();
+    const lx = cx - r.left, ly = cy - r.top;
+    for (let i = 0; i < geo.pages.length; i++) {
+      const o = pageOrigin(i);
+      if (lx < o.x || lx > o.x + pw || ly < o.y || ly > o.y + ph) continue;
+      const s = geo.surface.slices.find(sl => sl.key === geo.pages[i].key);
+      if (!s) return null;
+      return {
+        sx: (lx - o.x) / scale - s.ox + s.fromMm,
+        sy: (ly - o.y) / scale - s.oy,
+      };
+    }
+    return null;
+  };
+
+  const overPages = (cx: number, cy: number): boolean => {
+    const el = setRef.current;
+    if (!el) return false;
+    const r = el.getBoundingClientRect();
+    return cx >= r.left && cx <= r.right && cy >= r.top && cy <= r.bottom;
+  };
+
+  const placeParts = (kinds: PartKind[], at: { sx: number; sy: number } | null) => {
     setLayout(prev => {
       let spanning = prev.spanning;
       let rest = kinds;
       // On a spread the calendar is one part across both pages, so it becomes
-      // the spanning band rather than a tile.
+      // the band rather than a surface region.
       if (prev.spread && !spanning && kinds.includes('monthly')) {
         spanning = { pattern: 1, ratio: 1 };
         rest = kinds.filter(k => k !== 'monthly');
@@ -184,92 +213,83 @@ function CanvasScreen({ layout, setLayout, onBack }: {
       if (spanning && rest.length > 0 && spanning.ratio >= 0.95) {
         spanning = { ...spanning, ratio: spanning.pattern === 2 ? 0.48 : 0.72 };
       }
-      const pg = prev.pages[page];
-      const room = MAX_PARTS_PER_PAGE - pg.placed.length;
-      const toAdd = rest.slice(0, room);
-      if (rest.length > toAdd.length) say(`1ページに置けるのは${MAX_PARTS_PER_PAGE}つまでです`);
-      return {
-        ...prev,
-        spanning,
-        pages: { ...prev.pages, [page]: { placed: [...pg.placed, ...toAdd], ratios: {} } },
-      };
+
+      const cur = prev.surface;
+      const toAdd = rest.slice(0, MAX_PARTS - cur.placed.length);
+      if (rest.length > toAdd.length) say(`一度に置けるのは${MAX_PARTS}つまでです`);
+      if (toAdd.length === 0) return { ...prev, spanning };
+
+      let placed = [...cur.placed];
+      let split = cur.split;
+      // One part joining one existing part: where it landed decides whether the
+      // surface divides across or down, and which side the newcomer takes.
+      if (cur.placed.length === 1 && toAdd.length === 1 && at && surfaceW > 0 && surfaceH > 0) {
+        const fx = at.sx / surfaceW, fy = at.sy / surfaceH;
+        const nearerSide = Math.min(fx, 1 - fx) < Math.min(fy, 1 - fy);
+        split = nearerSide ? 'v' : 'h';
+        placed = (nearerSide ? fx < 0.5 : fy < 0.5)
+          ? [toAdd[0], ...placed]
+          : [...placed, toAdd[0]];
+      } else {
+        placed = [...placed, ...toAdd];
+      }
+      return { ...prev, spanning, surface: { placed, ratios: {}, split } };
     });
   };
 
-  const swapParts = (page: PageKey, a: number, b: number) => {
+  const swapParts = (a: number, b: number) => {
     if (a === b) return;
     setLayout(prev => {
-      const placed = [...prev.pages[page].placed];
+      const placed = [...prev.surface.placed];
       [placed[a], placed[b]] = [placed[b], placed[a]];
-      return { ...prev, pages: { ...prev.pages, [page]: { ...prev.pages[page], placed } } };
+      return { ...prev, surface: { ...prev.surface, placed } };
     });
   };
 
-  const removePart = (page: PageKey, slot: number) => {
+  const removePart = (slot: number) => {
     setLayout(prev => ({
       ...prev,
-      pages: { ...prev.pages, [page]: { placed: prev.pages[page].placed.filter((_, i) => i !== slot), ratios: {} } },
+      surface: { ...prev.surface, placed: prev.surface.placed.filter((_, i) => i !== slot), ratios: {} },
     }));
     setSheet(null);
   };
 
-  const hitPage = (x: number, y: number): PageKey | null => {
-    for (const [key, el] of pageEls.current) {
-      const r = el.getBoundingClientRect();
-      if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) return key;
-    }
-    return null;
-  };
-
-  const hitRegion = (page: PageKey, x: number, y: number): number | null => {
-    const el = pageEls.current.get(page);
-    const pg = geo.pages.find(p => p.key === page);
-    if (!el || !pg) return null;
-    const r = el.getBoundingClientRect();
-    const mx = (x - r.left) / scale, my = (y - r.top) / scale;
-    for (let i = 0; i < pg.regions.length; i++) {
-      const g = pg.regions[i];
-      if (mx >= g.x && mx <= g.x + g.w && my >= g.y && my <= g.y + g.h) return i;
-    }
-    return null;
-  };
-
-  // One pointer gesture covers both tray interactions: a tap toggles the
-  // stamp's selection, a drag carries it (or the whole selection) onto a page.
-  const startDrag = (e: React.PointerEvent, kinds: PartKind[], from: DragState['from']) => {
+  const startDrag = (e: React.PointerEvent, kinds: PartKind[], fromSlot: number | null) => {
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-    dragRef.current = { kinds, from, moved: false, startX: e.clientX, startY: e.clientY };
+    dragRef.current = { kinds, fromSlot, moved: false, startX: e.clientX, startY: e.clientY };
   };
   const moveDrag = (e: React.PointerEvent) => {
     const d = dragRef.current;
     if (!d) return;
     if (!d.moved && Math.abs(e.clientX - d.startX) + Math.abs(e.clientY - d.startY) < 8) return;
     d.moved = true;
-    setDrag({ x: e.clientX, y: e.clientY, kinds: d.kinds });
+    setGhost({ x: e.clientX, y: e.clientY, kinds: d.kinds });
   };
   const endTrayDrag = (e: React.PointerEvent, kind: PartKind) => {
     const d = dragRef.current;
     dragRef.current = null;
-    setDrag(null);
+    setGhost(null);
     if (!d) return;
     if (!d.moved) {
       setTraySelected(prev => prev.includes(kind) ? prev.filter(k => k !== kind) : [...prev, kind]);
       return;
     }
-    const page = hitPage(e.clientX, e.clientY);
-    if (page) {
-      addParts(page, d.kinds);
-      setTraySelected([]);
-    }
+    if (!overPages(e.clientX, e.clientY)) return;
+    // Dropping several at once is an automatic arrangement, so the landing
+    // point only steers a single part.
+    placeParts(d.kinds, d.kinds.length === 1 ? toSurface(e.clientX, e.clientY) : null);
+    setTraySelected([]);
   };
-  const endPartDrag = (e: React.PointerEvent, page: PageKey, slot: number) => {
+  const endPartDrag = (e: React.PointerEvent, slot: number) => {
     const d = dragRef.current;
     dragRef.current = null;
-    setDrag(null);
+    setGhost(null);
     if (!d) return;
-    if (!d.moved) { setSheet({ page, slot }); return; }
-    const target = hitRegion(page, e.clientX, e.clientY);
-    if (target !== null) swapParts(page, slot, target);
+    if (!d.moved) { setSheet({ slot }); return; }
+    const at = toSurface(e.clientX, e.clientY);
+    if (!at) return;
+    const target = regionAt(geo.surface.regions, at.sx, at.sy);
+    if (target !== null) swapParts(slot, target);
   };
 
   const startDivider = (e: React.PointerEvent, d: Divider) => {
@@ -284,7 +304,7 @@ function CanvasScreen({ layout, setLayout, onBack }: {
     const next = Math.min(MAX_RATIO, Math.max(MIN_RATIO, d.ratio + delta / extentPx));
     setLayout(prev => d.key === 'span'
       ? { ...prev, spanning: prev.spanning ? { ...prev.spanning, ratio: next } : null }
-      : { ...prev, pages: { ...prev.pages, [d.page]: { ...prev.pages[d.page], ratios: { ...prev.pages[d.page].ratios, [d.key]: next } } } });
+      : { ...prev, surface: { ...prev.surface, ratios: { ...prev.surface.ratios, [d.key]: next } } });
   };
   const endDivider = () => { dividerRef.current = null; };
 
@@ -294,6 +314,46 @@ function CanvasScreen({ layout, setLayout, onBack }: {
     say('原寸PDFを書き出しました');
   };
 
+  // Hit areas and borders are drawn over the sheets rather than inside them, so
+  // a border sitting on the gutter stays grabbable from both sides.
+  const partBoxes: { key: string; slot: number; left: number; top: number; width: number; height: number }[] = [];
+  const dividerBoxes: { key: string; d: Divider; left: number; top: number; width: number; height: number }[] = [];
+
+  geo.surface.slices.forEach(s => {
+    const i = geo.pages.findIndex(p => p.key === s.key);
+    const o = pageOrigin(i);
+    const toX = (sx: number) => o.x + (sx - s.fromMm + s.ox) * scale;
+    const toY = (sy: number) => o.y + (sy + s.oy) * scale;
+
+    geo.surface.regions.forEach((r, slot) => {
+      const lo = Math.max(r.x, s.fromMm), hi = Math.min(r.x + r.w, s.toMm);
+      if (hi <= lo) return;
+      partBoxes.push({
+        key: `${slot}-${s.key}`, slot,
+        left: toX(lo), top: toY(r.y), width: (hi - lo) * scale, height: r.h * scale,
+      });
+    });
+
+    geo.surface.dividers.forEach(d => {
+      if (d.axis === 'h') {
+        const lo = Math.max(d.x, s.fromMm), hi = Math.min(d.x + d.length, s.toMm);
+        if (hi <= lo) return;
+        dividerBoxes.push({ key: `${d.id}-${s.key}`, d, left: toX(lo), top: toY(d.y) - 11, width: (hi - lo) * scale, height: 22 });
+      } else if (d.x >= s.fromMm && d.x <= s.toMm) {
+        dividerBoxes.push({ key: `${d.id}-${s.key}`, d, left: toX(d.x) - 11, top: toY(d.y), width: 22, height: d.length * scale });
+      }
+    });
+  });
+
+  geo.pages.forEach((pg, i) => {
+    if (!pg.spanDivider) return;
+    const o = pageOrigin(i);
+    const d = pg.spanDivider;
+    dividerBoxes.push({ key: d.id, d, left: o.x + d.x * scale, top: o.y + d.y * scale - 11, width: d.length * scale, height: 22 });
+  });
+
+  const empty = layout.surface.placed.length === 0 && !layout.spanning;
+
   return (
     <div className="screen">
       <header className="bar">
@@ -302,23 +362,54 @@ function CanvasScreen({ layout, setLayout, onBack }: {
       </header>
 
       <div className="stage" ref={boxRef}>
-        <div className="sheetset" style={{ flexDirection: geo.flow, gap: GAP }}>
+        <div
+          className="sheetset"
+          ref={setRef}
+          style={{ flexDirection: geo.flow, gap: GAP, position: 'relative' }}
+        >
           {geo.pages.map((pg, i) => (
-            <PageView
-              key={pg.key}
-              pg={pg}
-              page={pages[i]}
-              scale={scale}
-              layout={layout}
-              register={el => { if (el) pageEls.current.set(pg.key, el); else pageEls.current.delete(pg.key); }}
-              onPartDown={(e, slot) => startDrag(e, [layout.pages[pg.key].placed[slot]], { page: pg.key, slot })}
-              onPartMove={moveDrag}
-              onPartUp={(e, slot) => endPartDrag(e, pg.key, slot)}
-              onSpanTap={() => setSheet('spanning')}
-              onDividerDown={startDivider}
-              onDividerMove={moveDivider}
-              onDividerUp={endDivider}
+            <div key={pg.key} className="page" style={{ width: pw, height: ph }}>
+              <PageSvg page={pages[i]} scale={scale} showGuides />
+              {pg.spanRect && (
+                <button
+                  className="hitbox"
+                  onClick={() => setSheet('spanning')}
+                  style={{
+                    left: pg.spanRect.x * scale, top: pg.spanRect.y * scale,
+                    width: pg.spanRect.w * scale, height: pg.spanRect.h * scale,
+                  }}
+                  aria-label="マンスリーの設定"
+                />
+              )}
+            </div>
+          ))}
+
+          {empty && <div className="drop-hint">スタンプをドラッグして<br />ここに配置</div>}
+
+          {partBoxes.map(b => (
+            <div
+              key={b.key}
+              className="hitbox part"
+              style={{ left: b.left, top: b.top, width: b.width, height: b.height }}
+              onPointerDown={e => startDrag(e, [layout.surface.placed[b.slot]], b.slot)}
+              onPointerMove={moveDrag}
+              onPointerUp={e => endPartDrag(e, b.slot)}
+              title={PART_LABEL[layout.surface.placed[b.slot]]}
             />
+          ))}
+
+          {dividerBoxes.map(b => (
+            <div
+              key={b.key}
+              className={`divider ${b.d.axis}`}
+              style={{ left: b.left, top: b.top, width: b.width, height: b.height }}
+              onPointerDown={e => startDivider(e, b.d)}
+              onPointerMove={moveDivider}
+              onPointerUp={endDivider}
+              onPointerCancel={endDivider}
+            >
+              <i />
+            </div>
           ))}
         </div>
       </div>
@@ -354,9 +445,9 @@ function CanvasScreen({ layout, setLayout, onBack }: {
         <button className="primary" onClick={onExport}>PDF出力</button>
       </div>
 
-      {drag && (
-        <div className="ghost" style={{ left: drag.x, top: drag.y }}>
-          {drag.kinds.map(k => PART_LABEL[k]).join(' + ')}
+      {ghost && (
+        <div className="ghost" style={{ left: ghost.x, top: ghost.y }}>
+          {ghost.kinds.map(k => PART_LABEL[k]).join(' + ')}
         </div>
       )}
 
@@ -376,86 +467,16 @@ function CanvasScreen({ layout, setLayout, onBack }: {
   );
 }
 
-function PageView({ pg, page, scale, layout, register, onPartDown, onPartMove, onPartUp, onSpanTap, onDividerDown, onDividerMove, onDividerUp }: {
-  pg: PageGeometry;
-  page: ReturnType<typeof buildPages>[number];
-  scale: number;
-  layout: Layout;
-  register: (el: HTMLDivElement | null) => void;
-  onPartDown: (e: React.PointerEvent, slot: number) => void;
-  onPartMove: (e: React.PointerEvent) => void;
-  onPartUp: (e: React.PointerEvent, slot: number) => void;
-  onSpanTap: () => void;
-  onDividerDown: (e: React.PointerEvent, d: Divider) => void;
-  onDividerMove: (e: React.PointerEvent) => void;
-  onDividerUp: () => void;
-}) {
-  const placed = layout.pages[pg.key].placed;
-  const px = (mm: number) => mm * scale;
-  const empty = placed.length === 0 && !pg.spanRect;
-
-  return (
-    <div className="page" ref={register} style={{ width: px(pg.widthMm), height: px(pg.heightMm) }}>
-      <PageSvg page={page} scale={scale} showGuides />
-
-      {empty && <div className="drop-hint">スタンプをドラッグして<br />ここに配置</div>}
-
-      {pg.spanRect && (
-        <button
-          className="hitbox"
-          onClick={onSpanTap}
-          style={{ left: px(pg.spanRect.x), top: px(pg.spanRect.y), width: px(pg.spanRect.w), height: px(pg.spanRect.h) }}
-          aria-label="マンスリーの設定"
-        />
-      )}
-
-      {placed.map((kind, slot) => {
-        const r = pg.regions[slot];
-        if (!r) return null;
-        return (
-          <div
-            key={slot}
-            className="hitbox part"
-            style={{ left: px(r.x), top: px(r.y), width: px(r.w), height: px(r.h) }}
-            onPointerDown={e => onPartDown(e, slot)}
-            onPointerMove={onPartMove}
-            onPointerUp={e => onPartUp(e, slot)}
-            title={PART_LABEL[kind]}
-          />
-        );
-      })}
-
-      {pg.dividers.map(d => (
-        <div
-          key={d.id}
-          className={`divider ${d.axis}`}
-          style={d.axis === 'h'
-            ? { left: px(d.x), top: px(d.y) - 11, width: px(d.length), height: 22 }
-            : { left: px(d.x) - 11, top: px(d.y), width: 22, height: px(d.length) }}
-          onPointerDown={e => onDividerDown(e, d)}
-          onPointerMove={onDividerMove}
-          onPointerUp={onDividerUp}
-          onPointerCancel={onDividerUp}
-        >
-          <i />
-        </div>
-      ))}
-    </div>
-  );
-}
-
 function PartSheet({ target, layout, setLayout, onClose, onRemove, onLoad }: {
   target: Exclude<SheetTarget, null>;
   layout: Layout;
   setLayout: (fn: (l: Layout) => Layout) => void;
   onClose: () => void;
-  onRemove: (page: PageKey, slot: number) => void;
+  onRemove: (slot: number) => void;
   onLoad: (l: Layout) => void;
 }) {
   const saved = useMemo(() => target === 'load' ? listLayouts() : [], [target]);
-  const kind = target === 'spanning' || target === 'load'
-    ? null
-    : layout.pages[target.page].placed[target.slot];
+  const kind = target === 'spanning' || target === 'load' ? null : layout.surface.placed[target.slot];
 
   const title = target === 'load' ? '保存済みレイアウト'
     : target === 'spanning' ? '見開きマンスリー'
@@ -523,7 +544,7 @@ function PartSheet({ target, layout, setLayout, onClose, onRemove, onLoad }: {
         )}
 
         {target !== 'load' && target !== 'spanning' && (
-          <button className="danger" onClick={() => onRemove(target.page, target.slot)}>このパーツを外す</button>
+          <button className="danger" onClick={() => onRemove(target.slot)}>このパーツを外す</button>
         )}
         {target === 'spanning' && (
           <button className="danger" onClick={() => { setLayout(l => ({ ...l, spanning: null })); onClose(); }}>

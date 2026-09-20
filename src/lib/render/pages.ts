@@ -1,19 +1,31 @@
 import type { Layout, SizeSpec } from '../../types';
 import type { Page, Primitive } from '../draw';
-import { RING_BAND, RING_HOLE } from '../draw';
+import { clipToBand, RING_BAND, RING_HOLE } from '../draw';
 import { buildGeometry } from '../layout';
 import { drawPart, drawSpanningMonthly } from '../parts';
 
 // Turns the editor's layout into printable pages. The on-screen preview and
 // the PDF both consume these, so what you arrange is what comes out.
 export function buildPages(layout: Layout, size: SizeSpec): Page[] {
-  return buildGeometry(layout, size).pages.map(pg => {
+  const geo = buildGeometry(layout, size);
+
+  return geo.pages.map(pg => {
     const primitives: Primitive[] = [];
     if (pg.spanRect) primitives.push(...drawSpanningMonthly(pg.spanRect, pg.key, layout));
-    layout.pages[pg.key].placed.forEach((kind, i) => {
-      const rect = pg.regions[i];
-      if (rect) primitives.push(...drawPart(kind, rect, layout));
-    });
+
+    const slice = geo.surface.slices.find(s => s.key === pg.key);
+    if (slice) {
+      layout.surface.placed.forEach((kind, i) => {
+        const region = geo.surface.regions[i];
+        if (!region) return;
+        // Draw across the part's whole region, then keep this page's piece.
+        primitives.push(...clipToBand(
+          drawPart(kind, region, layout),
+          slice.fromMm, slice.toMm,
+          slice.ox - slice.fromMm, slice.oy,
+        ));
+      });
+    }
 
     return {
       widthMm: pg.widthMm,

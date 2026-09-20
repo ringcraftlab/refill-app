@@ -2,6 +2,7 @@ import type { Layout, PageKey, PartKind } from '../types';
 import type { Color, Primitive } from './draw';
 import { INK, INK_SOFT, RULE, RULE_LIGHT, SATURDAY, SUNDAY } from './draw';
 import { monthGrid, orderedWeekdays, rokuyoLabel, weekdayLabel } from './dates';
+import { MONTHLY_HEADER_MM, weekSplit } from './layout';
 import type { Rect } from './layout';
 
 // Every part draws into whatever millimetre rectangle the layout hands it. A
@@ -13,7 +14,9 @@ const PAD = 1.2;
 // what is left, so the label and header keep their height whatever the row
 // count is.
 const MONTH_LABEL_H = 5;
-const DOW_HEADER_H = 3.8;
+// Shared with the spread geometry, which reserves the same header on both
+// pages so the week rows come out the same height.
+const DOW_HEADER_H = MONTHLY_HEADER_MM;
 
 const dowColor = (dow: number): Color => (dow === 0 ? SUNDAY : dow === 6 ? SATURDAY : INK);
 
@@ -141,9 +144,12 @@ export function drawMonthly(area: Rect, layout: Layout, slice: MonthlySlice): Pr
 export function drawSpanningMonthly(area: Rect, page: PageKey, layout: Layout): Primitive[] {
   const rows = weekCount(layout);
   if (layout.spanning?.pattern === 2) {
+    // Five weeks go three on the first page and two on the second, which
+    // leaves the second page room to write.
+    const [topRows] = weekSplit(rows);
     return drawMonthly(area, layout, {
       cols: [0, 7],
-      rows: page === 'left' ? [0, 2] : [2, rows],
+      rows: page === 'left' ? [0, topRows] : [topRows, rows],
       monthLabel: page === 'left' ? 'show' : 'none',
     });
   }

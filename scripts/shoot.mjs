@@ -64,4 +64,11 @@ const d = await centerOf(divider);
 await drag(d, { x: d.x, y: d.y - 90 });
 await shot('06-メモを広げた');
 
+// Dropping onto one side instead divides the spread at the gutter, so the two
+// pages carry different parts.
+const rightPage = page.locator('.page').last();
+const rp = await rightPage.boundingBox();
+await drag(await centerOf(stamp('方眼')), { x: rp.x + rp.width * 0.7, y: rp.y + rp.height * 0.8 });
+await shot('07-右に方眼を落とす');
+
 await browser.close();

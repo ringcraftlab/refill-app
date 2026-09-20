@@ -58,6 +58,40 @@ export interface Page {
   sheet: { widthMm: number; heightMm: number; rotation: SheetRotation };
 }
 
+// Keeps only what falls inside the millimetre band [xMin, xMax], then shifts
+// the result. A part is drawn once across its whole region and each page keeps
+// its piece, so rules and day columns carry on across the gutter instead of
+// restarting.
+export function clipToBand(
+  items: Primitive[], xMin: number, xMax: number, dx: number, dy: number,
+): Primitive[] {
+  const out: Primitive[] = [];
+  for (const p of items) {
+    if (p.type === 'rect') {
+      const x = Math.max(p.x, xMin), right = Math.min(p.x + p.w, xMax);
+      if (right <= x) continue;
+      out.push({ ...p, x: x + dx, y: p.y + dy, w: right - x });
+    } else if (p.type === 'line') {
+      if (p.x1 === p.x2) {
+        if (p.x1 < xMin || p.x1 > xMax) continue;
+        out.push({ ...p, x1: p.x1 + dx, x2: p.x2 + dx, y1: p.y1 + dy, y2: p.y2 + dy });
+      } else {
+        const lo = Math.max(Math.min(p.x1, p.x2), xMin);
+        const hi = Math.min(Math.max(p.x1, p.x2), xMax);
+        if (hi <= lo) continue;
+        out.push({ ...p, x1: lo + dx, x2: hi + dx, y1: p.y1 + dy, y2: p.y2 + dy });
+      }
+    } else if (p.type === 'circle') {
+      if (p.cx < xMin || p.cx > xMax) continue;
+      out.push({ ...p, cx: p.cx + dx, cy: p.cy + dy });
+    } else {
+      if (p.x < xMin || p.x > xMax) continue;
+      out.push({ ...p, x: p.x + dx, y: p.y + dy });
+    }
+  }
+  return out;
+}
+
 // Paper palette. Printed refills are warm, not black-on-white screen grey.
 export const INK: Color = [0.227, 0.212, 0.180];
 export const INK_SOFT: Color = [0.42, 0.40, 0.35];

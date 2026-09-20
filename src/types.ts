@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 3;
+export const SCHEMA_VERSION = 4;
 
 export type RefillSize = 'M5' | 'M6' | 'BIBLE' | 'A6' | 'A5';
 
@@ -30,11 +30,17 @@ export interface Spanning {
 
 export type PageKey = 'single' | 'left' | 'right';
 
-export interface PageState {
+// The area left over once the calendar has taken its band. In a spread this is
+// ONE surface across both pages: a part whose region crosses the gutter spans
+// the spread, one that fits in a half sits on that page alone.
+export interface Surface {
   placed: PartKind[];
   // Where the shared borders sit. This is the whole point of the app: a
   // commercial refill's memo area is fixed, here you drag it wider.
   ratios: { a?: number; b?: number; c?: number };
+  // How two parts divide the surface. 'h' stacks them, so in a spread both
+  // cross the gutter; 'v' sets them side by side, one per page.
+  split: 'h' | 'v';
 }
 
 export interface Layout {
@@ -44,7 +50,7 @@ export interface Layout {
   size: RefillSize;
   spread: boolean;
   spanning: Spanning | null;
-  pages: Record<PageKey, PageState>;
+  surface: Surface;
   year: number;
   month: number; // 1-12
   weekStart: WeekStart;
@@ -53,4 +59,4 @@ export interface Layout {
   updatedAt: string;
 }
 
-export const MAX_PARTS_PER_PAGE = 4;
+export const MAX_PARTS = 4;
