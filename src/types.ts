@@ -1,6 +1,19 @@
-export const SCHEMA_VERSION = 4;
+export const SCHEMA_VERSION = 5;
 
-export type RefillSize = 'M5' | 'M6' | 'BIBLE' | 'A6' | 'A5';
+export type RefillSize = 'M5' | 'M6' | 'BIBLE' | 'NARROW' | 'A5';
+
+// Punch pattern along the binding edge. The 19mm pitch is the worldwide
+// standard; what differs per size is the hole count, whether they run evenly
+// or in two groups of three, and how far in the outermost hole sits.
+export interface HoleSpec {
+  count: number;
+  diameterMm: number;
+  pitchMm: number;
+  // Paper edge to the outermost hole's centre.
+  marginMm: number;
+  // Centre-to-centre across the middle. Omitted means one even run.
+  centreGapMm?: number;
+}
 
 export interface SizeSpec {
   id: RefillSize;
@@ -10,6 +23,7 @@ export interface SizeSpec {
   // Strip along the binding edge that the rings occupy. Content never enters
   // it, so nothing can print on top of a punch hole.
   ringMarginMm: number;
+  holes: HoleSpec;
 }
 
 export type WeekStart = 0 | 1;

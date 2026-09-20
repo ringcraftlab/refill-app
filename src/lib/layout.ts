@@ -1,6 +1,7 @@
 import type { Layout, PageKey, SizeSpec, Surface } from '../types';
 import type { SheetRotation } from './draw';
 import { monthGrid } from './dates';
+import { holeCentres } from './sizes';
 
 // All geometry here is millimetres. Nothing knows about screens or CSS; the
 // editor scales it and the PDF exporter prints it, so what you drag is what
@@ -66,7 +67,6 @@ export interface Geometry {
   };
 }
 
-const HOLE_COUNT = 6;
 const EVEN = 0.5;
 export const MIN_RATIO = 0.18;
 export const MAX_RATIO = 0.82;
@@ -164,18 +164,20 @@ function pageBox(spread: boolean, landscape: boolean, key: PageKey, W: number, H
   };
 }
 
-function punchHoles(box: PageBox, W: number, H: number, ring: number) {
+// Holes are measured along the sheet's binding edge, which is its long side in
+// both orientations. The patterns are symmetric end to end, so turning the page
+// a quarter turn does not change where they land.
+function punchHoles(box: PageBox, size: SizeSpec) {
   const vertical = box.edge === 'left' || box.edge === 'right';
-  const step = (vertical ? H : W) / (HOLE_COUNT + 1);
-  const across = vertical ? box.ringBand.x + ring / 2 : box.ringBand.y + ring / 2;
-  return Array.from({ length: HOLE_COUNT }, (_, i) => {
-    const along = step * (i + 1);
-    return {
-      cx: vertical ? across : along,
-      cy: vertical ? along : across,
-      r: Math.min(1.8, ring / 4),
-    };
-  });
+  const across = vertical
+    ? box.ringBand.x + box.ringBand.w / 2
+    : box.ringBand.y + box.ringBand.h / 2;
+  const r = size.holes.diameterMm / 2;
+  return holeCentres(size.holes).map(along => ({
+    cx: vertical ? across : along,
+    cy: vertical ? along : across,
+    r,
+  }));
 }
 
 export function buildGeometry(layout: Layout, size: SizeSpec): Geometry {
@@ -220,7 +222,7 @@ export function buildGeometry(layout: Layout, size: SizeSpec): Geometry {
       sheet,
       ringEdge: box.edge,
       ringBand: box.ringBand,
-      holes: punchHoles(box, W, H, ring),
+      holes: punchHoles(box, size),
       spanRect: span ? { x: box.ox, y: box.oy, w: box.usableW, h: bandH } : null,
       spanDivider: span && layout.surface.placed.length > 0
         ? { id: `${key}-span`, key: 'span', axis: 'h', x: box.ox, y: box.oy + bandH, length: box.usableW, ratio: span.ratio, extentMm: extent }
