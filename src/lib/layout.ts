@@ -69,9 +69,10 @@ export interface Geometry {
 }
 
 const EVEN = 0.5;
-// Trim margin on the edges that are not the binding. Cutting by hand is not
-// precise, and content close to the edge reads as cramped.
-export const OUTER_MM = 6;
+// Trim margin on the edges that are not the binding. Parts add their own small
+// inset on top of this, so a few millimetres here is enough to stop the content
+// reading as cramped without eating the page.
+export const OUTER_MM = 3;
 export const MIN_RATIO = 0.18;
 export const MAX_RATIO = 0.82;
 
