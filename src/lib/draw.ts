@@ -56,6 +56,14 @@ export interface Page {
   sheet: { widthMm: number; heightMm: number; rotation: SheetRotation };
 }
 
-export const BLACK: Color = [0, 0, 0];
-export const GRAY: Color = [0.7, 0.7, 0.7];
-export const LIGHT_GRAY: Color = [0.9, 0.9, 0.9];
+// Paper palette. Printed refills are warm, not black-on-white screen grey.
+export const INK: Color = [0.227, 0.212, 0.180];
+export const INK_SOFT: Color = [0.42, 0.40, 0.35];
+export const SUNDAY: Color = [0.788, 0.482, 0.576];
+export const SATURDAY: Color = [0.431, 0.561, 0.651];
+export const RULE: Color = [0.894, 0.874, 0.827];
+export const RULE_LIGHT: Color = [0.941, 0.918, 0.851];
+export const LABEL_BG: Color = [0.953, 0.933, 0.882];
+export const PAPER: Color = [1, 0.992, 0.969];
+export const RING_BAND: Color = [0.965, 0.957, 0.933];
+export const RING_HOLE: Color = [0.847, 0.824, 0.769];

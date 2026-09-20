@@ -1,68 +1,56 @@
-// Versioned layout schema. Bump `version` on breaking changes and add a
-// migration path in lib/storage.ts.
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
 
-export type RefillSize =
-  | 'M5' | 'M5SQ' | 'M6' | 'BIBLE' | 'A6' | 'A5';
+export type RefillSize = 'M5' | 'M6' | 'BIBLE' | 'A6' | 'A5';
 
 export interface SizeSpec {
   id: RefillSize;
   label: string;
   widthMm: number;
   heightMm: number;
-  // Left margin reserved for rings when this page is the right half of a spread
-  // (or the whole page for single-side). Approximate MVP values.
+  // Strip along the binding edge that the rings occupy. Content never enters
+  // it, so nothing can print on top of a punch hole.
   ringMarginMm: number;
 }
 
-export type WeekStart = 0 | 1; // 0=Sunday, 1=Monday
-export type WeekdayFormat = 'jp-long' | 'jp-short' | 'en-short' | 'en-initial';
+export type WeekStart = 0 | 1;
 
-export interface HabitTrackerPart {
-  kind: 'habit-tracker';
-  id: string;
-  // First date shown. Days flow from here, allowing month-boundary trackers.
-  startDate: string; // YYYY-MM-DD
-  days: number;      // e.g. 28-35
-  habits: string[];
-  title: string;
-  weekdayFormat: WeekdayFormat;
+export type PartKind = 'monthly' | 'habit' | 'grid' | 'lines' | 'memo';
+
+// A spread monthly is one calendar across both pages.
+//   1: split the weekday columns (Mon-Wed | Thu-Sun), pages stay portrait
+//   2: split the week rows, pages turn landscape and stack
+export type SpanPattern = 1 | 2;
+
+export interface Spanning {
+  pattern: SpanPattern;
+  // Share of the usable page height the calendar takes. It stays at 1 — the
+  // whole page — until another part actually joins it.
+  ratio: number;
 }
 
-// The four confirmed monthly layouts.
-//   spread-weekday   Mon/Tue/Wed on the left page, Thu-Sun on the right. One
-//                    calendar spanning two portrait pages side by side.
-//   spread-week      Weeks 1-2 on one page, the rest on the other. The pages
-//                    are landscape and stack vertically.
-//   single-portrait  An ordinary one-page calendar.
-//   single-landscape Same content as single-portrait on a landscape page; the
-//                    user turns the planner a quarter turn to read it.
-//
-// Landscape NEVER transposes the grid. It stays seven weekday columns; only
-// the page shape and the ring edge change.
-export type MonthlyVariant =
-  | 'spread-weekday'
-  | 'spread-week'
-  | 'single-portrait'
-  | 'single-landscape';
+export type PageKey = 'single' | 'left' | 'right';
 
-export interface MonthlyCalendarPart {
-  kind: 'monthly-calendar';
-  id: string;
-  year: number;
-  month: number; // 1-12
-  weekStart: WeekStart;
-  weekdayFormat: WeekdayFormat;
-  variant: MonthlyVariant;
+export interface PageState {
+  placed: PartKind[];
+  // Where the shared borders sit. This is the whole point of the app: a
+  // commercial refill's memo area is fixed, here you drag it wider.
+  ratios: { a?: number; b?: number; c?: number };
 }
-
-export type Part = HabitTrackerPart | MonthlyCalendarPart;
 
 export interface Layout {
   version: number;
   id: string;
   name: string;
   size: RefillSize;
-  part: Part;
+  spread: boolean;
+  spanning: Spanning | null;
+  pages: Record<PageKey, PageState>;
+  year: number;
+  month: number; // 1-12
+  weekStart: WeekStart;
+  monthlyOrientation: 'portrait' | 'landscape';
+  habitCount: number;
   updatedAt: string;
 }
+
+export const MAX_PARTS_PER_PAGE = 4;

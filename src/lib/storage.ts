@@ -1,65 +1,45 @@
 import type { Layout } from '../types';
 import { SCHEMA_VERSION } from '../types';
 
-const KEY = 'refill-app.layouts.v1';
+const KEY = 'refill-app.layouts';
 
-interface Store { layouts: Layout[]; }
-
-function load(): Store {
+function load(): Layout[] {
   try {
     const raw = localStorage.getItem(KEY);
-    if (!raw) return { layouts: [] };
-    const data = JSON.parse(raw);
-    // Migration hook for future schema bumps
-    return { layouts: (data.layouts as Layout[]).map(migrate) };
+    if (!raw) return [];
+    const layouts = JSON.parse(raw).layouts as Layout[];
+    // Earlier schemas belonged to a different editor and cannot be converted.
+    return layouts.filter(l => l.version === SCHEMA_VERSION);
   } catch {
-    return { layouts: [] };
+    return [];
   }
 }
 
-function migrate(l: Layout): Layout {
-  if (l.version === SCHEMA_VERSION) return l;
-  let part = l.part;
-  if ((l.version ?? 1) < 2 && part.kind === 'monthly-calendar') {
-    // v1 stored a `spread` boolean; v2 names the four confirmed variants.
-    const { spread, ...rest } = part as typeof part & { spread?: boolean };
-    part = { ...rest, variant: spread ? 'spread-weekday' : 'single-portrait' };
+function persist(layouts: Layout[]) {
+  try {
+    localStorage.setItem(KEY, JSON.stringify({ layouts }));
+  } catch {
+    // Private browsing and blocked site data both land here; saving simply
+    // does not stick, which the caller reports through its toast.
   }
-  return { ...l, part, version: SCHEMA_VERSION };
-}
-
-function save(store: Store) {
-  localStorage.setItem(KEY, JSON.stringify(store));
 }
 
 export function listLayouts(): Layout[] {
-  return load().layouts.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  return load().sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 }
 
 export function saveLayout(layout: Layout) {
-  const store = load();
-  const idx = store.layouts.findIndex(l => l.id === layout.id);
-  const withTs = { ...layout, updatedAt: new Date().toISOString(), version: SCHEMA_VERSION };
-  if (idx >= 0) store.layouts[idx] = withTs;
-  else store.layouts.push(withTs);
-  save(store);
+  const layouts = load();
+  const next = { ...layout, updatedAt: new Date().toISOString(), version: SCHEMA_VERSION };
+  const i = layouts.findIndex(l => l.id === layout.id);
+  if (i >= 0) layouts[i] = next; else layouts.push(next);
+  persist(layouts);
 }
 
 export function deleteLayout(id: string) {
-  const store = load();
-  store.layouts = store.layouts.filter(l => l.id !== id);
-  save(store);
-}
-
-export function exportLayout(layout: Layout): string {
-  return JSON.stringify(layout, null, 2);
-}
-
-export function importLayout(json: string): Layout {
-  const parsed = JSON.parse(json);
-  return migrate(parsed);
+  persist(load().filter(l => l.id !== id));
 }
 
 export function newId(): string {
-  return (crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2)) as string;
+  return crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2);
 }
