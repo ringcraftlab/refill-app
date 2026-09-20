@@ -70,9 +70,9 @@ export function App() {
   return <CanvasScreen layout={layout} setLayout={setLayout} onBack={() => setStage('sides')} />;
 }
 
-// Largest to smallest, drawn to one scale so the row itself shows how the
-// sizes compare.
-const SIZE_ORDER: RefillSize[] = ['A5', 'BIBLE', 'NARROW', 'M6', 'M5'];
+// Smallest first, drawn to one scale so the list itself shows how the sizes
+// compare.
+const SIZE_ORDER: RefillSize[] = ['M5', 'M6', 'NARROW', 'BIBLE', 'A5'];
 const SIZE_NOTE: Record<RefillSize, string> = {
   A5: '書き込み重視',
   BIBLE: '王道サイズ',
@@ -81,7 +81,7 @@ const SIZE_NOTE: Record<RefillSize, string> = {
   M5: 'メモ帳サイズ',
 };
 // Millimetres to pixels for the picker. The whole row has to fit a phone.
-const PICKER_SCALE = 0.56;
+const PICKER_SCALE = 0.68;
 
 function SizeIcon({ size }: { size: SizeSpec }) {
   return (
@@ -107,20 +107,24 @@ function SizeIcon({ size }: { size: SizeSpec }) {
 }
 
 function SizeScreen({ selected, onPick }: { selected: RefillSize; onPick: (s: RefillSize) => void }) {
-  const tallest = Math.max(...SIZE_ORDER.map(id => SIZES[id].heightMm)) * PICKER_SCALE;
+  // A common icon column, so every binding edge lines up like refills standing
+  // on a shelf and only the paper's size differs.
+  const widest = Math.max(...SIZE_ORDER.map(id => SIZES[id].widthMm)) * PICKER_SCALE;
   return (
     <div className="screen pad">
       <div className="brand">RingCraftLab</div>
       <h1>手帳のサイズを選ぶ</h1>
-      <div className="sizerow">
+      <div className="sizelist">
         {SIZE_ORDER.map(id => {
           const s = SIZES[id];
           return (
-            <button key={id} className={`sizecard${selected === id ? ' on' : ''}`} onClick={() => onPick(id)}>
-              <span className="art" style={{ height: tallest }}><SizeIcon size={s} /></span>
-              <strong>{s.label}</strong>
-              <small>{s.widthMm}×{s.heightMm}mm</small>
-              <small className="note">{SIZE_NOTE[id]}</small>
+            <button key={id} className={`sizerow${selected === id ? ' on' : ''}`} onClick={() => onPick(id)}>
+              <span className="art" style={{ width: widest }}><SizeIcon size={s} /></span>
+              <span className="meta">
+                <strong>{s.label}</strong>
+                <small>{s.widthMm}×{s.heightMm}mm ・ {s.holes.count}穴</small>
+                <small className="note">{SIZE_NOTE[id]}</small>
+              </span>
             </button>
           );
         })}

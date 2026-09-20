@@ -44,38 +44,26 @@ h2 { font-size: 14px; margin: 0; }
 
 /* Drawn to one scale, bottom aligned, so the row reads as a size comparison.
    The holes come from the same spec the refill is punched to. */
+.sizelist { display: flex; flex-direction: column; gap: 6px; overflow-y: auto; }
 .sizerow {
   display: flex;
+  /* Bottoms level and binding edges in one column, so height alone carries the
+     size difference. */
   align-items: flex-end;
-  gap: 4px;
-  overflow-x: auto;
-  /* Full bleed, so five sizes fit without the outer page padding eating into
-     the comparison. */
-  margin: 0 -14px;
-  padding: 0 14px 4px;
-  /* Centring a scrolling row cuts off the leading card and puts it out of
-     reach, so the row starts at the left and scrolls. */
-  justify-content: flex-start;
-}
-.sizecard {
-  flex-shrink: 0;
-  width: max-content;
-  max-width: 96px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
-  padding: 6px 4px;
+  gap: 14px;
+  padding: 7px 10px;
   border: 1.5px solid transparent;
-  border-radius: 10px;
+  border-radius: 12px;
   background: none;
+  text-align: left;
 }
-.sizecard.on { border-color: var(--ink); background: #fff; }
-.sizecard .art { display: flex; align-items: flex-end; }
-.sizecard svg { display: block; }
-.sizecard strong { font-size: 11px; margin-top: 4px; }
-.sizecard small { font-size: 8.5px; color: var(--faint); text-align: center; line-height: 1.35; }
-.sizecard .note { color: var(--accent); }
+.sizerow.on { border-color: var(--ink); background: #fff; }
+.sizerow .art { flex-shrink: 0; display: flex; justify-content: flex-start; }
+.sizerow svg { display: block; }
+.sizerow .meta { display: flex; flex-direction: column; gap: 1px; padding-bottom: 2px; }
+.sizerow strong { font-size: 14px; }
+.sizerow small { font-size: 11px; color: var(--faint); }
+.sizerow .note { color: var(--accent); }
 
 .cards { display: flex; flex-direction: column; gap: 10px; }
 .card {
