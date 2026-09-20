@@ -5,13 +5,14 @@ import { holeCentres, SIZES } from './lib/sizes';
 import { buildGeometry, MAX_RATIO, MIN_RATIO, placeParts as planPlacement, regionAt } from './lib/layout';
 import type { Divider } from './lib/layout';
 import { nextMonthCell } from './lib/parts';
-import { buildPages } from './lib/render/pages';
+import { buildPages, buildPrintSheets, DEFAULT_PRINT, perPaperCount } from './lib/render/pages';
+import type { PrintOptions } from './lib/render/pages';
 import { PageSvg } from './lib/render/svg';
-import { downloadPdf, pagesToPdf } from './lib/render/pdf';
+import { downloadPdf, sheetsToPdf } from './lib/render/pdf';
 import { deleteLayout, listLayouts, newId, saveLayout } from './lib/storage';
 
 type Stage = 'size' | 'sides' | 'canvas';
-type SheetTarget = { slot: number } | 'spanning' | 'load' | null;
+type SheetTarget = { slot: number } | 'spanning' | 'load' | 'print' | null;
 
 const GAP = 6;
 
@@ -337,10 +338,11 @@ function CanvasScreen({ layout, setLayout, onBack }: {
   };
   const endDivider = () => { dividerRef.current = null; };
 
-  const onExport = async () => {
-    const bytes = await pagesToPdf(pages, layout.name);
-    downloadPdf(bytes, `${layout.name || 'refill'}.pdf`);
-    say('原寸PDFを書き出しました');
+  const onExport = async (opts: PrintOptions) => {
+    const sheets = buildPrintSheets(layout, size, opts);
+    downloadPdf(await sheetsToPdf(sheets, layout.name), `${layout.name || 'refill'}.pdf`);
+    setSheet(null);
+    say(opts.impose ? `A4 ${sheets.length}枚を書き出しました` : `原寸 ${sheets.length}枚を書き出しました`);
   };
 
   // Hit areas and borders are drawn over the sheets rather than inside them, so
@@ -488,7 +490,7 @@ function CanvasScreen({ layout, setLayout, onBack }: {
       <div className="actions">
         <button onClick={() => setSheet('load')}>読み込み</button>
         <button onClick={() => { saveLayout(layout); say('レイアウトを保存しました'); }}>保存</button>
-        <button className="primary" onClick={onExport}>PDF出力</button>
+        <button className="primary" onClick={() => setSheet('print')}>PDF出力</button>
       </div>
 
       {ghost && (
@@ -507,24 +509,30 @@ function CanvasScreen({ layout, setLayout, onBack }: {
           onClose={() => setSheet(null)}
           onRemove={removePart}
           onLoad={l => { setLayout(() => l); setSheet(null); say('読み込みました'); }}
+          size={size}
+          onExport={onExport}
         />
       )}
     </div>
   );
 }
 
-function PartSheet({ target, layout, setLayout, onClose, onRemove, onLoad }: {
+function PartSheet({ target, layout, setLayout, onClose, onRemove, onLoad, size, onExport }: {
   target: Exclude<SheetTarget, null>;
   layout: Layout;
   setLayout: (fn: (l: Layout) => Layout) => void;
   onClose: () => void;
   onRemove: (slot: number) => void;
   onLoad: (l: Layout) => void;
+  size: SizeSpec;
+  onExport: (opts: PrintOptions) => void;
 }) {
+  const [print, setPrint] = useState<PrintOptions>(DEFAULT_PRINT);
   const saved = useMemo(() => target === 'load' ? listLayouts() : [], [target]);
-  const kind = target === 'spanning' || target === 'load' ? null : layout.surface.placed[target.slot];
+  const kind = typeof target === 'string' ? null : layout.surface.placed[target.slot];
 
   const title = target === 'load' ? '保存済みレイアウト'
+    : target === 'print' ? '印刷'
     : target === 'spanning' ? '見開きマンスリー'
     : kind ? PART_LABEL[kind] : 'パーツ';
 
@@ -546,6 +554,49 @@ function PartSheet({ target, layout, setLayout, onClose, onRemove, onLoad }: {
                   </li>
                 ))}
               </ul>
+        )}
+
+        {target === 'print' && (
+          <>
+            <Choice
+              label="用紙"
+              options={[{ v: 'a4', label: 'A4にまとめる' }, { v: 'exact', label: '原寸のまま' }]}
+              value={print.impose ? 'a4' : 'exact'}
+              onPick={v => setPrint(p => ({ ...p, impose: v === 'a4' }))}
+            />
+            {print.impose && <p className="muted">A4 1枚に {perPaperCount(size)} 面</p>}
+
+            <div className="field">
+              <span className="field-label">部数</span>
+              <div className="stepper">
+                <button onClick={() => setPrint(p => ({ ...p, copies: Math.max(1, p.copies - 1) }))}>−</button>
+                <strong>{print.copies}</strong>
+                <button onClick={() => setPrint(p => ({ ...p, copies: Math.min(24, p.copies + 1) }))}>＋</button>
+              </div>
+            </div>
+
+            {print.impose && (
+              <Choice
+                label="切り取り線"
+                options={[{ v: 'on', label: '入れる' }, { v: 'off', label: '入れない' }]}
+                value={print.cutLines ? 'on' : 'off'}
+                onPick={v => setPrint(p => ({ ...p, cutLines: v === 'on' }))}
+              />
+            )}
+
+            {print.impose && (
+              <div className="field">
+                <span className="field-label">倍率補正（刷って穴位置がずれるとき）</span>
+                <div className="stepper">
+                  <button onClick={() => setPrint(p => ({ ...p, scalePercent: Math.max(95, +(p.scalePercent - 0.5).toFixed(1)) }))}>−</button>
+                  <strong>{print.scalePercent.toFixed(1)}%</strong>
+                  <button onClick={() => setPrint(p => ({ ...p, scalePercent: Math.min(105, +(p.scalePercent + 0.5).toFixed(1)) }))}>＋</button>
+                </div>
+              </div>
+            )}
+
+            <button className="primary" onClick={() => onExport(print)}>書き出す</button>
+          </>
         )}
 
         {(target === 'spanning' || kind === 'monthly') && (
@@ -613,7 +664,7 @@ function PartSheet({ target, layout, setLayout, onClose, onRemove, onLoad }: {
           </div>
         )}
 
-        {target !== 'load' && target !== 'spanning' && (
+        {typeof target !== 'string' && (
           <button className="danger" onClick={() => onRemove(target.slot)}>このパーツを外す</button>
         )}
         {target === 'spanning' && (

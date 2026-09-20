@@ -7,7 +7,7 @@ import type { HoleSpec, RefillSize, SizeSpec } from '../types';
 //   A5      32×2 + 19×4 + 70 = 210
 //   Bible   21.5×2 + 19×4 + 51 = 170
 //   Narrow  21.5×2 + 19×4 + 51 = 170   (same height, same punch)
-//   Mini 6  16×2 + 19×5 = 127          (one even run, no middle gap)
+//   Mini 6  16.5×2 + 19×5 = 128        (one even run, no middle gap)
 //   Micro 5 14.5×2 + 19×4 = 105        (five holes, not six)
 export const SIZES: Record<RefillSize, SizeSpec> = {
   M5: {
@@ -15,8 +15,8 @@ export const SIZES: Record<RefillSize, SizeSpec> = {
     holes: { count: 5, diameterMm: 4, pitchMm: 19, marginMm: 14.5 },
   },
   M6: {
-    id: 'M6', label: 'ミニ6', widthMm: 80, heightMm: 127, ringMarginMm: 9,
-    holes: { count: 6, diameterMm: 4, pitchMm: 19, marginMm: 16 },
+    id: 'M6', label: 'ミニ6', widthMm: 80, heightMm: 128, ringMarginMm: 9,
+    holes: { count: 6, diameterMm: 4, pitchMm: 19, marginMm: 16.5 },
   },
   NARROW: {
     id: 'NARROW', label: 'ナロー', widthMm: 80, heightMm: 170, ringMarginMm: 10,

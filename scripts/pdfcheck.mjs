@@ -1,16 +1,16 @@
-// Exports a PDF from the running app and checks what came out: page size must
-// be the physical punched sheet, and nothing may sit in the ring strip.
+// Exports a PDF from the running app and checks what came out: the paper size,
+// how many refills landed on each sheet, and a rendered image to look at.
 //
-//   node scripts/pdfcheck.mjs
+//   node scripts/pdfcheck.mjs [outDir]
 import { chromium } from 'playwright';
-import { mkdtemp, readFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { mkdir, readFile } from 'node:fs/promises';
+import { resolve } from 'node:path';
 import { PDFDocument } from 'pdf-lib';
 
 const BASE = process.env.BASE_URL ?? 'http://localhost:4173';
+const OUT = process.argv[2] ?? 'shots';
 const MM = 25.4 / 72;
-const dir = await mkdtemp(join(tmpdir(), 'refill-pdf-'));
+await mkdir(OUT, { recursive: true });
 
 const browser = await chromium.launch(
   process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {},
@@ -32,23 +32,41 @@ async function drag(from, to) {
   await page.mouse.move(to.x, to.y, { steps: 12 });
   await page.mouse.up();
 }
-const stamp = (label) => page.locator('.stamp', { hasText: label });
+const stamp = async (label) => {
+  const el = page.locator('.stamp', { hasText: label });
+  await el.scrollIntoViewIfNeeded();
+  return el;
+};
+
 const leftPage = page.locator('.page').first();
-await drag(await centerOf(stamp('マンスリー')), await centerOf(leftPage));
+await drag(await centerOf(await stamp('マンスリー')), await centerOf(leftPage));
 const lp = await leftPage.boundingBox();
-await drag(await centerOf(stamp('メモ')), { x: lp.x + lp.width / 2, y: lp.y + lp.height * 0.85 });
+await drag(await centerOf(await stamp('メモ')), { x: lp.x + lp.width / 2, y: lp.y + lp.height * 0.85 });
+
+await page.getByRole('button', { name: 'PDF出力' }).click();
+// Two copies of the spread, so the tiling has four refills to place.
+await page.locator('.stepper button').filter({ hasText: '＋' }).first().click();
+console.log('sheet says:', await page.locator('.sheet .muted').textContent());
 
 const dl = page.waitForEvent('download');
-await page.getByRole('button', { name: 'PDF出力' }).click();
-const file = join(dir, 'out.pdf');
+await page.getByRole('button', { name: '書き出す' }).click();
+const file = `${OUT}/imposed.pdf`;
 await (await dl).saveAs(file);
-await browser.close();
 
 const buf = await readFile(file);
 const doc = await PDFDocument.load(buf);
-console.log('pages:', doc.getPageCount());
+console.log('pdf pages:', doc.getPageCount());
 doc.getPages().forEach((p, i) => {
   const { width, height } = p.getSize();
   console.log(`  page${i + 1}: ${(width * MM).toFixed(1)} x ${(height * MM).toFixed(1)} mm`);
 });
-console.log('bytes:', buf.length);
+
+// Look at it rather than trusting the numbers.
+const viewer = await ctx.newPage();
+await viewer.setViewportSize({ width: 900, height: 1200 });
+await viewer.goto(`file://${resolve(file)}`);
+await viewer.waitForTimeout(3000);
+await viewer.screenshot({ path: `${OUT}/imposed.png` });
+console.log('rendered', `${OUT}/imposed.png`);
+
+await browser.close();

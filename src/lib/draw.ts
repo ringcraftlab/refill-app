@@ -13,6 +13,8 @@ export interface DrawRect {
   fill?: Color;
   stroke?: Color;
   strokeMm?: number;
+  // Dash/gap lengths in mm, for cut lines around an imposed refill.
+  dashMm?: number[];
 }
 export interface DrawLine {
   type: 'line';
@@ -30,6 +32,9 @@ export interface DrawText {
   color?: Color;
   // Horizontal alignment relative to (x, y). y is the baseline.
   align?: 'left' | 'center' | 'right';
+  // 90 means the text runs up the sheet, which is how a landscape page's
+  // content sits once it is flattened back onto its portrait sheet.
+  rotateDeg?: 90;
 }
 export interface DrawCircle {
   type: 'circle';
@@ -56,6 +61,28 @@ export interface Page {
   guides: Primitive[];
   // The physical punched sheet this reading-space canvas prints onto.
   sheet: { widthMm: number; heightMm: number; rotation: SheetRotation };
+}
+
+// Puts a page's content back on the physical punched sheet. Reading space is
+// the page as the user holds it, so a landscape page has to be turned a
+// quarter turn before it can be printed or imposed.
+export function flattenToSheet(page: Page): Primitive[] {
+  const H = page.sheet.heightMm;
+  if (page.sheet.rotation === 0) return page.primitives;
+
+  // The sheet's x is the page's y; the sheet's y runs back down the page's x.
+  return page.primitives.map((p): Primitive => {
+    if (p.type === 'rect') {
+      return { ...p, x: p.y, y: H - p.x - p.w, w: p.h, h: p.w };
+    }
+    if (p.type === 'line') {
+      return { ...p, x1: p.y1, y1: H - p.x1, x2: p.y2, y2: H - p.x2 };
+    }
+    if (p.type === 'circle') {
+      return { ...p, cx: p.cy, cy: H - p.cx };
+    }
+    return { ...p, x: p.y, y: H - p.x, rotateDeg: 90 };
+  });
 }
 
 // Keeps only what falls inside the millimetre band [xMin, xMax], then shifts
