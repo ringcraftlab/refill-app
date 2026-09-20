@@ -97,54 +97,47 @@ function ringEdgeFor(spread: boolean, landscape: boolean, key: PageKey): RingEdg
   return key === 'left' ? 'right' : 'left';
 }
 
+// Which way a surface wants to be cut: a long thin strip divides across its
+// length, so both halves stay usable. Splitting the strip left over under a
+// spread calendar the other way would leave two bands too shallow to write in.
+export const splitFor = (w: number, h: number): 'h' | 'v' => (w >= h ? 'v' : 'h');
+
+const cut = (r: Rect, ratio: number, vertical: boolean): [Rect, Rect] => vertical
+  ? [{ ...r, w: r.w * ratio }, { ...r, x: r.x + r.w * ratio, w: r.w * (1 - ratio) }]
+  : [{ ...r, h: r.h * ratio }, { ...r, y: r.y + r.h * ratio, h: r.h * (1 - ratio) }];
+
 function splitRegions(count: number, s: Surface, w: number, h: number): Rect[] {
   const a = s.ratios.a ?? EVEN, b = s.ratios.b ?? EVEN, c = s.ratios.c ?? EVEN;
   if (count <= 0) return [];
   // One part owns the whole surface. Space is only carved up once something
   // else actually joins it — never reserved in advance.
-  if (count === 1) return [{ x: 0, y: 0, w, h }];
-  if (count === 2) {
-    if (s.split === 'v') {
-      const left = w * a;
-      return [{ x: 0, y: 0, w: left, h }, { x: left, y: 0, w: w - left, h }];
-    }
-    const top = h * a;
-    return [{ x: 0, y: 0, w, h: top }, { x: 0, y: top, w, h: h - top }];
-  }
-  if (count === 3) {
-    const top = h * a, bottom = h - top, left = w * b;
-    return [
-      { x: 0, y: 0, w, h: top },
-      { x: 0, y: top, w: left, h: bottom },
-      { x: left, y: top, w: w - left, h: bottom },
-    ];
-  }
-  const row1 = h * a, row2 = h - row1, w1 = w * b, w2 = w * c;
-  return [
-    { x: 0, y: 0, w: w1, h: row1 },
-    { x: w1, y: 0, w: w - w1, h: row1 },
-    { x: 0, y: row1, w: w2, h: row2 },
-    { x: w2, y: row1, w: w - w2, h: row2 },
-  ];
+  const whole = { x: 0, y: 0, w, h };
+  if (count === 1) return [whole];
+
+  const vertical = s.split === 'v';
+  const [r1, r2] = cut(whole, a, vertical);
+  if (count === 2) return [r1, r2];
+  // Anything further divides the other way, so regions stay close to square.
+  if (count === 3) return [r1, ...cut(r2, b, !vertical)];
+  return [...cut(r1, b, !vertical), ...cut(r2, c, !vertical)];
 }
 
 function surfaceDividers(count: number, s: Surface, w: number, h: number): Divider[] {
   const a = s.ratios.a ?? EVEN, b = s.ratios.b ?? EVEN, c = s.ratios.c ?? EVEN;
-  const out: Divider[] = [];
-  if (count === 2) {
-    out.push(s.split === 'v'
-      ? { id: 'a', key: 'a', axis: 'v', x: w * a, y: 0, length: h, ratio: a, extentMm: w }
-      : { id: 'a', key: 'a', axis: 'h', x: 0, y: h * a, length: w, ratio: a, extentMm: h });
-  }
-  if (count === 3) {
-    out.push({ id: 'a', key: 'a', axis: 'h', x: 0, y: h * a, length: w, ratio: a, extentMm: h });
-    out.push({ id: 'b', key: 'b', axis: 'v', x: w * b, y: h * a, length: h - h * a, ratio: b, extentMm: w });
-  }
+  if (count < 2) return [];
+
+  const vertical = s.split === 'v';
+  const whole = { x: 0, y: 0, w, h };
+  const [r1, r2] = cut(whole, a, vertical);
+  const border = (id: DividerKey, r: Rect, ratio: number, vert: boolean): Divider => vert
+    ? { id, key: id, axis: 'v', x: r.x + r.w * ratio, y: r.y, length: r.h, ratio, extentMm: r.w }
+    : { id, key: id, axis: 'h', x: r.x, y: r.y + r.h * ratio, length: r.w, ratio, extentMm: r.h };
+
+  const out = [border('a', whole, a, vertical)];
+  if (count === 3) out.push(border('b', r2, b, !vertical));
   if (count === 4) {
-    const row1 = h * a;
-    out.push({ id: 'a', key: 'a', axis: 'h', x: 0, y: row1, length: w, ratio: a, extentMm: h });
-    out.push({ id: 'b', key: 'b', axis: 'v', x: w * b, y: 0, length: row1, ratio: b, extentMm: w });
-    out.push({ id: 'c', key: 'c', axis: 'v', x: w * c, y: row1, length: h - row1, ratio: c, extentMm: w });
+    out.push(border('b', r1, b, !vertical));
+    out.push(border('c', r2, c, !vertical));
   }
   return out;
 }

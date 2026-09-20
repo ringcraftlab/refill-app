@@ -2,7 +2,7 @@ import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { Layout, PartKind, RefillSize, SpanPattern } from './types';
 import { MAX_PARTS, SCHEMA_VERSION } from './types';
 import { SIZES } from './lib/sizes';
-import { buildGeometry, MAX_RATIO, MIN_RATIO, regionAt } from './lib/layout';
+import { buildGeometry, MAX_RATIO, MIN_RATIO, regionAt, splitFor } from './lib/layout';
 import type { Divider } from './lib/layout';
 import { buildPages } from './lib/render/pages';
 import { PageSvg } from './lib/render/svg';
@@ -221,15 +221,14 @@ function CanvasScreen({ layout, setLayout, onBack }: {
 
       let placed = [...cur.placed];
       let split = cur.split;
-      // One part joining one existing part: where it landed decides whether the
-      // surface divides across or down, and which side the newcomer takes.
-      if (cur.placed.length === 1 && toAdd.length === 1 && at && surfaceW > 0 && surfaceH > 0) {
-        const fx = at.sx / surfaceW, fy = at.sy / surfaceH;
-        const nearerSide = Math.min(fx, 1 - fx) < Math.min(fy, 1 - fy);
-        split = nearerSide ? 'v' : 'h';
-        placed = (nearerSide ? fx < 0.5 : fy < 0.5)
-          ? [toAdd[0], ...placed]
-          : [...placed, toAdd[0]];
+      // A second part divides the leftover across its longer side, so neither
+      // half comes out too shallow to use. Where it landed picks the side.
+      if (cur.placed.length === 1 && toAdd.length === 1 && surfaceW > 0 && surfaceH > 0) {
+        split = splitFor(surfaceW, surfaceH);
+        const before = at
+          ? (split === 'v' ? at.sx / surfaceW < 0.5 : at.sy / surfaceH < 0.5)
+          : false;
+        placed = before ? [toAdd[0], ...placed] : [...placed, toAdd[0]];
       } else {
         placed = [...placed, ...toAdd];
       }
@@ -358,7 +357,7 @@ function CanvasScreen({ layout, setLayout, onBack }: {
     <div className="screen">
       <header className="bar">
         <button className="icon" onClick={onBack} aria-label="戻る">←</button>
-        <span>{size.label} ・ {layout.spread ? '見開き' : '片面'}</span>
+        <span>{size.label} {size.widthMm}×{size.heightMm}mm ・ {layout.spread ? '見開き' : '片面'}</span>
       </header>
 
       <div className="stage" ref={boxRef}>
@@ -529,6 +528,15 @@ function PartSheet({ target, layout, setLayout, onClose, onRemove, onLoad }: {
             options={[{ v: 'portrait', label: '縦' }, { v: 'landscape', label: '横（回転）' }]}
             value={layout.monthlyOrientation}
             onPick={v => setLayout(l => ({ ...l, monthlyOrientation: v as 'portrait' | 'landscape' }))}
+          />
+        )}
+
+        {kind && layout.surface.placed.length >= 2 && (
+          <Choice
+            label="並べ方"
+            options={[{ v: 'v', label: '左右に並べる' }, { v: 'h', label: '上下に並べる' }]}
+            value={layout.surface.split}
+            onPick={v => setLayout(l => ({ ...l, surface: { ...l.surface, split: v as 'h' | 'v' } }))}
           />
         )}
 
