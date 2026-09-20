@@ -2,8 +2,9 @@ import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { Layout, PartKind, RefillSize, SizeSpec, SpanPattern } from './types';
 import { MAX_PARTS, SCHEMA_VERSION } from './types';
 import { holeCentres, SIZES } from './lib/sizes';
-import { buildGeometry, MAX_RATIO, MIN_RATIO, regionAt, splitFor } from './lib/layout';
+import { buildGeometry, MAX_RATIO, MIN_RATIO, placeParts as planPlacement, regionAt } from './lib/layout';
 import type { Divider } from './lib/layout';
+import { nextMonthCell } from './lib/parts';
 import { buildPages } from './lib/render/pages';
 import { PageSvg } from './lib/render/svg';
 import { downloadPdf, pagesToPdf } from './lib/render/pdf';
@@ -17,13 +18,17 @@ const GAP = 6;
 const TRAY: { kind: PartKind; label: string; glyph: string }[] = [
   { kind: 'monthly', label: 'マンスリー', glyph: '31' },
   { kind: 'habit', label: 'ハビット', glyph: '✓' },
+  { kind: 'todo', label: 'TODO', glyph: '☐' },
+  { kind: 'goal', label: '目標', glyph: '◎' },
+  { kind: 'budget', label: '家計', glyph: '¥' },
   { kind: 'grid', label: '方眼', glyph: '#' },
   { kind: 'lines', label: '罫線', glyph: '≡' },
   { kind: 'memo', label: 'メモ', glyph: '✎' },
 ];
 
 const PART_LABEL: Record<PartKind, string> = {
-  monthly: 'マンスリー', habit: 'ハビットトラッカー', grid: '方眼', lines: '罫線', memo: 'メモ',
+  monthly: 'マンスリー', habit: 'ハビットトラッカー', todo: 'TODOリスト',
+  goal: '今月の目標', budget: '家計', grid: '方眼', lines: '罫線', memo: 'メモ',
 };
 
 function createLayout(): Layout {
@@ -40,6 +45,7 @@ function createLayout(): Layout {
     month: now.getMonth() + 1,
     weekStart: 1,
     monthlyOrientation: 'portrait',
+    showNextMonth: true,
     habitCount: 4,
     updatedAt: now.toISOString(),
   };
@@ -207,9 +213,6 @@ function CanvasScreen({ layout, setLayout, onBack }: {
     ? { x: i * (pw + GAP), y: 0 }
     : { x: 0, y: i * (ph + GAP) };
 
-  const surfaceW = geo.surface.widthMm;
-  const surfaceH = geo.surface.heightMm;
-
   const say = (text: string) => {
     setToast(text);
     window.clearTimeout(toastTimer.current);
@@ -245,39 +248,13 @@ function CanvasScreen({ layout, setLayout, onBack }: {
 
   const placeParts = (kinds: PartKind[], at: { sx: number; sy: number } | null) => {
     setLayout(prev => {
-      let spanning = prev.spanning;
-      let rest = kinds;
-      // On a spread the calendar is one part across both pages, so it becomes
-      // the band rather than a surface region.
-      if (prev.spread && !spanning && kinds.includes('monthly')) {
-        spanning = { pattern: 1, ratio: 1 };
-        rest = kinds.filter(k => k !== 'monthly');
+      const planned = planPlacement(prev, size, kinds, at);
+      if (!planned) {
+        say('空きが足りません。境界を動かしてください');
+        return prev;
       }
-      // The calendar keeps the whole page until something else actually joins
-      // it — space is never reserved in advance.
-      if (spanning && rest.length > 0 && spanning.ratio >= 0.95) {
-        spanning = { ...spanning, ratio: spanning.pattern === 2 ? 0.48 : 0.72 };
-      }
-
-      const cur = prev.surface;
-      const toAdd = rest.slice(0, MAX_PARTS - cur.placed.length);
-      if (rest.length > toAdd.length) say(`一度に置けるのは${MAX_PARTS}つまでです`);
-      if (toAdd.length === 0) return { ...prev, spanning };
-
-      let placed = [...cur.placed];
-      let split = cur.split;
-      // A second part divides the leftover across its longer side, so neither
-      // half comes out too shallow to use. Where it landed picks the side.
-      if (cur.placed.length === 1 && toAdd.length === 1 && surfaceW > 0 && surfaceH > 0) {
-        split = splitFor(surfaceW, surfaceH);
-        const before = at
-          ? (split === 'v' ? at.sx / surfaceW < 0.5 : at.sy / surfaceH < 0.5)
-          : false;
-        placed = before ? [toAdd[0], ...placed] : [...placed, toAdd[0]];
-      } else {
-        placed = [...placed, ...toAdd];
-      }
-      return { ...prev, spanning, surface: { placed, ratios: {}, split } };
+      if (planned.overflow > 0) say(`一度に置けるのは${MAX_PARTS}つまでです`);
+      return planned.layout;
     });
   };
 
@@ -398,6 +375,11 @@ function CanvasScreen({ layout, setLayout, onBack }: {
 
   const empty = layout.surface.placed.length === 0 && !layout.spanning;
 
+  // The next-month calendar is part of the monthly rather than a part of its
+  // own, so it gets a clear button on the sheet instead of a tray entry.
+  const leftSpan = geo.pages.find(p => p.key === 'left')?.spanRect;
+  const miniCell = layout.showNextMonth && leftSpan ? nextMonthCell(leftSpan, layout) : null;
+
   return (
     <div className="screen">
       <header className="bar">
@@ -441,6 +423,18 @@ function CanvasScreen({ layout, setLayout, onBack }: {
               title={PART_LABEL[layout.surface.placed[b.slot]]}
             />
           ))}
+
+          {miniCell && (
+            <button
+              className="clearmini"
+              style={{
+                left: pageOrigin(0).x + (miniCell.x + miniCell.w) * scale - 9,
+                top: pageOrigin(0).y + miniCell.y * scale - 3,
+              }}
+              onClick={() => setLayout(l => ({ ...l, showNextMonth: false }))}
+              aria-label="翌月のカレンダーを消す"
+            >×</button>
+          )}
 
           {dividerBoxes.map(b => (
             <div
@@ -564,6 +558,15 @@ function PartSheet({ target, layout, setLayout, onClose, onRemove, onLoad }: {
               ...l,
               spanning: l.spanning ? { ...l.spanning, pattern: v as SpanPattern } : null,
             }))}
+          />
+        )}
+
+        {target === 'spanning' && layout.spanning?.pattern === 1 && (
+          <Choice
+            label="翌月のミニカレンダー"
+            options={[{ v: 'on', label: '入れる' }, { v: 'off', label: '入れない' }]}
+            value={layout.showNextMonth ? 'on' : 'off'}
+            onPick={v => setLayout(l => ({ ...l, showNextMonth: v === 'on' }))}
           />
         )}
 

@@ -102,6 +102,9 @@ export function drawMonthly(area: Rect, layout: Layout, slice: MonthlySlice): Pr
       type: 'text', x: cx, y: bodyTop + Math.min(rowH * 0.8, 13),
       text: EN_MONTH[layout.month - 1], sizePt: 6, color: INK_SOFT, align: 'center',
     });
+    if (layout.showNextMonth && weeks.length >= 2) {
+      out.push(...drawMiniMonth({ x: left, y: bodyTop + rowH, w: colW, h: rowH }, layout));
+    }
   }
 
   out.push({ type: 'rect', x: left, y: gridTop, w: width, h: bottom - gridTop, stroke: RULE, strokeMm: 0.25 });
@@ -139,6 +142,48 @@ export function drawMonthly(area: Rect, layout: Layout, slice: MonthlySlice): Pr
     }
   }
   return out;
+}
+
+// Next month tucked into a free index cell, the way printed refills do it.
+function drawMiniMonth(cell: Rect, layout: Layout): Primitive[] {
+  const year = layout.month === 12 ? layout.year + 1 : layout.year;
+  const month = layout.month === 12 ? 1 : layout.month + 1;
+  const weeks = monthGrid(year, month, layout.weekStart);
+
+  const pad = 1.4;
+  const left = cell.x + pad, top = cell.y + pad;
+  const w = cell.w - pad * 2, h = cell.h - pad * 2;
+  if (w < 11 || h < 11) return [];
+
+  const out: Primitive[] = [
+    { type: 'text', x: left, y: top + 2.2, text: `${month}月`, sizePt: 4.5, color: INK_SOFT, align: 'left' },
+  ];
+  const gridTop = top + 3.2;
+  const colW = w / 7;
+  const rowH = (h - 3.2) / weeks.length;
+  if (rowH < 1.6) return out;
+
+  weeks.forEach((week, r) => week.forEach((d, c) => {
+    if (!d) return;
+    out.push({
+      type: 'text',
+      x: left + colW * (c + 0.5), y: gridTop + rowH * (r + 0.8),
+      text: String(d.getDate()), sizePt: 3.2,
+      color: dowColor(d.getDay()), align: 'center',
+    });
+  }));
+  return out;
+}
+
+// Where that mini calendar sits, so the editor can offer to clear it.
+export function nextMonthCell(area: Rect, layout: Layout): Rect | null {
+  if (layout.spanning?.pattern !== 1) return null;
+  const weeks = weekCount(layout);
+  if (weeks < 2) return null;
+  const { left, right, top, bottom } = inset(area);
+  const bodyTop = top + DOW_HEADER_H;
+  const rowH = (bottom - bodyTop) / weeks;
+  return { x: left, y: bodyTop + rowH, w: (right - left) / 4, h: rowH };
 }
 
 export function drawSpanningMonthly(area: Rect, page: PageKey, layout: Layout): Primitive[] {
@@ -179,6 +224,49 @@ function ruled(area: Rect, title: string | null, pitch: number): Primitive[] {
 
 export const drawMemo = (area: Rect): Primitive[] => ruled(area, 'MEMO', 5);
 export const drawLines = (area: Rect): Primitive[] => ruled(area, null, 6);
+
+export function drawTodo(area: Rect): Primitive[] {
+  const { left, right, top, bottom } = inset(area);
+  const out: Primitive[] = [
+    { type: 'text', x: left, y: top + 2.8, text: 'TO DO', sizePt: 5.5, color: INK_SOFT, align: 'left' },
+  ];
+  const pitch = 6, box = 2.4;
+  for (let y = top + 7; y <= bottom; y += pitch) {
+    out.push({ type: 'rect', x: left, y: y - box, w: box, h: box, stroke: RULE, strokeMm: 0.2 });
+    out.push({ type: 'line', x1: left + box + 1.2, y1: y, x2: right, y2: y, stroke: RULE_LIGHT, strokeMm: 0.15 });
+  }
+  return out;
+}
+
+export function drawGoal(area: Rect): Primitive[] {
+  const { left, right, top, bottom } = inset(area);
+  const out: Primitive[] = [
+    { type: 'rect', x: left, y: top, w: right - left, h: bottom - top, stroke: RULE, strokeMm: 0.25 },
+    { type: 'text', x: left + 1.5, y: top + 3.6, text: 'GOAL', sizePt: 5.5, color: INK, align: 'left' },
+    { type: 'line', x1: left, y1: top + 5, x2: right, y2: top + 5, stroke: RULE, strokeMm: 0.2 },
+  ];
+  for (let y = top + 10; y <= bottom - 1.5; y += 5) {
+    out.push({ type: 'line', x1: left + 1.5, y1: y, x2: right - 1.5, y2: y, stroke: RULE_LIGHT, strokeMm: 0.15 });
+  }
+  return out;
+}
+
+export function drawBudget(area: Rect): Primitive[] {
+  const { left, right, top, bottom } = inset(area);
+  const gridTop = top + 4.4;
+  // A ruled column on the right for amounts, which is what makes this a
+  // ledger rather than plain lines.
+  const amountX = right - Math.min(18, (right - left) * 0.32);
+  const out: Primitive[] = [
+    { type: 'text', x: left, y: top + 2.8, text: 'BUDGET', sizePt: 5.5, color: INK_SOFT, align: 'left' },
+    { type: 'rect', x: left, y: gridTop, w: right - left, h: bottom - gridTop, stroke: RULE, strokeMm: 0.2 },
+    { type: 'line', x1: amountX, y1: gridTop, x2: amountX, y2: bottom, stroke: RULE, strokeMm: 0.2 },
+  ];
+  for (let y = gridTop + 5; y < bottom; y += 5) {
+    out.push({ type: 'line', x1: left, y1: y, x2: right, y2: y, stroke: RULE_LIGHT, strokeMm: 0.15 });
+  }
+  return out;
+}
 
 export function drawGrid(area: Rect, pitch = 5): Primitive[] {
   const { left, right, top, bottom } = inset(area);
@@ -226,6 +314,9 @@ export function drawPart(kind: PartKind, area: Rect, layout: Layout): Primitive[
     case 'monthly':
       return drawMonthly(area, layout, { cols: [0, 7], rows: [0, weekCount(layout)], monthLabel: 'show' });
     case 'habit': return drawHabit(area, layout);
+    case 'todo': return drawTodo(area);
+    case 'goal': return drawGoal(area);
+    case 'budget': return drawBudget(area);
     case 'grid': return drawGrid(area);
     case 'lines': return drawLines(area);
     case 'memo': return drawMemo(area);

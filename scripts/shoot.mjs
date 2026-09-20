@@ -35,7 +35,13 @@ async function drag(from, to) {
   await page.mouse.up();
 }
 
-const stamp = (label) => page.locator('.stamp', { hasText: label });
+// The tray scrolls, so a stamp has to be brought into view before it can be
+// picked up.
+const stamp = async (label) => {
+  const el = page.locator('.stamp', { hasText: label });
+  await el.scrollIntoViewIfNeeded();
+  return el;
+};
 
 await page.goto(BASE);
 await shot('01-サイズ選択');
@@ -49,12 +55,12 @@ await page.locator('.page').first().waitFor();
 await shot('03-空のキャンバス');
 
 const leftPage = page.locator('.page').first();
-await drag(await centerOf(stamp('マンスリー')), await centerOf(leftPage));
+await drag(await centerOf(await stamp('マンスリー')), await centerOf(leftPage));
 await shot('04-マンスリーを配置');
 
 // Drop the memo onto the lower part of the same page.
 const lp = await leftPage.boundingBox();
-await drag(await centerOf(stamp('メモ')), { x: lp.x + lp.width / 2, y: lp.y + lp.height * 0.85 });
+await drag(await centerOf(await stamp('メモ')), { x: lp.x + lp.width / 2, y: lp.y + lp.height * 0.85 });
 await shot('05-メモを追加');
 
 // The app's reason for existing: the memo area is too small, so drag the
@@ -68,7 +74,39 @@ await shot('06-メモを広げた');
 // pages carry different parts.
 const rightPage = page.locator('.page').last();
 const rp = await rightPage.boundingBox();
-await drag(await centerOf(stamp('方眼')), { x: rp.x + rp.width * 0.7, y: rp.y + rp.height * 0.8 });
+await drag(await centerOf(await stamp('方眼')), { x: rp.x + rp.width * 0.7, y: rp.y + rp.height * 0.8 });
 await shot('07-右に方眼を落とす');
+
+// A fresh spread: the habit tracker needs width for its 31 day columns, so it
+// should take a band across the whole spread rather than half a page.
+await page.goto(BASE);
+await page.locator('.sizerow', { hasText: 'ミニ6' }).click();
+await page.locator('.card', { hasText: '見開き' }).click();
+await page.getByRole('button', { name: 'この構成で作る' }).click();
+await page.locator('.page').first().waitFor();
+const left2 = page.locator('.page').first();
+await drag(await centerOf(await stamp('マンスリー')), await centerOf(left2));
+const lp2 = await left2.boundingBox();
+await drag(await centerOf(await stamp('ハビット')), { x: lp2.x + lp2.width * 0.5, y: lp2.y + lp2.height * 0.85 });
+await shot('08-ハビットは横長で配置');
+
+// A to-do list stacks items, so it needs height; with only the habit band's
+// leftover it should be refused rather than squeezed in.
+await drag(await centerOf(await stamp('TODO')), { x: lp2.x + lp2.width * 0.3, y: lp2.y + lp2.height * 0.85 });
+await shot('09-TODOを足す');
+
+// Splitting the spread by week turns both pages landscape and stacks them,
+// with the fuller page first and the shorter page's leftover free to write in.
+await page.goto(BASE);
+await page.locator('.sizerow', { hasText: 'ミニ6' }).click();
+await page.locator('.card', { hasText: '見開き' }).click();
+await page.getByRole('button', { name: 'この構成で作る' }).click();
+await page.locator('.page').first().waitFor();
+const left3 = page.locator('.page').first();
+await drag(await centerOf(await stamp('マンスリー')), await centerOf(left3));
+await page.getByRole('button', { name: 'マンスリーの設定' }).first().click();
+await page.getByRole('button', { name: '週で分ける（横向き）' }).click();
+await page.locator('.scrim').click();
+await shot('10-横向きの週分割');
 
 await browser.close();

@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 5;
+export const SCHEMA_VERSION = 6;
 
 export type RefillSize = 'M5' | 'M6' | 'BIBLE' | 'NARROW' | 'A5';
 
@@ -28,7 +28,29 @@ export interface SizeSpec {
 
 export type WeekStart = 0 | 1;
 
-export type PartKind = 'monthly' | 'habit' | 'grid' | 'lines' | 'memo';
+export type PartKind =
+  | 'monthly' | 'habit' | 'todo' | 'goal' | 'budget' | 'grid' | 'lines' | 'memo';
+
+// What a part needs to stay usable, and which way it wants to be shaped. The
+// habit tracker carries 31 day columns, so it needs width or its ticks become
+// unwritable; a to-do list stacks items, so it wants height. Placement picks a
+// split from these numbers rather than from anyone's taste.
+export interface PartFit {
+  minWMm: number;
+  minHMm: number;
+  prefer: 'wide' | 'tall' | 'any';
+}
+
+export const PART_FIT: Record<PartKind, PartFit> = {
+  monthly: { minWMm: 52, minHMm: 40, prefer: 'any' },
+  habit:   { minWMm: 76, minHMm: 18, prefer: 'wide' },
+  todo:    { minWMm: 18, minHMm: 28, prefer: 'tall' },
+  goal:    { minWMm: 26, minHMm: 18, prefer: 'any' },
+  budget:  { minWMm: 34, minHMm: 20, prefer: 'any' },
+  grid:    { minWMm: 14, minHMm: 8,  prefer: 'any' },
+  lines:   { minWMm: 16, minHMm: 8,  prefer: 'any' },
+  memo:    { minWMm: 16, minHMm: 10, prefer: 'any' },
+};
 
 // A spread monthly is one calendar across both pages.
 //   1: split the weekday columns (Mon-Wed | Thu-Sun), pages stay portrait
@@ -69,6 +91,9 @@ export interface Layout {
   month: number; // 1-12
   weekStart: WeekStart;
   monthlyOrientation: 'portrait' | 'landscape';
+  // Printed refills usually tuck next month's dates into the spread's index
+  // column, so it is on unless the user clears it.
+  showNextMonth: boolean;
   habitCount: number;
   updatedAt: string;
 }

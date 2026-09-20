@@ -1,4 +1,5 @@
-import type { Layout, PageKey, SizeSpec, Surface } from '../types';
+import type { Layout, PageKey, PartKind, SizeSpec, Surface } from '../types';
+import { MAX_PARTS, PART_FIT } from '../types';
 import type { SheetRotation } from './draw';
 import { monthGrid } from './dates';
 import { holeCentres } from './sizes';
@@ -262,6 +263,72 @@ export function buildGeometry(layout: Layout, size: SizeSpec): Geometry {
       dividers: surfaceDividers(count, layout.surface, surfaceW, surfaceH),
     },
   };
+}
+
+function fits(kind: PartKind, r: Rect): boolean {
+  const f = PART_FIT[kind];
+  return r.w >= f.minWMm && r.h >= f.minHMm;
+}
+
+function everyPartFits(layout: Layout, size: SizeSpec): boolean {
+  const { regions } = buildGeometry(layout, size).surface;
+  return layout.surface.placed.every((kind, i) => !!regions[i] && fits(kind, regions[i]));
+}
+
+// Works out where a dropped part goes, and refuses rather than squeezing it
+// into a region too small to write in. Returns null when nothing fits.
+export function placeParts(
+  prev: Layout, size: SizeSpec, kinds: PartKind[], at: { sx: number; sy: number } | null,
+): { layout: Layout; overflow: number } | null {
+  let spanning = prev.spanning;
+  let rest = kinds;
+  // On a spread the calendar is one part across both pages, so it becomes the
+  // band rather than a surface region.
+  if (prev.spread && !spanning && kinds.includes('monthly')) {
+    spanning = { pattern: 1, ratio: 1 };
+    rest = kinds.filter(k => k !== 'monthly');
+  }
+  // The calendar keeps the whole page until something else actually joins it —
+  // space is never reserved in advance.
+  if (spanning && rest.length > 0 && spanning.ratio >= 0.95) {
+    spanning = { ...spanning, ratio: spanning.pattern === 2 ? 0.48 : 0.72 };
+  }
+
+  const cur = prev.surface;
+  const room = MAX_PARTS - cur.placed.length;
+  const toAdd = rest.slice(0, room);
+  const overflow = rest.length - toAdd.length;
+  if (toAdd.length === 0) return { layout: { ...prev, spanning }, overflow };
+
+  const candidates: Surface[] = [];
+  if (cur.placed.length === 1 && toAdd.length === 1) {
+    const incoming = toAdd[0];
+    const { widthMm, heightMm } = buildGeometry(prev, size).surface;
+    const pref = PART_FIT[incoming].prefer;
+    // A part that needs width gets a full-width band; one that stacks items
+    // gets a full-height column; anything else follows the surface's shape.
+    const order: ('h' | 'v')[] = pref === 'wide' ? ['h', 'v']
+      : pref === 'tall' ? ['v', 'h']
+      : splitFor(widthMm, heightMm) === 'v' ? ['v', 'h'] : ['h', 'v'];
+    for (const split of order) {
+      const first = at
+        ? (split === 'v' ? at.sx < widthMm / 2 : at.sy < heightMm / 2)
+        : false;
+      candidates.push({
+        placed: first ? [incoming, ...cur.placed] : [...cur.placed, incoming],
+        ratios: {},
+        split,
+      });
+    }
+  } else {
+    candidates.push({ placed: [...cur.placed, ...toAdd], ratios: {}, split: cur.split });
+  }
+
+  for (const surface of candidates) {
+    const layout = { ...prev, spanning, surface };
+    if (everyPartFits(layout, size)) return { layout, overflow };
+  }
+  return null;
 }
 
 // Which surface region a point in surface space falls in.
