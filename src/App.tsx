@@ -28,6 +28,8 @@ const TRAY: { kind: PartKind; label: string; glyph: string }[] = [
   { kind: 'memo', label: 'メモ', glyph: '✎' },
 ];
 
+const TAUGHT_KEY = 'ringcraft.dividerTaught';
+
 const PART_LABEL: Record<PartKind, string> = {
   monthly: 'マンスリー', habit: 'ハビットトラッカー', todo: 'TODOリスト',
   goal: '今月の目標', budget: '家計', grid: '方眼', lines: '罫線', memo: 'メモ',
@@ -185,6 +187,11 @@ function CanvasScreen({ layout, setLayout, onBack }: {
   const [sheet, setSheet] = useState<SheetTarget>(null);
   const [toast, setToast] = useState('');
   const [ghost, setGhost] = useState<{ x: number; y: number; kinds: PartKind[] } | null>(null);
+  // Dragging a border is the app's one irreplaceable gesture, so the handles
+  // keep asking for it until it has been used once.
+  const [taught, setTaught] = useState(() => {
+    try { return localStorage.getItem(TAUGHT_KEY) === '1'; } catch { return false; }
+  });
 
   const dragRef = useRef<DragState | null>(null);
   const dividerRef = useRef<{ d: Divider; startX: number; startY: number; extentPx: number } | null>(null);
@@ -326,6 +333,10 @@ function CanvasScreen({ layout, setLayout, onBack }: {
 
   const startDivider = (e: React.PointerEvent, d: Divider) => {
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    if (!taught) {
+      setTaught(true);
+      try { localStorage.setItem(TAUGHT_KEY, '1'); } catch { /* private mode */ }
+    }
     dividerRef.current = { d, startX: e.clientX, startY: e.clientY, extentPx: d.extentMm * scale };
   };
   const moveDivider = (e: React.PointerEvent) => {
@@ -386,6 +397,7 @@ function CanvasScreen({ layout, setLayout, onBack }: {
   });
 
   const empty = layout.surface.placed.length === 0 && !layout.spanning;
+  const teachDivider = !taught && dividerBoxes.length > 0;
 
   // The next-month calendar is part of the monthly rather than a part of its
   // own, so it gets a clear button on the sheet instead of a tray entry.
@@ -451,7 +463,7 @@ function CanvasScreen({ layout, setLayout, onBack }: {
           {dividerBoxes.map(b => (
             <div
               key={b.key}
-              className={`divider ${b.d.axis}`}
+              className={`divider ${b.d.axis}${taught ? '' : ' teach'}`}
               style={{ left: b.left, top: b.top, width: b.width, height: b.height }}
               onPointerDown={e => startDivider(e, b.d)}
               onPointerMove={moveDivider}
@@ -459,15 +471,18 @@ function CanvasScreen({ layout, setLayout, onBack }: {
               onPointerCancel={endDivider}
             >
               <i />
+              <b className="grip"><span /><span /></b>
             </div>
           ))}
         </div>
       </div>
 
-      <p className={`hint${traySelected.length > 1 ? ' active' : ''}`}>
-        {traySelected.length > 1
-          ? `${traySelected.length}個選択中：まとめてドラッグで自動配置`
-          : 'タップで複数選択 → まとめてドラッグで自動配置'}
+      <p className={`hint${traySelected.length > 1 || teachDivider ? ' active' : ''}`}>
+        {teachDivider
+          ? 'つまみを上下にドラッグすると、パーツの広さを変えられます'
+          : traySelected.length > 1
+            ? `${traySelected.length}個選択中：まとめてドラッグで自動配置`
+            : 'タップで複数選択 → まとめてドラッグで自動配置'}
       </p>
 
       <div className="tray">
