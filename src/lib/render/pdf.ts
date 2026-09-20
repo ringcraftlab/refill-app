@@ -47,6 +47,7 @@ function drawPrimitive(page: PDFPage, prim: Primitive, sheet: Page['sheet'], fon
       end: pt(prim.x2, prim.y2),
       thickness: mmToPt(prim.strokeMm ?? 0.2),
       color: rgb(...prim.stroke),
+      dashArray: prim.dashMm?.map(mmToPt),
     });
   } else if (prim.type === 'circle') {
     const c = pt(prim.cx, prim.cy);

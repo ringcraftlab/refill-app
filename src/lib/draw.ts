@@ -19,6 +19,8 @@ export interface DrawLine {
   x1: number; y1: number; x2: number; y2: number;
   stroke: Color;
   strokeMm?: number;
+  // Dash/gap lengths in mm, for the writing rules printed inside day cells.
+  dashMm?: number[];
 }
 export interface DrawText {
   type: 'text';
@@ -63,7 +65,7 @@ export const SUNDAY: Color = [0.788, 0.482, 0.576];
 export const SATURDAY: Color = [0.431, 0.561, 0.651];
 export const RULE: Color = [0.894, 0.874, 0.827];
 export const RULE_LIGHT: Color = [0.941, 0.918, 0.851];
-export const LABEL_BG: Color = [0.953, 0.933, 0.882];
-export const PAPER: Color = [1, 0.992, 0.969];
+// Refill stock is cream, not screen white.
+export const PAPER: Color = [0.992, 0.980, 0.925];
 export const RING_BAND: Color = [0.965, 0.957, 0.933];
 export const RING_HOLE: Color = [0.847, 0.824, 0.769];

@@ -1,6 +1,6 @@
 import type { Layout, PageKey, PartKind } from '../types';
 import type { Color, Primitive } from './draw';
-import { INK, INK_SOFT, LABEL_BG, RULE, RULE_LIGHT, SATURDAY, SUNDAY } from './draw';
+import { INK, INK_SOFT, RULE, RULE_LIGHT, SATURDAY, SUNDAY } from './draw';
 import { monthGrid, orderedWeekdays, rokuyoLabel, weekdayLabel } from './dates';
 import type { Rect } from './layout';
 
@@ -70,7 +70,8 @@ export function drawMonthly(area: Rect, layout: Layout, slice: MonthlySlice): Pr
     });
   }
 
-  out.push({ type: 'rect', x: left, y: gridTop, w: width, h: DOW_HEADER_H, fill: LABEL_BG });
+  // Printed refills leave the weekday row unshaded; the rule under it is
+  // enough to separate it.
   const dows = orderedWeekdays(layout.weekStart);
   if (lead) {
     out.push({
@@ -113,7 +114,9 @@ export function drawMonthly(area: Rect, layout: Layout, slice: MonthlySlice): Pr
     out.push({ type: 'line', x1: left, y1: y, x2: right, y2: y, stroke: RULE_LIGHT, strokeMm: 0.15 });
   }
 
-  const roomForRokuyo = rowH >= 6 && colW >= 7;
+  // The printed refills set the six-day label beside the date on the same
+  // line, not underneath it.
+  const roomForRokuyo = colW >= 9;
   for (let r = 0; r < weeks.length; r++) {
     for (let c = 0; c < dayCols; c++) {
       const cell = weeks[r][colStart + c];
@@ -121,11 +124,14 @@ export function drawMonthly(area: Rect, layout: Layout, slice: MonthlySlice): Pr
       const x = left + colW * (lead + c) + 0.9;
       const y = bodyTop + rowH * r;
       out.push({
-        type: 'text', x, y: y + 2.6, text: String(cell.getDate()),
-        sizePt: 6.5, color: dowColor(cell.getDay()), align: 'left',
+        type: 'text', x, y: y + 3.2, text: String(cell.getDate()),
+        sizePt: 8, color: dowColor(cell.getDay()), align: 'left',
       });
       if (roomForRokuyo) {
-        out.push({ type: 'text', x, y: y + 5.1, text: rokuyoLabel(cell), sizePt: 3.6, color: SUNDAY, align: 'left' });
+        out.push({
+          type: 'text', x: left + colW * (lead + c + 1) - 0.9, y: y + 3.1,
+          text: rokuyoLabel(cell), sizePt: 4, color: SUNDAY, align: 'right',
+        });
       }
     }
   }

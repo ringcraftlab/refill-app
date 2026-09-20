@@ -1,5 +1,6 @@
 import React from 'react';
 import type { Page, Primitive, Color } from '../draw';
+import { PAPER } from '../draw';
 
 const rgb = (c: Color) => `rgb(${Math.round(c[0]*255)},${Math.round(c[1]*255)},${Math.round(c[2]*255)})`;
 
@@ -39,6 +40,7 @@ function Primitives({ items }: { items: Primitive[] }) {
               x1={p.x1} y1={p.y1} x2={p.x2} y2={p.y2}
               stroke={rgb(p.stroke)}
               strokeWidth={p.strokeMm ?? 0.2}
+              strokeDasharray={p.dashMm?.join(' ')}
             />
           );
         }
@@ -73,7 +75,7 @@ export function PageSvg({ page, scale = 3, showGuides = true }: { page: Page; sc
       viewBox={`0 0 ${page.widthMm} ${page.heightMm}`}
       xmlns="http://www.w3.org/2000/svg"
     >
-      <rect x={0} y={0} width={page.widthMm} height={page.heightMm} fill="white" />
+      <rect x={0} y={0} width={page.widthMm} height={page.heightMm} fill={rgb(PAPER)} />
       {showGuides && <Primitives items={page.guides} />}
       <Primitives items={page.primitives} />
     </svg>
