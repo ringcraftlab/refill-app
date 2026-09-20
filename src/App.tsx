@@ -6,7 +6,7 @@ import { buildGeometry, MAX_RATIO, MIN_RATIO, placeParts as planPlacement, regio
 import type { Divider } from './lib/layout';
 import { nextMonthCell } from './lib/parts';
 import { buildPages, buildPrintSheets, DEFAULT_PRINT, perPaperCount } from './lib/render/pages';
-import type { PrintOptions } from './lib/render/pages';
+import type { BackFill, PrintOptions } from './lib/render/pages';
 import { PageSvg } from './lib/render/svg';
 import { downloadPdf, sheetsToPdf } from './lib/render/pdf';
 import { deleteLayout, listLayouts, newId, saveLayout } from './lib/storage';
@@ -565,6 +565,32 @@ function PartSheet({ target, layout, setLayout, onClose, onRemove, onLoad, size,
               onPick={v => setPrint(p => ({ ...p, impose: v === 'a4' }))}
             />
             {print.impose && <p className="muted">A4 1枚に {perPaperCount(size)} 面</p>}
+
+            <Choice
+              label="印刷"
+              options={[{ v: 'both', label: '両面' }, { v: 'one', label: '片面' }]}
+              value={print.duplex ? 'both' : 'one'}
+              onPick={v => setPrint(p => ({ ...p, duplex: v === 'both' }))}
+            />
+            {print.duplex && (
+              <Choice
+                label="裏面（使わない面）"
+                options={[
+                  { v: 'blank', label: '白紙' },
+                  { v: 'grid', label: '方眼' },
+                  { v: 'lines', label: '罫線' },
+                ]}
+                value={print.backFill}
+                onPick={v => setPrint(p => ({ ...p, backFill: v as BackFill }))}
+              />
+            )}
+
+            <Choice
+              label="穴ガイド"
+              options={[{ v: 'on', label: '印刷する' }, { v: 'off', label: '印刷しない' }]}
+              value={print.punchGuides ? 'on' : 'off'}
+              onPick={v => setPrint(p => ({ ...p, punchGuides: v === 'on' }))}
+            />
 
             <div className="field">
               <span className="field-label">部数</span>

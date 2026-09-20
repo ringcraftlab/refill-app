@@ -73,7 +73,10 @@ export function tilesPerPage(sheet: SheetContent, spec: ImposeSpec) {
   };
 }
 
-export function impose(sheets: SheetContent[], spec: ImposeSpec): SheetContent[] {
+// `mirrorColumns` is what makes duplex work: the back of a sheet meets the
+// front after the paper is turned over, so its tiles have to run the other way
+// across the page or nothing lines up.
+export function impose(sheets: SheetContent[], spec: ImposeSpec, mirrorColumns = false): SheetContent[] {
   if (sheets.length === 0) return [];
   const { cols, rows } = tilesPerPage(sheets[0], spec);
   const perPage = cols * rows;
@@ -88,7 +91,8 @@ export function impose(sheets: SheetContent[], spec: ImposeSpec): SheetContent[]
   for (let start = 0; start < sheets.length; start += perPage) {
     const primitives: Primitive[] = [];
     sheets.slice(start, start + perPage).forEach((sheet, i) => {
-      const x = ox + (i % cols) * (tw + spec.gapMm);
+      const col = mirrorColumns ? cols - 1 - (i % cols) : i % cols;
+      const x = ox + col * (tw + spec.gapMm);
       const y = oy + Math.floor(i / cols) * (th + spec.gapMm);
       if (spec.cutLines) primitives.push(cutRect(x, y, sheet.widthMm, sheet.heightMm));
       primitives.push(...translate(sheet.primitives, x, y));
