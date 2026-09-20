@@ -44,38 +44,26 @@ h2 { font-size: 14px; margin: 0; }
 
 /* Drawn to one scale, bottom aligned, so the row reads as a size comparison.
    The holes come from the same spec the refill is punched to. */
-/* The row sits in the middle of the free space rather than crowding the top. */
-.sizewrap { flex: 1; display: flex; align-items: center; min-height: 0; }
+/* Stacked tight, so the icons read as one run of increasing sizes rather than
+   five unrelated rows. */
+.sizelist { flex: 1; min-height: 0; display: flex; flex-direction: column; justify-content: center; gap: 2px; }
 .sizerow {
   display: flex;
-  /* One baseline, so height differences read directly. */
   align-items: flex-end;
-  justify-content: flex-start;
-  gap: 4px;
-  width: 100%;
-  overflow-x: auto;
-  /* Full bleed, so five sizes fit without the page padding eating into the
-     comparison. */
-  margin: 0 -14px;
-  padding: 0 14px;
-}
-.sizecard {
-  flex-shrink: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 1px;
-  padding: 6px 3px;
+  gap: 14px;
+  padding: 3px 8px;
   border: 1.5px solid transparent;
   border-radius: 10px;
   background: none;
+  text-align: left;
 }
-.sizecard.on { border-color: var(--ink); background: #fff; }
-.sizecard .art { display: flex; align-items: flex-end; }
-.sizecard svg { display: block; }
-.sizecard strong { font-size: 10px; margin-top: 5px; white-space: nowrap; }
-.sizecard small { font-size: 8.5px; color: var(--faint); text-align: center; line-height: 1.35; }
-.sizecard .note { color: var(--accent); margin-top: 2px; }
+.sizerow.on { border-color: var(--ink); background: #fff; }
+.sizerow .art { flex-shrink: 0; display: flex; justify-content: flex-start; }
+.sizerow svg { display: block; }
+.sizerow .meta { display: flex; flex-direction: column; gap: 1px; padding-bottom: 3px; }
+.sizerow strong { font-size: 15px; }
+.sizerow small { font-size: 11px; color: var(--faint); }
+.sizerow .note { color: var(--accent); }
 
 .cards { display: flex; flex-direction: column; gap: 10px; }
 .card {

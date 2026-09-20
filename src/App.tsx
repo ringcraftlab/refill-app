@@ -81,7 +81,9 @@ const SIZE_NOTE: Record<RefillSize, string> = {
   M5: 'メモ帳',
 };
 // Millimetres to pixels for the picker. The whole row has to fit a phone.
-const PICKER_SCALE = 0.62;
+// Stacked, so this is bounded by the screen's height rather than by five
+// sheets' combined width — which caps a side-by-side row at about 0.75.
+const PICKER_SCALE = 0.71;
 
 function SizeIcon({ size }: { size: SizeSpec }) {
   return (
@@ -107,28 +109,27 @@ function SizeIcon({ size }: { size: SizeSpec }) {
 }
 
 function SizeScreen({ selected, onPick }: { selected: RefillSize; onPick: (s: RefillSize) => void }) {
-  // Side by side on one baseline: the sizes only compare when you can see them
-  // next to each other.
-  const tallest = Math.max(...SIZE_ORDER.map(id => SIZES[id].heightMm)) * PICKER_SCALE;
+  // One icon column with every binding edge on the same line, so the sheets
+  // read as a stack and only their size differs.
+  const widest = Math.max(...SIZE_ORDER.map(id => SIZES[id].widthMm)) * PICKER_SCALE;
   return (
     <div className="screen pad">
       <div className="brand">RingCraftLab</div>
       <h1>手帳のサイズを選ぶ</h1>
-      <div className="sizewrap">
-        <div className="sizerow">
-          {SIZE_ORDER.map(id => {
-            const s = SIZES[id];
-            return (
-              <button key={id} className={`sizecard${selected === id ? ' on' : ''}`} onClick={() => onPick(id)}>
-                <span className="art" style={{ height: tallest }}><SizeIcon size={s} /></span>
+      <div className="sizelist">
+        {SIZE_ORDER.map(id => {
+          const s = SIZES[id];
+          return (
+            <button key={id} className={`sizerow${selected === id ? ' on' : ''}`} onClick={() => onPick(id)}>
+              <span className="art" style={{ width: widest }}><SizeIcon size={s} /></span>
+              <span className="meta">
                 <strong>{s.label}</strong>
-                <small>{s.widthMm}×{s.heightMm}</small>
-                <small>{s.holes.count}穴</small>
+                <small>{s.widthMm}×{s.heightMm}mm ・ {s.holes.count}穴</small>
                 <small className="note">{SIZE_NOTE[id]}</small>
-              </button>
-            );
-          })}
-        </div>
+              </span>
+            </button>
+          );
+        })}
       </div>
     </div>
   );
