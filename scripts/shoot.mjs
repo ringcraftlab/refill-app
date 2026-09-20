@@ -106,7 +106,8 @@ const left3 = page.locator('.page').first();
 await drag(await centerOf(await stamp('マンスリー')), await centerOf(left3));
 await page.getByRole('button', { name: 'マンスリーの設定' }).first().click();
 await page.getByRole('button', { name: '週で分ける（横向き）' }).click();
-await page.locator('.scrim').click();
+// Near the top, because the sheet itself now covers most of the scrim.
+await page.locator('.scrim').click({ position: { x: 100, y: 20 } });
 await shot('10-横向きの週分割');
 
 // Parts share the calendar's page while they are there; take them away and

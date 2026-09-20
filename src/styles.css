@@ -214,7 +214,7 @@ h2 { font-size: 14px; margin: 0; }
 
 .stepper { display: flex; align-items: center; gap: 10px; }
 .stepper button { width: 38px; height: 38px; border-radius: 8px; border: 1px solid var(--line-strong); background: var(--bg); font-size: 16px; }
-.stepper strong { min-width: 24px; text-align: center; }
+.stepper strong { min-width: 84px; text-align: center; font-size: 13px; }
 
 .saved { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; max-height: 240px; overflow-y: auto; }
 .saved li { display: flex; gap: 8px; }

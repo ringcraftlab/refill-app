@@ -69,6 +69,9 @@ export interface Geometry {
 }
 
 const EVEN = 0.5;
+// Trim margin on the edges that are not the binding. Cutting by hand is not
+// precise, and content close to the edge reads as cramped.
+export const OUTER_MM = 6;
 export const MIN_RATIO = 0.18;
 export const MAX_RATIO = 0.82;
 
@@ -153,15 +156,18 @@ interface PageBox {
 function pageBox(spread: boolean, landscape: boolean, key: PageKey, W: number, H: number, ring: number): PageBox {
   const edge = ringEdgeFor(spread, landscape, key);
   const vertical = edge === 'left' || edge === 'right';
+  const O = OUTER_MM;
+  // The ring strip is the margin on the binding edge; the other three get the
+  // trim margin.
   return {
     edge,
     ringBand: vertical
       ? { x: edge === 'left' ? 0 : W - ring, y: 0, w: ring, h: H }
       : { x: 0, y: edge === 'top' ? 0 : H - ring, w: W, h: ring },
-    ox: edge === 'left' ? ring : 0,
-    oy: edge === 'top' ? ring : 0,
-    usableW: vertical ? W - ring : W,
-    usableH: vertical ? H : H - ring,
+    ox: vertical ? (edge === 'left' ? ring : O) : O,
+    oy: vertical ? O : (edge === 'top' ? ring : O),
+    usableW: vertical ? W - ring - O : W - O * 2,
+    usableH: vertical ? H - O * 2 : H - ring - O,
   };
 }
 

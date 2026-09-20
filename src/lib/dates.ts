@@ -5,6 +5,11 @@ const EN_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 // Jan 7 2024 was a Sunday, so +dow lands on the wanted weekday.
 export const weekdayLabel = (dow: number): string => EN_SHORT[dow];
 
+export function addMonths(year: number, month: number, n: number): { year: number; month: number } {
+  const zeroBased = year * 12 + (month - 1) + n;
+  return { year: Math.floor(zeroBased / 12), month: (zeroBased % 12) + 1 };
+}
+
 export function daysInMonth(year: number, month: number): number {
   return new Date(year, month, 0).getDate();
 }

@@ -5,7 +5,8 @@ import { holeCentres, SIZES } from './lib/sizes';
 import { buildGeometry, MAX_RATIO, MIN_RATIO, placeParts as planPlacement, regionAt } from './lib/layout';
 import type { Divider } from './lib/layout';
 import { nextMonthCell } from './lib/parts';
-import { buildPages, buildPrintSheets, DEFAULT_PRINT, perPaperCount } from './lib/render/pages';
+import { addMonths } from './lib/dates';
+import { buildPages, buildPrintSheets, DEFAULT_PRINT, hasDatedPart, perPaperCount } from './lib/render/pages';
 import type { BackFill, PrintOptions } from './lib/render/pages';
 import { PageSvg } from './lib/render/svg';
 import { downloadPdf, sheetsToPdf } from './lib/render/pdf';
@@ -44,6 +45,7 @@ function createLayout(): Layout {
     surface: { placed: [], ratios: {}, split: 'h' },
     year: now.getFullYear(),
     month: now.getMonth() + 1,
+    monthCount: 12,
     weekStart: 1,
     monthlyOrientation: 'portrait',
     showNextMonth: true,
@@ -438,8 +440,8 @@ function CanvasScreen({ layout, setLayout, onBack }: {
             <button
               className="clearmini"
               style={{
-                left: pageOrigin(0).x + (miniCell.x + miniCell.w) * scale - 9,
-                top: pageOrigin(0).y + miniCell.y * scale - 3,
+                left: pageOrigin(0).x + (miniCell.x + miniCell.w) * scale - 20,
+                top: pageOrigin(0).y + miniCell.y * scale + 2,
               }}
               onClick={() => setLayout(l => ({ ...l, showNextMonth: false }))}
               aria-label="翌月のカレンダーを消す"
@@ -528,6 +530,7 @@ function PartSheet({ target, layout, setLayout, onClose, onRemove, onLoad, size,
   onExport: (opts: PrintOptions) => void;
 }) {
   const [print, setPrint] = useState<PrintOptions>(DEFAULT_PRINT);
+  const lastMonth = addMonths(layout.year, layout.month, Math.max(1, layout.monthCount) - 1);
   const saved = useMemo(() => target === 'load' ? listLayouts() : [], [target]);
   const kind = typeof target === 'string' ? null : layout.surface.placed[target.slot];
 
@@ -564,7 +567,10 @@ function PartSheet({ target, layout, setLayout, onClose, onRemove, onLoad, size,
               value={print.impose ? 'a4' : 'exact'}
               onPick={v => setPrint(p => ({ ...p, impose: v === 'a4' }))}
             />
-            {print.impose && <p className="muted">A4 1枚に {perPaperCount(size)} 面</p>}
+            <p className="muted">
+              {hasDatedPart(layout) && `${layout.year}年${layout.month}月から${layout.monthCount}ヶ月分・`}
+              {print.impose && `A4 1枚に ${perPaperCount(size)} 面`}
+            </p>
 
             <Choice
               label="印刷"
@@ -650,6 +656,29 @@ function PartSheet({ target, layout, setLayout, onClose, onRemove, onLoad, size,
               } : null,
             }))}
           />
+        )}
+
+        {(target === 'spanning' || kind === 'monthly') && (
+          <>
+            <div className="field">
+              <span className="field-label">開始月</span>
+              <div className="stepper">
+                <button onClick={() => setLayout(l => ({ ...l, ...addMonths(l.year, l.month, -1) }))}>−</button>
+                <strong>{layout.year}年{layout.month}月</strong>
+                <button onClick={() => setLayout(l => ({ ...l, ...addMonths(l.year, l.month, 1) }))}>＋</button>
+              </div>
+            </div>
+            <div className="field">
+              <span className="field-label">
+                何ヶ月分つくる（{lastMonth.year}年{lastMonth.month}月まで）
+              </span>
+              <div className="stepper">
+                <button onClick={() => setLayout(l => ({ ...l, monthCount: Math.max(1, l.monthCount - 1) }))}>−</button>
+                <strong>{layout.monthCount}ヶ月</strong>
+                <button onClick={() => setLayout(l => ({ ...l, monthCount: Math.min(24, l.monthCount + 1) }))}>＋</button>
+              </div>
+            </div>
+          </>
         )}
 
         {target === 'spanning' && layout.spanning?.pattern === 1 && (

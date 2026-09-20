@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 6;
+export const SCHEMA_VERSION = 7;
 
 export type RefillSize = 'M5' | 'M6' | 'BIBLE' | 'NARROW' | 'A5';
 
@@ -87,8 +87,11 @@ export interface Layout {
   spread: boolean;
   spanning: Spanning | null;
   surface: Surface;
+  // The first month generated. Dated parts repeat for `monthCount` months, so
+  // one design yields a whole year of refills in a single export.
   year: number;
   month: number; // 1-12
+  monthCount: number;
   weekStart: WeekStart;
   monthlyOrientation: 'portrait' | 'landscape';
   // Printed refills usually tuck next month's dates into the spread's index

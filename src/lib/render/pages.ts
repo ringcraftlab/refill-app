@@ -4,6 +4,7 @@ import { clipToBand, flattenToSheet, RING_BAND, RING_HOLE } from '../draw';
 import { buildGeometry } from '../layout';
 import { drawGrid, drawLines, drawMemo, drawPart, drawSpanningMonthly } from '../parts';
 import { holeCentres } from '../sizes';
+import { addMonths } from '../dates';
 import { DEFAULT_IMPOSE, impose, tilesPerPage } from './impose';
 import type { SheetContent } from './impose';
 
@@ -65,7 +66,9 @@ export const DEFAULT_PRINT: PrintOptions = {
   cutLines: true,
   scalePercent: 100,
   duplex: true,
-  backFill: 'blank',
+  // A blank back is half the paper thrown away, and printed refills almost
+  // always carry something on the reverse.
+  backFill: 'grid',
   punchGuides: true,
 };
 
@@ -97,9 +100,9 @@ function fillerFace(size: SizeSpec, fill: BackFill, side: Side): Primitive[] {
   return drawMemo(area);
 }
 
-// The refills as they will print: flattened onto their punched sheets, paired
-// front to back, then laid out on paper.
-export function buildPrintSheets(layout: Layout, size: SizeSpec, opts: PrintOptions): SheetContent[] {
+interface Duplexed { front: SheetContent; back: SheetContent }
+
+function sheetsForMonth(layout: Layout, size: SizeSpec, opts: PrintOptions): Duplexed[] {
   const designed = buildPages(layout, size).map(p => flattenToSheet(p));
   // A spread's left page binds on its right, because it is the back of a sheet.
   const sideOf = (i: number): Side => (layout.spread && i === 0 ? 'right' : 'left');
@@ -113,26 +116,36 @@ export function buildPrintSheets(layout: Layout, size: SizeSpec, opts: PrintOpti
   // One entry per physical sheet. A spread lives on two of them: its left page
   // is the back of one and its right page the front of the next, which is how
   // they come to face each other once the sheets are bound.
-  const sheets: { front: SheetContent; back: SheetContent }[] = [];
   if (!opts.duplex) {
-    designed.forEach((d, i) => sheets.push({
+    return designed.map((d, i) => ({
       front: face(d, sideOf(i)),
       back: face([], mirror(sideOf(i))),
     }));
-  } else if (designed.length === 2) {
-    sheets.push({
-      front: face(fillerFace(size, opts.backFill, 'left'), 'left'),
-      back: face(designed[0], 'right'),
-    });
-    sheets.push({
-      front: face(designed[1], 'left'),
-      back: face(fillerFace(size, opts.backFill, 'right'), 'right'),
-    });
-  } else {
-    sheets.push({
-      front: face(designed[0], 'left'),
-      back: face(fillerFace(size, opts.backFill, 'right'), 'right'),
-    });
+  }
+  if (designed.length === 2) {
+    return [
+      { front: face(fillerFace(size, opts.backFill, 'left'), 'left'), back: face(designed[0], 'right') },
+      { front: face(designed[1], 'left'), back: face(fillerFace(size, opts.backFill, 'right'), 'right') },
+    ];
+  }
+  return [{
+    front: face(designed[0], 'left'),
+    back: face(fillerFace(size, opts.backFill, 'right'), 'right'),
+  }];
+}
+
+export const hasDatedPart = (layout: Layout): boolean =>
+  !!layout.spanning || layout.surface.placed.includes('monthly');
+
+// The refills as they will print: every month in the range, flattened onto
+// their punched sheets, paired front to back, then laid out on paper.
+export function buildPrintSheets(layout: Layout, size: SizeSpec, opts: PrintOptions): SheetContent[] {
+  const months = hasDatedPart(layout) ? Math.max(1, layout.monthCount) : 1;
+
+  const sheets: Duplexed[] = [];
+  for (let i = 0; i < months; i++) {
+    const at = addMonths(layout.year, layout.month, i);
+    sheets.push(...sheetsForMonth({ ...layout, ...at }, size, opts));
   }
 
   const all = Array.from({ length: Math.max(1, opts.copies) }, () => sheets).flat();
