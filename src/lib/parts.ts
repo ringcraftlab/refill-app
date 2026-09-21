@@ -526,8 +526,11 @@ export function drawDateGrid(area: Rect, layout: Layout, spec: DateGridSpec): Pr
         text: dateText(i), sizePt: size, color: dateTone(i), align: 'center',
       });
     } else {
+      // Two thirds down a thin row is the middle of it; two thirds down a
+      // day-sized block is the middle of nowhere, so the date stops just
+      // under the line once the row is tall enough to write in.
       out.push({
-        type: 'text', x: left + 0.8, y: bodyT + rowH * i + rowH * 0.66,
+        type: 'text', x: left + 0.8, y: bodyT + rowH * i + Math.min(rowH * 0.66, size * 0.9),
         text: dateText(i), sizePt: size, color: dateTone(i), align: 'left',
       });
     }
@@ -686,20 +689,20 @@ export function drawPartAcross(kind: PartKind, a: Rect, b: Rect, layout: Layout)
     const total = spec.span === 'month'
       ? daysInMonth(layout.year, layout.month)
       : Math.max(1, layout.daysPerSheet);
-    // Half the days on each page, split the way the two pages actually lie.
-    // Pages side by side can let a row run on across the gutter -- the day
-    // keeps its label at the left and gains writing room -- but pages that
-    // stack cannot: the second one would be a blank continuation of the
-    // first. There the days divide instead.
-    const split = (cut: number): Primitive[] => [
-      ...drawDateGrid(a, layout, { ...spec, range: [0, cut] }),
+    // Half the days on each page. Letting a row run on across the gutter
+    // instead leaves the second page a blank continuation with nothing to say
+    // which day its lines belong to, whichever way the pages lie; a part with
+    // dates on an axis divides at a day, like every other dated part does.
+    // Rows divide along the height the pages share, columns along their
+    // widths.
+    const along = spec.dates === 'rows'
+      ? shareColumns(a.h, b.h, total, false)
+      : shareColumns(a.w, b.w, total, false);
+    return [
+      ...drawDateGrid(a, layout, { ...spec, range: [0, along.cut] }),
       // The title belongs to the part, not to each page of it.
-      ...drawDateGrid(b, layout, { ...spec, title: '', range: [cut, total] }),
+      ...drawDateGrid(b, layout, { ...spec, title: '', range: [along.cut, total] }),
     ];
-    if (spec.dates === 'rows') {
-      return stacked ? split(shareColumns(a.h, b.h, total, false).cut) : null;
-    }
-    return split(shareColumns(a.w, b.w, total, false).cut);
   }
   return null;
 }
