@@ -1,4 +1,6 @@
 import type { WeekStart } from '../types';
+import { rokuyo } from './kyureki';
+import { holidayName } from './holidays';
 
 const EN_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
@@ -33,9 +35,12 @@ export function orderedWeekdays(weekStart: WeekStart): number[] {
   return Array.from({ length: 7 }, (_, i) => (weekStart + i) % 7);
 }
 
-const ROKUYO = ['先勝', '友引', '先負', '仏滅', '大安', '赤口'];
+// The six-day cycle, from the lunisolar calendar rather than from the day of
+// the month. See kyureki.ts for how the lunar date is worked out.
+export const rokuyoLabel = (date: Date): string =>
+  rokuyo(date.getFullYear(), date.getMonth() + 1, date.getDate());
 
-// PLACEHOLDER. The real six-day cycle follows the lunisolar calendar, which
-// needs a proper ephemeris; this only cycles on the day number so the layout
-// can be judged with something in the cell. Do not ship it as fact.
-export const rokuyoLabel = (date: Date): string => ROKUYO[(date.getDate() - 1) % 6];
+// A public holiday's name, or null. The calendar colours the date and prints
+// the name where the cell has room for it.
+export const holidayOf = (date: Date): string | null =>
+  holidayName(date.getFullYear(), date.getMonth() + 1, date.getDate());

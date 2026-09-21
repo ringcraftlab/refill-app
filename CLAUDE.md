@@ -39,6 +39,7 @@ CHROMIUM_PATH=/opt/pw-browsers/chromium-1194/chrome-linux/chrome \
 | `pdfcheck.mjs` | PDFを書き出して用紙サイズと中身を見る |
 | `uidiff.mjs` | 2つのビルドで同じ要素の座標と大きさを比べる |
 | `pixdiff.py` | 2つのスクショ群を突き合わせて、どれがどれだけ動いたか |
+| `koyomicheck.mjs` | 六曜と祝日を外部の実装と突き合わせる（暦を触ったとき） |
 | `buildfont.mjs` | 印刷用フォントのサブセット再生成（文字を足したとき） |
 
 ## 構成
@@ -49,6 +50,9 @@ CHROMIUM_PATH=/opt/pw-browsers/chromium-1194/chrome-linux/chrome \
 | `src/ui/` | 共通部品。Button / Field / Segmented / Stepper / Sheet / Dialog / Toast |
 | `src/styles.css` | Tailwindの読み込み、`@theme` の色、base のみ |
 | `src/lib/render/svg.tsx` | mmの図形をSVGに（画面用） |
+| `src/lib/astro.ts` | 朔の時刻・太陽黄経・ΔT。六曜と春分秋分の土台 |
+| `src/lib/kyureki.ts` | 旧暦と六曜 |
+| `src/lib/holidays.ts` | 祝日（法律の条文どおりに計算する。表ではない） |
 | `src/lib/**` | **Reactを知らない。** 幾何・パーツ描画・面付け・PDF |
 | `scripts/*.mjs` | 検証用。アプリには含まれない |
 

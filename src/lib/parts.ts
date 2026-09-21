@@ -1,7 +1,7 @@
 import type { Layout, PageKey, PartKind } from '../types';
 import type { Color, Primitive } from './draw';
 import { INK, INK_SOFT, RULE, RULE_LIGHT, SATURDAY, SUNDAY } from './draw';
-import { daysInMonth, monthGrid, orderedWeekdays, rokuyoLabel, weekdayLabel } from './dates';
+import { daysInMonth, holidayOf, monthGrid, orderedWeekdays, rokuyoLabel, weekdayLabel } from './dates';
 import { isLandscape, MONTHLY_HEADER_MM, weekSplit } from './layout';
 import type { Rect } from './layout';
 
@@ -19,6 +19,10 @@ const MONTH_LABEL_H = 5;
 const DOW_HEADER_H = MONTHLY_HEADER_MM;
 
 const dowColor = (dow: number): Color => (dow === 0 ? SUNDAY : dow === 6 ? SATURDAY : INK);
+
+// A public holiday reads as a Sunday whatever weekday it falls on, which is
+// what every printed calendar does.
+const dateColor = (date: Date): Color => (holidayOf(date) ? SUNDAY : dowColor(date.getDay()));
 
 function inset(area: Rect) {
   return {
@@ -124,8 +128,10 @@ export function drawMonthly(area: Rect, layout: Layout, slice: MonthlySlice): Pr
   }
 
   // The printed refills set the six-day label beside the date on the same
-  // line, not underneath it.
+  // line, not underneath it. A holiday's name goes on the line below, which
+  // needs both a wide enough column and a tall enough row.
   const roomForRokuyo = colW >= 9;
+  const roomForHoliday = colW >= 11 && rowH >= 7;
   for (let r = 0; r < weeks.length; r++) {
     for (let c = 0; c < dayCols; c++) {
       const cell = weeks[r][colStart + c];
@@ -134,12 +140,22 @@ export function drawMonthly(area: Rect, layout: Layout, slice: MonthlySlice): Pr
       const y = bodyTop + rowH * r;
       out.push({
         type: 'text', x, y: y + 3.2, text: String(cell.getDate()),
-        sizePt: 8, color: dowColor(cell.getDay()), align: 'left',
+        sizePt: 8, color: dateColor(cell), align: 'left',
       });
       if (roomForRokuyo) {
         out.push({
           type: 'text', x: left + colW * (lead + c + 1) - 0.9, y: y + 3.1,
           text: rokuyoLabel(cell), sizePt: 4, color: SUNDAY, align: 'right',
+        });
+      }
+      const holiday = roomForHoliday ? holidayOf(cell) : null;
+      if (holiday) {
+        // Names run to seven characters, so the type shrinks to whatever the
+        // column can hold rather than running into the next cell.
+        const fit = Math.min(3.8, (colW - 1.8) / holiday.length * 2.6);
+        out.push({
+          type: 'text', x, y: y + 6.4, text: holiday,
+          sizePt: fit, color: SUNDAY, align: 'left',
         });
       }
     }
@@ -175,7 +191,7 @@ function drawMiniMonth(cell: Rect, layout: Layout): Primitive[] {
       type: 'text',
       x: left + colW * (c + 0.5), y: gridTop + rowH * (r + 0.8),
       text: String(d.getDate()), sizePt: 3.2,
-      color: dowColor(d.getDay()), align: 'center',
+      color: dateColor(d), align: 'center',
     });
   }));
   return out;
@@ -301,7 +317,7 @@ export function drawDayList(area: Rect, layout: Layout, range?: [number, number]
     if (i % rows > 0) {
       out.push({ type: 'line', x1: x, y1: y, x2: x + colW, y2: y, stroke: RULE_LIGHT, strokeMm: 0.12 });
     }
-    const colour = dowColor(date.getDay());
+    const colour = dateColor(date);
     const base = y + rowH * 0.74;
     out.push({
       type: 'text', x: x + 0.8, y: base, text: String(d),
@@ -440,7 +456,7 @@ export function drawDateGrid(area: Rect, layout: Layout, spec: DateGridSpec): Pr
   const dateText = (i: number) =>
     dated ? String(from + i + 1) : weekdayLabel(dows[from + i]);
   const dateTone = (i: number) =>
-    dated ? dowColor(new Date(layout.year, layout.month - 1, from + i + 1).getDay()) : dowColor(dows[from + i]);
+    dated ? dateColor(new Date(layout.year, layout.month - 1, from + i + 1)) : dowColor(dows[from + i]);
 
   // Bound once so the kind narrows; reading spec.cross each time does not.
   const cross = spec.cross;
