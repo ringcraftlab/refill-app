@@ -1,6 +1,7 @@
 import React from 'react';
 import type { Page, Primitive, Color } from '../draw';
 import { PAPER } from '../draw';
+import type { SheetContent } from './impose';
 
 const rgb = (c: Color) => `rgb(${Math.round(c[0]*255)},${Math.round(c[1]*255)},${Math.round(c[2]*255)})`;
 
@@ -46,10 +47,13 @@ function Primitives({ items }: { items: Primitive[] }) {
         }
         // text
         const anchor = p.align === 'center' ? 'middle' : p.align === 'right' ? 'end' : 'start';
+        // A quarter turn on a landscape sheet. SVG's y runs down where the
+        // PDF's runs up, so the same quarter turn is the other way round here.
+        const turn = p.rotateDeg ? `rotate(${-p.rotateDeg} ${p.x} ${p.y})` : undefined;
         return (
           <text
             key={i}
-            x={p.x} y={p.y}
+            x={p.x} y={p.y} transform={turn}
             fill={p.color ? rgb(p.color) : '#000'}
             fontSize={p.sizePt * PT_TO_MM}
             fontFamily='system-ui, -apple-system, "Hiragino Sans", sans-serif'
@@ -78,6 +82,24 @@ export function PageSvg({ page, scale = 3, showGuides = true }: { page: Page; sc
       <rect x={0} y={0} width={page.widthMm} height={page.heightMm} fill={rgb(PAPER)} />
       {showGuides && <Primitives items={page.guides} />}
       <Primitives items={page.primitives} />
+    </svg>
+  );
+}
+
+// One sheet of paper exactly as it will come out of the printer: tiles,
+// cut lines and all. Nothing is added here that the PDF does not carry, so
+// what this shows is what prints.
+export function SheetSvg({ sheet, boxPx }: { sheet: SheetContent; boxPx: number }) {
+  const scale = Math.min(boxPx / sheet.widthMm, (boxPx * 1.42) / sheet.heightMm);
+  return (
+    <svg
+      width={`${sheet.widthMm * scale}px`}
+      height={`${sheet.heightMm * scale}px`}
+      viewBox={`0 0 ${sheet.widthMm} ${sheet.heightMm}`}
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <rect x={0} y={0} width={sheet.widthMm} height={sheet.heightMm} fill="#fff" />
+      <Primitives items={sheet.primitives} />
     </svg>
   );
 }

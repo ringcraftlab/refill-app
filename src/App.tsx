@@ -8,7 +8,7 @@ import { nextMonthCell } from './lib/parts';
 import { addMonths } from './lib/dates';
 import { buildPages, buildPrintSheets, DEFAULT_PRINT, hasDatedPart, perPaperCount } from './lib/render/pages';
 import type { BackFill, PrintOptions } from './lib/render/pages';
-import { PageSvg } from './lib/render/svg';
+import { PageSvg, SheetSvg } from './lib/render/svg';
 import { downloadPdf, sheetsToPdf } from './lib/render/pdf';
 import { deleteLayout, listLayouts, newId, saveLayout } from './lib/storage';
 
@@ -653,6 +653,7 @@ function PartSheet({ target, layout, setLayout, onClose, onRemove, onRemoveSpann
 
         {target === 'print' && (
           <>
+            <PrintPreview layout={layout} size={size} print={print} />
             <Choice
               label="用紙"
               options={[{ v: 'a4', label: 'A4にまとめる' }, { v: 'exact', label: '原寸のまま' }]}
@@ -817,6 +818,44 @@ function PartSheet({ target, layout, setLayout, onClose, onRemove, onRemoveSpann
         )}
       </div>
     </>
+  );
+}
+
+// Only the first few, because a year of refills is a lot of paper and the
+// pattern is clear by the second sheet.
+const PREVIEW_PAGES = 4;
+
+// Imposed, duplexed sheets look like nonsense until you see them laid out and
+// numbered. Showing them here means the options can be judged before anyone
+// spends ink on them.
+function PrintPreview({ layout, size, print }: { layout: Layout; size: SizeSpec; print: PrintOptions }) {
+  const sheets = useMemo(() => buildPrintSheets(layout, size, print), [layout, size, print]);
+  const shown = sheets.slice(0, PREVIEW_PAGES);
+  const label = (i: number) => print.duplex
+    ? `${Math.floor(i / 2) + 1}枚目 ${i % 2 === 0 ? '表' : '裏'}`
+    : `${i + 1}枚目`;
+
+  return (
+    <div className="field">
+      <span className="field-label">刷り上がり（全{sheets.length}ページ）</span>
+      <div className="preview">
+        {shown.map((sheet, i) => (
+          <figure key={i}>
+            <SheetSvg sheet={sheet} boxPx={110} />
+            <figcaption>{label(i)}</figcaption>
+          </figure>
+        ))}
+        {sheets.length > shown.length && (
+          <div className="more">ほか<br />{sheets.length - shown.length}ページ</div>
+        )}
+      </div>
+      {print.duplex && layout.spread && hasDatedPart(layout) && (
+        <p className="note">
+          見開きは左ページが必ず裏面に来るので、最初の表と最後の裏だけが余ります。
+          そのまま両面で刷って、切り取って順に重ねてください。
+        </p>
+      )}
+    </div>
   );
 }
 
