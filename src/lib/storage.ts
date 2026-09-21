@@ -3,21 +3,33 @@ import { SCHEMA_VERSION } from '../types';
 
 // Version 7 kept the orientation inside the calendar: a spread said it through
 // its span pattern, a single page through a field of its own. Version 8 puts it
-// on the refill, where it belongs. Converting is cheap, and throwing away
-// someone's saved layouts over a field we can work out is not acceptable.
+// on the refill, where it belongs. Version 9 adds how many days a sheet covers,
+// which a saved layout simply did not have a say in. Converting is cheap, and
+// throwing away someone's saved layouts over a field we can work out is not
+// acceptable.
+const DEFAULT_DAYS_PER_SHEET = 7;
+
 function migrate(raw: Record<string, unknown>): Layout | null {
   if (raw.version === SCHEMA_VERSION) return raw as unknown as Layout;
-  if (raw.version !== 7) return null;
-  const span = raw.spanning as { pattern?: number; ratio: number } | null;
-  const landscape = raw.spread ? span?.pattern === 2 : raw.monthlyOrientation === 'landscape';
-  const { monthlyOrientation, ...rest } = raw;
-  void monthlyOrientation;
-  return {
-    ...rest,
-    version: SCHEMA_VERSION,
-    orientation: landscape ? 'landscape' : 'portrait',
-    spanning: span ? { ratio: span.ratio } : null,
-  } as unknown as Layout;
+
+  let out = raw;
+  if (out.version === 7) {
+    const span = out.spanning as { pattern?: number; ratio: number } | null;
+    const landscape = out.spread ? span?.pattern === 2 : out.monthlyOrientation === 'landscape';
+    const { monthlyOrientation, ...rest } = out;
+    void monthlyOrientation;
+    out = {
+      ...rest,
+      version: 8,
+      orientation: landscape ? 'landscape' : 'portrait',
+      spanning: span ? { ratio: span.ratio } : null,
+    };
+  }
+  if (out.version === 8) {
+    // A week to a spread is what every saved layout was drawing already.
+    out = { ...out, version: 9, daysPerSheet: DEFAULT_DAYS_PER_SHEET };
+  }
+  return out.version === SCHEMA_VERSION ? (out as unknown as Layout) : null;
 }
 
 const KEY = 'refill-app.layouts';

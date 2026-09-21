@@ -7,7 +7,9 @@ import { buildGeometry, MAX_RATIO, MIN_RATIO, placeParts as planPlacement, regio
 import type { Divider, DropPoint, Geometry } from './lib/layout';
 import { nextMonthCell } from './lib/parts';
 import { addMonths } from './lib/dates';
-import { buildPages, buildPrintSheets, DEFAULT_PRINT, hasDatedPart, perPaperCount } from './lib/render/pages';
+import {
+  buildPages, buildPrintSheets, DEFAULT_PRINT, hasDatedPart, isDayPaced, perPaperCount, sheetCount,
+} from './lib/render/pages';
 import type { BackFill, PrintOptions } from './lib/render/pages';
 import { PageSvg, SheetSvg } from './lib/render/svg';
 import { downloadPdf, sheetsToPdf } from './lib/render/pdf';
@@ -69,6 +71,7 @@ function createLayout(): Layout {
     year: now.getFullYear(),
     month: now.getMonth() + 1,
     monthCount: 12,
+    daysPerSheet: 7,
     weekStart: 1,
     orientation: 'portrait',
     showNextMonth: true,
@@ -528,8 +531,13 @@ function CanvasScreen({ layout, setLayout, onBack }: {
 
   const dated = hasDatedPart(layout);
   const lastMonth = addMonths(layout.year, layout.month, Math.max(1, layout.monthCount) - 1);
-  const monthlySlot = layout.surface.placed.indexOf('monthly');
-  const monthlyTarget: SheetTarget = layout.spanning ? 'spanning' : { slot: monthlySlot };
+  // The button that shows the date range opens whatever part owns the dates.
+  // A weekly refill may have no calendar on it at all, and its range still has
+  // to be reachable.
+  const datedSlot = ['monthly', 'weekvert', 'weekhoriz']
+    .map(k => layout.surface.placed.indexOf(k as PartKind))
+    .find(i => i >= 0) ?? -1;
+  const monthlyTarget: SheetTarget = layout.spanning ? 'spanning' : { slot: datedSlot };
 
   // One button per removable thing, at the outer top corner of the whole
   // block. A part straddling the gutter is still one part, and its button
@@ -603,7 +611,9 @@ function CanvasScreen({ layout, setLayout, onBack }: {
           onClick={() => setSheet(monthlyTarget)}
         >
           {layout.year}年{layout.month}月 → {lastMonth.year}年{lastMonth.month}月
-          <em className="not-italic text-faint">{layout.monthCount}ヶ月分</em>
+          <em className="not-italic text-faint">
+            {isDayPaced(layout) ? `${sheetCount(layout)}枚` : `${layout.monthCount}ヶ月分`}
+          </em>
         </button>
       )}
 
@@ -887,6 +897,7 @@ function PartSheet({ target, layout, setLayout, onClose, onRemove, onRemoveSpann
                 breathing room between the paper choice and the print options. */}
             <p className="print-summary my-[13px] text-[13px] text-faint">
               {hasDatedPart(layout) && `${layout.year}年${layout.month}月から${layout.monthCount}ヶ月分・`}
+              {isDayPaced(layout) && `${sheetCount(layout)}枚・`}
               {print.impose && `A4 1枚に ${perPaperCount(size)} 面`}
             </p>
 
@@ -990,6 +1001,40 @@ function PartSheet({ target, layout, setLayout, onClose, onRemove, onRemoveSpann
             value={layout.surface.split}
             onPick={v => setLayout(l => ({ ...l, surface: { ...l.surface, split: v as 'h' | 'v' } }))}
           />
+        )}
+
+        {(kind === 'weekvert' || kind === 'weekhoriz') && (
+          <>
+            <Field label={layout.spread ? '見開き1枚に入れる日数' : '1ページに入れる日数'}>
+              <Stepper
+                value={`${layout.daysPerSheet}日`}
+                onStep={n => setLayout(l => ({
+                  ...l, daysPerSheet: Math.min(14, Math.max(1, l.daysPerSheet + n)),
+                }))}
+              />
+            </Field>
+            {/* The period is the monthly's control too, but a weekly refill
+                may be the only thing on the sheet, and it still has to say
+                which months it covers. */}
+            <Field label="開始月">
+              <Stepper
+                value={`${layout.year}年${layout.month}月`}
+                onStep={n => setLayout(l => ({ ...l, ...addMonths(l.year, l.month, n) }))}
+              />
+            </Field>
+            <Field label={`終了月（${layout.monthCount}ヶ月分・${sheetCount(layout)}枚）`}>
+              <Stepper
+                value={`${lastMonth.year}年${lastMonth.month}月`}
+                onStep={n => setLayout(l => ({ ...l, monthCount: Math.min(36, Math.max(1, l.monthCount + n)) }))}
+              />
+            </Field>
+            <Choice
+              label="週の始まり"
+              options={[{ v: 1, label: '月曜始まり' }, { v: 0, label: '日曜始まり' }]}
+              value={layout.weekStart}
+              onPick={v => setLayout(l => ({ ...l, weekStart: v as 0 | 1 }))}
+            />
+          </>
         )}
 
         {kind === 'habit' && (

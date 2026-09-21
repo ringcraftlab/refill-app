@@ -1,7 +1,9 @@
 import type { Layout, PageKey, PartKind } from '../types';
 import type { Color, Primitive } from './draw';
 import { INK, INK_SOFT, RULE, RULE_LIGHT, SATURDAY, SUNDAY } from './draw';
-import { daysInMonth, holidayOf, monthGrid, orderedWeekdays, rokuyoLabel, weekdayLabel } from './dates';
+import {
+  daysInMonth, holidayOf, monthGrid, orderedWeekdays, rokuyoLabel, sheetDays, weekdayLabel,
+} from './dates';
 import { isLandscape, MONTHLY_HEADER_MM, weekSplit } from './layout';
 import type { Rect } from './layout';
 
@@ -424,10 +426,10 @@ export interface DateGridSpec {
   title: string;
   // Which way the dates run.
   dates: 'columns' | 'rows';
-  // How far they reach. A month is dated from the layout. A week is not: a
-  // dated week means 52 sheets a year, and the output is built a month at a
-  // time, so weekly grids carry weekday names and no numbers.
-  span: 'month' | 'week';
+  // How far they reach. 'month' is every day of the layout's month. 'days' is
+  // the run of days this one sheet carries -- seven for a week to a spread --
+  // which is what makes a weekly grid dated.
+  span: 'month' | 'days';
   // What fills the other axis.
   cross:
     | { kind: 'time'; fromHour: number; toHour: number }
@@ -448,15 +450,24 @@ export function drawDateGrid(area: Rect, layout: Layout, spec: DateGridSpec): Pr
     out.push({ type: 'text', x: left, y: top + 2.8, text: spec.title, sizePt: 5.5, color: INK_SOFT, align: 'left' });
   }
 
-  const dows = orderedWeekdays(layout.weekStart);
-  const dated = spec.span === 'month';
-  const all = dated ? daysInMonth(layout.year, layout.month) : 7;
-  const [from, to] = spec.range ?? [0, all];
+  // The days on the date axis, as dates. A month grid runs the month; a
+  // weekly runs whatever days this sheet covers.
+  const axis = spec.span === 'month'
+    ? Array.from({ length: daysInMonth(layout.year, layout.month) },
+        (_, i) => new Date(layout.year, layout.month - 1, i + 1))
+    : sheetDays(layout);
+  const [from, to] = spec.range ?? [0, axis.length];
   const dateCount = to - from;
-  const dateText = (i: number) =>
-    dated ? String(from + i + 1) : weekdayLabel(dows[from + i]);
-  const dateTone = (i: number) =>
-    dated ? dateColor(new Date(layout.year, layout.month - 1, from + i + 1)) : dowColor(dows[from + i]);
+  const dayAt = (i: number) => axis[from + i];
+  // A month grid has a column per day and no room to say which weekday it is;
+  // a weekly has few enough columns to name them.
+  const dateText = (i: number) => {
+    const d = dayAt(i);
+    return spec.span === 'month'
+      ? String(d.getDate())
+      : `${d.getDate()} ${weekdayLabel(d.getDay())}`;
+  };
+  const dateTone = (i: number) => dateColor(dayAt(i));
 
   // Bound once so the kind narrows; reading spec.cross each time does not.
   const cross = spec.cross;
@@ -543,6 +554,13 @@ export function drawDateGrid(area: Rect, layout: Layout, spec: DateGridSpec): Pr
   return out;
 }
 
+// A sheet of one day is a daily, seven is a weekly, and the rest say how many
+// days they hold rather than pretending to be either.
+const runTitle = (l: Layout): string => {
+  const n = Math.max(1, l.daysPerSheet);
+  return n === 1 ? 'DAILY' : n === 7 ? 'WEEKLY' : `${n} DAYS`;
+};
+
 // What the tray's stamps actually are: the same grid with different arguments.
 // The names people use, not the parameters underneath.
 const DATE_GRIDS: Partial<Record<PartKind, (l: Layout) => DateGridSpec>> = {
@@ -554,12 +572,12 @@ const DATE_GRIDS: Partial<Record<PartKind, (l: Layout) => DateGridSpec>> = {
     title: 'GANTT', dates: 'columns', span: 'month',
     cross: { kind: 'lanes', count: 8, named: true },
   }),
-  weekvert: () => ({
-    title: 'WEEKLY', dates: 'columns', span: 'week',
+  weekvert: l => ({
+    title: runTitle(l), dates: 'columns', span: 'days',
     cross: { kind: 'time', fromHour: 6, toHour: 24 },
   }),
-  weekhoriz: () => ({
-    title: 'WEEKLY', dates: 'rows', span: 'week',
+  weekhoriz: l => ({
+    title: runTitle(l), dates: 'rows', span: 'days',
     cross: { kind: 'lanes', count: 1, named: false },
   }),
 };
@@ -669,8 +687,10 @@ export function drawPartAcross(kind: PartKind, a: Rect, b: Rect, layout: Layout)
     if (spec.dates !== 'columns') return null;
     // A week is read as a week. Split across stacked sheets it stops being
     // one, so it stays on the page that can hold it.
-    if (stacked && spec.span === 'week') return drawPart(kind, wider, layout);
-    const total = spec.span === 'month' ? daysInMonth(layout.year, layout.month) : 7;
+    if (stacked && spec.span === 'days') return drawPart(kind, wider, layout);
+    const total = spec.span === 'month'
+      ? daysInMonth(layout.year, layout.month)
+      : Math.max(1, layout.daysPerSheet);
     const { cut } = shareColumns(a.w, b.w, total, false);
     return [
       ...drawDateGrid(a, layout, { ...spec, range: [0, cut] }),

@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 8;
+export const SCHEMA_VERSION = 9;
 
 export type RefillSize =
   | 'MINI3' | 'CARD3' | 'M5' | 'M5SQ' | 'M6' | 'BIBLE' | 'NARROW' | 'A5SLIM' | 'A5';
@@ -113,6 +113,11 @@ export interface Layout {
   year: number;
   month: number; // 1-12
   monthCount: number;
+  // How many days one sheet covers once a weekly grid is on it. Seven is a
+  // week to a spread; four and two are the other shapes printed refills come
+  // in, and one is a day to a page. It decides how often the sheet repeats,
+  // so it belongs to the refill rather than to the part.
+  daysPerSheet: number;
   weekStart: WeekStart;
   orientation: Orientation;
   // Printed refills usually tuck next month's dates into the spread's index
@@ -120,6 +125,10 @@ export interface Layout {
   showNextMonth: boolean;
   habitCount: number;
   updatedAt: string;
+  // The first day this sheet covers. Set while a dated run is being drawn and
+  // never saved: a layout in the editor has none and shows the first sheet of
+  // its period.
+  sheetStart?: string;
 }
 
 export const MAX_PARTS = 4;

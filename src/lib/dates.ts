@@ -1,4 +1,4 @@
-import type { WeekStart } from '../types';
+import type { Layout, WeekStart } from '../types';
 import { rokuyo } from './kyureki';
 import { holidayName } from './holidays';
 
@@ -30,6 +30,52 @@ export function monthGrid(year: number, month: number, weekStart: WeekStart): (D
   for (let i = 0; i < cells.length; i += 7) rows.push(cells.slice(i, i + 7));
   return rows;
 }
+
+export const addDays = (date: Date, n: number): Date =>
+  new Date(date.getFullYear(), date.getMonth(), date.getDate() + n);
+
+// Back to the day the week starts on, which is where a seven-day sheet has to
+// begin or the weeks come out split down the middle.
+export const startOfWeek = (date: Date, weekStart: WeekStart): Date =>
+  addDays(date, -(((date.getDay() - weekStart) % 7 + 7) % 7));
+
+// The first day of every sheet in a dated run. The period is the same one the
+// month range names; a run whose sheets are whole weeks starts on a week
+// boundary, anything else starts on the first of the month.
+export function sheetStarts(layout: Layout): Date[] {
+  const days = Math.max(1, layout.daysPerSheet);
+  const last = addMonths(layout.year, layout.month, Math.max(1, layout.monthCount) - 1);
+  const end = new Date(last.year, last.month, 0);
+  const from = new Date(layout.year, layout.month - 1, 1);
+  let cursor = days % 7 === 0 ? startOfWeek(from, layout.weekStart) : from;
+  const out: Date[] = [];
+  // A year of single days is 365 sheets, which is a lot but is what was
+  // asked for; the guard is only against a runaway.
+  while (cursor <= end && out.length < 800) {
+    out.push(cursor);
+    cursor = addDays(cursor, days);
+  }
+  return out;
+}
+
+// The day the sheet in hand starts on. Only a run being rendered says which
+// one; the editor shows the first.
+export function sheetStartOf(layout: Layout): Date {
+  if (layout.sheetStart) {
+    const [y, m, d] = layout.sheetStart.split('-').map(Number);
+    return new Date(y, m - 1, d);
+  }
+  return sheetStarts(layout)[0] ?? new Date(layout.year, layout.month - 1, 1);
+}
+
+// The days one sheet carries, when a weekly grid sets the pace.
+export const sheetDays = (layout: Layout): Date[] => {
+  const start = sheetStartOf(layout);
+  return Array.from({ length: Math.max(1, layout.daysPerSheet) }, (_, i) => addDays(start, i));
+};
+
+export const isoDate = (d: Date): string =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
 export function orderedWeekdays(weekStart: WeekStart): number[] {
   return Array.from({ length: 7 }, (_, i) => (weekStart + i) % 7);

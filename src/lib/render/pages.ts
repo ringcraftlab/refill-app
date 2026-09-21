@@ -5,7 +5,7 @@ import { buildGeometry } from '../layout';
 import type { Rect, SurfaceSlice } from '../layout';
 import { drawGrid, drawLines, drawMemo, drawPart, drawPartAcross, drawSpanningMonthly } from '../parts';
 import { holeCentres } from '../sizes';
-import { addMonths } from '../dates';
+import { addMonths, isoDate, sheetStarts } from '../dates';
 import { DEFAULT_IMPOSE, impose, tilesPerPage } from './impose';
 import type { SheetContent } from './impose';
 
@@ -123,27 +123,57 @@ function fillerFace(size: SizeSpec, fill: BackFill, side: Side): Primitive[] {
 interface Duplexed { front: SheetContent; back: SheetContent }
 interface Face { primitives: Primitive[]; side: Side }
 
-export const hasDatedPart = (layout: Layout): boolean =>
-  !!layout.spanning || layout.surface.placed.includes('monthly');
+// Parts whose dates come from the run of days a sheet covers rather than from
+// its month. One of these on the sheet makes the whole refill repeat by days.
+const DAY_PACED: PartKind[] = ['weekvert', 'weekhoriz'];
 
-// Every printable face in binder order, month after month.
+export const isDayPaced = (layout: Layout): boolean =>
+  layout.surface.placed.some(k => DAY_PACED.includes(k));
+
+export const hasDatedPart = (layout: Layout): boolean =>
+  !!layout.spanning || layout.surface.placed.includes('monthly') || isDayPaced(layout);
+
+// How many sheets the run comes to, which is what the export has to warn
+// about: a year of weeks is 52, a year of single days is 365.
+export const sheetCount = (layout: Layout): number => {
+  if (!hasDatedPart(layout)) return 1;
+  return isDayPaced(layout) ? sheetStarts(layout).length : Math.max(1, layout.monthCount);
+};
+
+// Every sheet's dates, in order. A weekly paces the refill by days; everything
+// else by months.
+function sheetsOf(layout: Layout): Layout[] {
+  if (!hasDatedPart(layout)) return [layout];
+  if (isDayPaced(layout)) {
+    return sheetStarts(layout).map(start => ({
+      ...layout,
+      // The month a sheet belongs to is the month it starts in, which is what
+      // a calendar printed beside the week should show.
+      year: start.getFullYear(),
+      month: start.getMonth() + 1,
+      sheetStart: isoDate(start),
+    }));
+  }
+  return Array.from({ length: Math.max(1, layout.monthCount) },
+    (_, i) => ({ ...layout, ...addMonths(layout.year, layout.month, i) }));
+}
+
+// Every printable face in binder order, sheet after sheet.
 function facesInOrder(layout: Layout, size: SizeSpec, duplex: boolean): Face[] {
-  const months = hasDatedPart(layout) ? Math.max(1, layout.monthCount) : 1;
   const faces: Face[] = [];
 
-  for (let i = 0; i < months; i++) {
-    const monthly = { ...layout, ...addMonths(layout.year, layout.month, i) };
+  for (const sheet of sheetsOf(layout)) {
     if (layout.spread) {
       // A spread is the back of one sheet facing the front of the next, so its
       // left page always lands on a back and its right page on a front.
-      const pages = buildPages(monthly, size);
+      const pages = buildPages(sheet, size);
       faces.push({ primitives: flattenToSheet(pages[0]), side: 'right' });
       faces.push({ primitives: flattenToSheet(pages[1]), side: 'left' });
     } else {
       // Single pages run front, back, front, back down the stack, and a page
       // on a back binds on the other side.
       const onBack = duplex && faces.length % 2 === 1;
-      const page = buildPages(monthly, size, onBack)[0];
+      const page = buildPages(sheet, size, onBack)[0];
       faces.push({ primitives: flattenToSheet(page), side: onBack ? 'right' : 'left' });
     }
   }
