@@ -285,7 +285,8 @@ h2 { font-size: 14px; margin: 0; }
 /* What will actually come out of the printer, shown before committing ink. */
 .preview { display: flex; gap: 10px; overflow-x: auto; padding: 2px 0 4px; }
 .preview figure { margin: 0; flex-shrink: 0; display: flex; flex-direction: column; align-items: center; gap: 4px; }
-.preview svg { border: 1px solid var(--line-strong); border-radius: 2px; display: block; }
+.preview figure button { padding: 0; border: none; background: none; display: block; }
+.preview svg { border: 1px solid var(--line-strong); border-radius: 2px; display: block; background: #fff; }
 .preview figcaption { font-size: 10px; color: var(--muted); white-space: nowrap; }
 .preview .more {
   flex-shrink: 0; width: 110px; min-height: 142px;
@@ -294,3 +295,23 @@ h2 { font-size: 14px; margin: 0; }
   font-size: 10px; color: var(--faint); line-height: 1.6;
 }
 .note { margin: 0; font-size: 10px; color: var(--faint); line-height: 1.7; }
+
+/* A thumbnail shows the arrangement; this shows the page. */
+.lightbox {
+  position: fixed; inset: 0; z-index: 50;
+  background: rgba(28, 26, 22, 0.86);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 14px; padding: 20px;
+}
+.lightbox-page {
+  background: #fff; border-radius: 2px; overflow: hidden;
+  display: flex; align-items: center; justify-content: center;
+}
+.lightbox-page svg {
+  display: block;
+  width: min(calc(100vw - 44px), 430px);
+  height: auto; max-height: 70vh;
+}
+.lightbox-bar { display: flex; align-items: center; gap: 14px; color: #fff; font-size: 12px; }
+.lightbox-bar button { min-width: 52px; }
+.lightbox-bar button:disabled { opacity: 0.35; }

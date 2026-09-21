@@ -569,7 +569,7 @@ function CanvasScreen({ layout, setLayout, onBack }: {
       <div className="actions">
         <button onClick={() => setSheet('load')}>読み込み</button>
         <button onClick={() => { saveLayout(layout); say('レイアウトを保存しました'); }}>保存</button>
-        <button className="primary" onClick={() => setSheet('print')}>PDF出力</button>
+        <button className="primary" onClick={() => setSheet('print')}>PDF出力プレビュー</button>
       </div>
 
       {ghost && (
@@ -627,7 +627,7 @@ function PartSheet({ target, layout, setLayout, onClose, onRemove, onRemoveSpann
   const kind = typeof target === 'string' ? null : layout.surface.placed[target.slot];
 
   const title = target === 'load' ? '保存済みレイアウト'
-    : target === 'print' ? '印刷'
+    : target === 'print' ? 'PDF出力プレビュー'
     : target === 'spanning' ? '見開きマンスリー'
     : kind ? PART_LABEL[kind] : 'パーツ';
 
@@ -830,23 +830,31 @@ const PREVIEW_PAGES = 4;
 // spends ink on them.
 function PrintPreview({ layout, size, print }: { layout: Layout; size: SizeSpec; print: PrintOptions }) {
   const sheets = useMemo(() => buildPrintSheets(layout, size, print), [layout, size, print]);
+  // A thumbnail is enough to see how the paper is laid out, not enough to read
+  // a date, so any of them opens full size.
+  const [open, setOpen] = useState<number | null>(null);
   const shown = sheets.slice(0, PREVIEW_PAGES);
   const label = (i: number) => print.duplex
     ? `${Math.floor(i / 2) + 1}枚目 ${i % 2 === 0 ? '表' : '裏'}`
     : `${i + 1}枚目`;
+  const step = (n: number) => setOpen(o => (o === null ? null : Math.min(sheets.length - 1, Math.max(0, o + n))));
 
   return (
     <div className="field">
-      <span className="field-label">刷り上がり（全{sheets.length}ページ）</span>
+      <span className="field-label">刷り上がり（全{sheets.length}ページ・タップで拡大）</span>
       <div className="preview">
         {shown.map((sheet, i) => (
           <figure key={i}>
-            <SheetSvg sheet={sheet} boxPx={110} />
+            <button onClick={() => setOpen(i)} aria-label={`${label(i)}を拡大`}>
+              <SheetSvg sheet={sheet} boxPx={110} />
+            </button>
             <figcaption>{label(i)}</figcaption>
           </figure>
         ))}
         {sheets.length > shown.length && (
-          <div className="more">ほか<br />{sheets.length - shown.length}ページ</div>
+          <button className="more" onClick={() => setOpen(PREVIEW_PAGES)}>
+            ほか<br />{sheets.length - shown.length}ページ
+          </button>
         )}
       </div>
       {print.duplex && layout.spread && hasDatedPart(layout) && (
@@ -854,6 +862,20 @@ function PrintPreview({ layout, size, print }: { layout: Layout; size: SizeSpec;
           見開きは左ページが必ず裏面に来るので、最初の表と最後の裏だけが余ります。
           そのまま両面で刷って、切り取って順に重ねてください。
         </p>
+      )}
+
+      {open !== null && sheets[open] && (
+        <div className="lightbox" onClick={() => setOpen(null)}>
+          <div className="lightbox-page" onClick={e => e.stopPropagation()}>
+            <SheetSvg sheet={sheets[open]} boxPx={1200} />
+          </div>
+          <div className="lightbox-bar" onClick={e => e.stopPropagation()}>
+            <button className="ghostbtn" disabled={open === 0} onClick={() => step(-1)} aria-label="前のページ">←</button>
+            <span>{label(open)}　{open + 1}/{sheets.length}</span>
+            <button className="ghostbtn" disabled={open === sheets.length - 1} onClick={() => step(1)} aria-label="次のページ">→</button>
+          </div>
+          <button className="ghostbtn" onClick={() => setOpen(null)}>閉じる</button>
+        </div>
       )}
     </div>
   );

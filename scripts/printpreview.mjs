@@ -36,7 +36,7 @@ await drag(await centerOf(await stamp('方眼')), { x: lp.x + lp.width * 0.4, y:
 await drag(await centerOf(await stamp('家計')), { x: lp.x + lp.width * 1.6, y: lp.y + lp.height * 0.85 });
 
 const t0 = Date.now();
-await page.getByRole('button', { name: 'PDF出力' }).click();
+await page.getByRole('button', { name: 'PDF出力プレビュー' }).click();
 await page.locator('.preview svg').first().waitFor();
 console.log('preview drawn in', Date.now() - t0, 'ms');
 console.log('pages:', await page.locator('.field-label').filter({ hasText: '刷り上がり' }).textContent());
@@ -49,5 +49,16 @@ await page.waitForTimeout(400);
 console.log('single-sided:', await page.locator('.field-label').filter({ hasText: '刷り上がり' }).textContent());
 console.log('captions:', await page.locator('.preview figcaption').allTextContents());
 await page.screenshot({ path: `${OUT}/02-片面にすると変わる.png` });
+
+// A thumbnail is too small to read, so any of them opens full size.
+await page.getByRole('button', { name: '両面' }).click();
+await page.locator('.preview figure button').nth(1).click();
+await page.locator('.lightbox svg').waitFor();
+console.log('enlarged:', await page.locator('.lightbox-bar span').textContent());
+await page.screenshot({ path: `${OUT}/03-タップで拡大.png` });
+await page.getByRole('button', { name: '次のページ' }).click();
+console.log('next:', await page.locator('.lightbox-bar span').textContent());
+await page.getByRole('button', { name: '閉じる' }).click();
+console.log('closed:', await page.locator('.lightbox').count());
 
 await browser.close();
