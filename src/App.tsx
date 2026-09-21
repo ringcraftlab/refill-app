@@ -108,9 +108,10 @@ const SIZE_CODE: Record<RefillSize, string> = {
   M5: 'M5', M6: 'M6', NARROW: 'ナロー', BIBLE: 'バイブル', A5: 'A5',
 };
 // Millimetres to pixels for the picker. Every sheet is drawn to this one
-// scale, so a tile's height is the paper's height: the list itself is the
-// size comparison. Bounded by five stacked sheets fitting a phone.
-const PICKER_SCALE = 0.6;
+// scale, so a tile's height is the paper's height: the grid itself is the
+// size comparison. Two columns give the sheet the full tile width, so it can
+// be drawn larger than it could beside the name.
+const PICKER_SCALE = 0.8;
 
 function SizeIcon({ size }: { size: SizeSpec }) {
   return (
@@ -137,8 +138,31 @@ function SizeIcon({ size }: { size: SizeSpec }) {
 }
 
 function SizeScreen({ selected, onPick }: { selected: RefillSize; onPick: (s: RefillSize) => void }) {
-  // One icon column, so the sheets read as a stack and only their size differs.
   const widest = Math.max(...SIZE_ORDER.map(id => SIZES[id].widthMm)) * PICKER_SCALE;
+
+  // The sheet on the desk colour, so it reads as paper. Bottom aligned and all
+  // to one scale, so a glance down the grid compares the sizes.
+  const paper = (s: SizeSpec, wide: boolean) => (
+    <span
+      className={`flex shrink-0 items-end rounded-xl bg-bg p-1.5 ${wide ? 'justify-end' : 'w-full justify-center'}`}
+      style={wide ? { width: widest + 12 } : undefined}
+    >
+      <SizeIcon size={s} />
+    </span>
+  );
+
+  const info = (id: RefillSize, s: SizeSpec) => (
+    <span className="flex flex-col gap-1">
+      <strong className="text-[26px] font-light leading-none tracking-tight">{SIZE_CODE[id]}</strong>
+      {/* M5 and M6 are what the code says; the Japanese name is what people
+          say. Narrow and Bible are the same word twice. */}
+      <small className="text-[11px] leading-snug text-faint">
+        {SIZE_CODE[id] !== s.label && `${s.label} ・ `}{s.widthMm}×{s.heightMm}mm ・ {s.holes.count}穴
+      </small>
+      <small className="text-[11px] text-accent">{SIZE_NOTE[id]}</small>
+    </span>
+  );
+
   return (
     <div className={SCREEN_PAD}>
       <div className="text-[13px] font-bold tracking-[0.04em] text-muted">RingCraftLab</div>
@@ -147,36 +171,24 @@ function SizeScreen({ selected, onPick }: { selected: RefillSize; onPick: (s: Re
           scroll origin when it overflows, where nothing can reach it. Centring
           with `m-auto` on the inner block falls back to the top instead. */}
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
-        <div className="m-auto flex w-full flex-col gap-1.5 py-1">
-        {SIZE_ORDER.map(id => {
-          const s = SIZES[id];
-          return (
-            <button
-              key={id}
-              onClick={() => onPick(id)}
-              className={`sizerow flex shrink-0 items-center justify-between gap-3 rounded-[20px] border-2 bg-white px-4 py-2 text-left ${
-                selected === id ? 'border-ink' : 'border-line'
-              }`}
-            >
-              <span className="flex flex-col gap-1">
-                <strong className="text-[26px] font-light leading-none tracking-tight">{SIZE_CODE[id]}</strong>
-                {/* M5 and M6 are what the code says; the Japanese name is what
-                    people say. Narrow and Bible are the same word twice. */}
-                <small className="text-[11px] text-faint">
-                  {SIZE_CODE[id] !== s.label && `${s.label} ・ `}{s.widthMm}×{s.heightMm}mm ・ {s.holes.count}穴
-                </small>
-                <small className="text-[11px] text-accent">{SIZE_NOTE[id]}</small>
-              </span>
-              {/* The sheet sits on the desk colour, so it reads as paper. */}
-              <span
-                className="flex shrink-0 items-end justify-end rounded-xl bg-bg p-1.5"
-                style={{ width: widest + 12 }}
+        <div className="m-auto grid w-full grid-cols-2 gap-2 py-1">
+          {SIZE_ORDER.map((id, i) => {
+            const s = SIZES[id];
+            // An odd count leaves the last one alone on its row, so it takes
+            // the whole width and lays out the other way round.
+            const wide = i === SIZE_ORDER.length - 1 && SIZE_ORDER.length % 2 === 1;
+            return (
+              <button
+                key={id}
+                onClick={() => onPick(id)}
+                className={`sizerow flex gap-2 rounded-[20px] border-2 bg-white p-3 text-left ${
+                  wide ? 'col-span-2 items-center justify-between' : 'flex-col'
+                } ${selected === id ? 'border-ink' : 'border-line'}`}
               >
-                <SizeIcon size={s} />
-              </span>
-            </button>
-          );
-        })}
+                {wide ? <>{info(id, s)}{paper(s, true)}</> : <>{paper(s, false)}{info(id, s)}</>}
+              </button>
+            );
+          })}
         </div>
       </div>
     </div>
