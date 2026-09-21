@@ -2,7 +2,7 @@ import type { Layout, PageKey, PartKind } from '../types';
 import type { Color, Primitive } from './draw';
 import { INK, INK_SOFT, RULE, RULE_LIGHT, SATURDAY, SUNDAY } from './draw';
 import { daysInMonth, monthGrid, orderedWeekdays, rokuyoLabel, weekdayLabel } from './dates';
-import { MONTHLY_HEADER_MM, weekSplit } from './layout';
+import { isLandscape, MONTHLY_HEADER_MM, weekSplit } from './layout';
 import type { Rect } from './layout';
 
 // Every part draws into whatever millimetre rectangle the layout hands it. A
@@ -571,6 +571,10 @@ export function drawPart(kind: PartKind, area: Rect, layout: Layout): Primitive[
 // at all; breaking its content into the sliver reads worse than letting the
 // page edge trim it.
 const ACROSS_MIN_MM = 8;
+// Splitting the weeks across stacked sheets draws the same seven columns
+// twice, so the two sheets have to be near enough the same width or the
+// calendar changes size at the seam.
+const ACROSS_EVEN_SHARE = 0.8;
 
 // Gives each page a whole number of columns, as near the same width as the
 // division allows. The three-and-four a printed refill uses falls out of this
@@ -593,10 +597,32 @@ function shareColumns(aW: number, bW: number, total: number, allowIndex: boolean
 // each page takes whole days instead. Parts with nothing to break along, like
 // a memo, return null and are simply trimmed by the page edge.
 export function drawPartAcross(kind: PartKind, a: Rect, b: Rect, layout: Layout): Primitive[] | null {
-  if (a.w < ACROSS_MIN_MM || b.w < ACROSS_MIN_MM) return null;
+  const wider = a.w >= b.w ? a : b;
+  // Pages side by side read as one wide page, so a week can run across the
+  // gutter. Pages that stack cannot: the far end of the week would sit on the
+  // sheet below, which no calendar does.
+  const stacked = isLandscape(layout);
 
   if (kind === 'monthly') {
     const rows = weekCount(layout);
+    if (stacked) {
+      if (Math.min(a.w, b.w) < Math.max(a.w, b.w) * ACROSS_EVEN_SHARE) {
+        return drawPart(kind, wider, layout);
+      }
+      // Weeks split the way the band splits them -- three sheets up, two
+      // down -- and the second page's rows are held to the first page's
+      // height so the grid does not change size across the seam.
+      const [topRows, bottomRows] = weekSplit(rows);
+      const rowH = (a.h - PAD * 2 - MONTH_LABEL_H - DOW_HEADER_H) / topRows;
+      const shortH = rowH * bottomRows + DOW_HEADER_H + PAD * 2;
+      return [
+        ...drawMonthly(a, layout, { cols: [0, 7], rows: [0, topRows], monthLabel: 'show' }),
+        ...drawMonthly({ ...b, h: Math.min(b.h, shortH) }, layout, {
+          cols: [0, 7], rows: [topRows, rows], monthLabel: 'none',
+        }),
+      ];
+    }
+
     const { cut, index } = shareColumns(a.w, b.w, 7, true);
     return [
       ...drawMonthly(a, layout, {
@@ -625,6 +651,9 @@ export function drawPartAcross(kind: PartKind, a: Rect, b: Rect, layout: Layout)
     const spec = grid(layout);
     // Dates down the side carry on across the gutter the way ruled lines do.
     if (spec.dates !== 'columns') return null;
+    // A week is read as a week. Split across stacked sheets it stops being
+    // one, so it stays on the page that can hold it.
+    if (stacked && spec.span === 'week') return drawPart(kind, wider, layout);
     const total = spec.span === 'month' ? daysInMonth(layout.year, layout.month) : 7;
     const { cut } = shareColumns(a.w, b.w, total, false);
     return [
