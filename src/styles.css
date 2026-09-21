@@ -299,19 +299,31 @@ h2 { font-size: 14px; margin: 0; }
 /* A thumbnail shows the arrangement; this shows the page. */
 .lightbox {
   position: fixed; inset: 0; z-index: 50;
-  background: rgba(28, 26, 22, 0.86);
+  background: rgba(28, 26, 22, 0.9);
   display: flex; flex-direction: column; align-items: center; justify-content: center;
-  gap: 14px; padding: 20px;
+  gap: 12px; padding: 54px 16px 18px;
 }
-.lightbox-page {
-  background: #fff; border-radius: 2px; overflow: hidden;
-  display: flex; align-items: center; justify-content: center;
+.lightbox-close {
+  position: absolute; top: 12px; right: 14px;
+  width: 34px; height: 34px; padding: 0;
+  border: none; border-radius: 50%;
+  background: rgba(255, 255, 255, 0.18); color: #fff;
+  font-size: 17px; line-height: 34px;
 }
+.lightbox-page { background: #fff; border-radius: 2px; overflow: auto; }
+/* Both maxima with auto sizing, so the page shrinks to fit whichever runs out
+   first and keeps its proportions. Setting a width and capping the height
+   instead leaves the sheet floating in white space. */
 .lightbox-page svg {
-  display: block;
-  width: min(calc(100vw - 44px), 430px);
-  height: auto; max-height: 70vh;
+  display: block; width: auto; height: auto;
+  max-width: calc(100vw - 32px);
+  max-height: calc(100vh - 128px);
 }
+.lightbox-page.zoom { width: calc(100vw - 32px); height: calc(100vh - 128px); }
+.lightbox-page.zoom svg { max-width: none; max-height: none; width: calc((100vw - 32px) * 2.4); }
+
 .lightbox-bar { display: flex; align-items: center; gap: 14px; color: #fff; font-size: 12px; }
+.lightbox-bar span { display: flex; flex-direction: column; align-items: center; gap: 2px; text-align: center; }
+.lightbox-bar em { font-style: normal; font-size: 10px; color: rgba(255, 255, 255, 0.55); }
 .lightbox-bar button { min-width: 52px; }
 .lightbox-bar button:disabled { opacity: 0.35; }

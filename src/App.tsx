@@ -833,11 +833,18 @@ function PrintPreview({ layout, size, print }: { layout: Layout; size: SizeSpec;
   // A thumbnail is enough to see how the paper is laid out, not enough to read
   // a date, so any of them opens full size.
   const [open, setOpen] = useState<number | null>(null);
+  // Four refills fit on one A4, so the whole sheet at phone width is too small
+  // to read a date on. Tapping swaps between the whole sheet and a size you
+  // can actually check.
+  const [zoom, setZoom] = useState(false);
   const shown = sheets.slice(0, PREVIEW_PAGES);
   const label = (i: number) => print.duplex
     ? `${Math.floor(i / 2) + 1}枚目 ${i % 2 === 0 ? '表' : '裏'}`
     : `${i + 1}枚目`;
-  const step = (n: number) => setOpen(o => (o === null ? null : Math.min(sheets.length - 1, Math.max(0, o + n))));
+  const step = (n: number) => {
+    setZoom(false);
+    setOpen(o => (o === null ? null : Math.min(sheets.length - 1, Math.max(0, o + n))));
+  };
 
   return (
     <div className="field">
@@ -845,14 +852,14 @@ function PrintPreview({ layout, size, print }: { layout: Layout; size: SizeSpec;
       <div className="preview">
         {shown.map((sheet, i) => (
           <figure key={i}>
-            <button onClick={() => setOpen(i)} aria-label={`${label(i)}を拡大`}>
+            <button onClick={() => { setZoom(false); setOpen(i); }} aria-label={`${label(i)}を拡大`}>
               <SheetSvg sheet={sheet} boxPx={110} />
             </button>
             <figcaption>{label(i)}</figcaption>
           </figure>
         ))}
         {sheets.length > shown.length && (
-          <button className="more" onClick={() => setOpen(PREVIEW_PAGES)}>
+          <button className="more" onClick={() => { setZoom(false); setOpen(PREVIEW_PAGES); }}>
             ほか<br />{sheets.length - shown.length}ページ
           </button>
         )}
@@ -866,15 +873,21 @@ function PrintPreview({ layout, size, print }: { layout: Layout; size: SizeSpec;
 
       {open !== null && sheets[open] && (
         <div className="lightbox" onClick={() => setOpen(null)}>
-          <div className="lightbox-page" onClick={e => e.stopPropagation()}>
-            <SheetSvg sheet={sheets[open]} boxPx={1200} />
+          <button className="lightbox-close" onClick={() => setOpen(null)} aria-label="閉じる">×</button>
+          <div
+            className={`lightbox-page${zoom ? ' zoom' : ''}`}
+            onClick={e => { e.stopPropagation(); setZoom(z => !z); }}
+          >
+            <SheetSvg sheet={sheets[open]} boxPx={1400} />
           </div>
           <div className="lightbox-bar" onClick={e => e.stopPropagation()}>
             <button className="ghostbtn" disabled={open === 0} onClick={() => step(-1)} aria-label="前のページ">←</button>
-            <span>{label(open)}　{open + 1}/{sheets.length}</span>
+            <span>
+              {label(open)}　{open + 1}/{sheets.length}
+              <em>{zoom ? 'タップで全体' : 'タップで拡大'}</em>
+            </span>
             <button className="ghostbtn" disabled={open === sheets.length - 1} onClick={() => step(1)} aria-label="次のページ">→</button>
           </div>
-          <button className="ghostbtn" onClick={() => setOpen(null)}>閉じる</button>
         </div>
       )}
     </div>
