@@ -29,7 +29,8 @@ export interface SizeSpec {
 export type WeekStart = 0 | 1;
 
 export type PartKind =
-  | 'monthly' | 'daylist' | 'habit' | 'todo' | 'goal' | 'budget' | 'grid' | 'lines' | 'memo';
+  | 'monthly' | 'daylist' | 'weekvert' | 'weekhoriz' | 'gantt'
+  | 'habit' | 'todo' | 'goal' | 'budget' | 'grid' | 'lines' | 'memo';
 
 // What a part needs to stay usable, and which way it wants to be shaped. The
 // habit tracker carries 31 day columns, so it needs width or its ticks become
@@ -48,6 +49,12 @@ export const PART_FIT: Record<PartKind, PartFit> = {
   // Thirty-one rows is what it is: the height decides whether this is usable
   // at all, so it asks for a tall column and refuses a short one.
   daylist: { minWMm: 20, minHMm: 90, prefer: 'tall' },
+  // Seven day columns and a run of hours down the side.
+  weekvert: { minWMm: 52, minHMm: 58, prefer: 'any' },
+  // Seven day rows, each wide enough to write a line in.
+  weekhoriz: { minWMm: 40, minHMm: 44, prefer: 'any' },
+  // A column per day of the month, so it needs the width a habit grid does.
+  gantt: { minWMm: 76, minHMm: 26, prefer: 'wide' },
   habit:   { minWMm: 76, minHMm: 18, prefer: 'wide' },
   todo:    { minWMm: 18, minHMm: 28, prefer: 'tall' },
   goal:    { minWMm: 26, minHMm: 18, prefer: 'any' },

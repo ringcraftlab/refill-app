@@ -357,17 +357,164 @@ export function drawHabit(area: Rect, layout: Layout): Primitive[] {
   return out;
 }
 
+
+// One grid for everything with a date on one axis. A weekly vertical, a gantt
+// chart and a habit tracker differ only in which way the dates run, how far
+// they reach, and what fills the other axis -- so they are one function with
+// three sets of arguments rather than three functions that drift apart.
+export interface DateGridSpec {
+  title: string;
+  // Which way the dates run.
+  dates: 'columns' | 'rows';
+  // How far they reach. A month is dated from the layout. A week is not: a
+  // dated week means 52 sheets a year, and the output is built a month at a
+  // time, so weekly grids carry weekday names and no numbers.
+  span: 'month' | 'week';
+  // What fills the other axis.
+  cross:
+    | { kind: 'time'; fromHour: number; toHour: number }
+    | { kind: 'lanes'; count: number; named: boolean };
+}
+
+const TITLE_H = 4.4;
+const AXIS_H = 3.2;
+
+export function drawDateGrid(area: Rect, layout: Layout, spec: DateGridSpec): Primitive[] {
+  const { left, right, top, bottom } = inset(area);
+  const width = right - left;
+  const out: Primitive[] = [
+    { type: 'text', x: left, y: top + 2.8, text: spec.title, sizePt: 5.5, color: INK_SOFT, align: 'left' },
+  ];
+
+  const dows = orderedWeekdays(layout.weekStart);
+  const dated = spec.span === 'month';
+  const dateCount = dated ? daysInMonth(layout.year, layout.month) : 7;
+  const dateText = (i: number) =>
+    dated ? String(i + 1) : weekdayLabel(dows[i]);
+  const dateTone = (i: number) =>
+    dated ? dowColor(new Date(layout.year, layout.month - 1, i + 1).getDay()) : dowColor(dows[i]);
+
+  // Bound once so the kind narrows; reading spec.cross each time does not.
+  const cross = spec.cross;
+  const timed = cross.kind === 'time';
+  const crossCount = cross.kind === 'time' ? cross.toHour - cross.fromHour : cross.count;
+  const crossText = (i: number) => (cross.kind === 'time' ? String(cross.fromHour + i) : '');
+  // Hours always need their labels; free lanes only when they are to be named.
+  const crossGutter = cross.kind === 'time' || cross.named;
+  if (crossCount < 1 || dateCount < 1) return out;
+
+  const gridTop = top + TITLE_H;
+  const acrossDates = spec.dates === 'columns';
+  // The axis that carries the dates gets a header band; the other gets a
+  // gutter, when there is anything to write in it.
+  const gutter = acrossDates
+    ? (crossGutter ? Math.min(12, width * 0.26) : 0)
+    : Math.min(10, width * 0.22);
+  const header = acrossDates ? AXIS_H : (crossGutter && crossCount > 1 ? AXIS_H : 0);
+
+  const bodyL = left + gutter;
+  const bodyT = gridTop + header;
+  const bodyW = right - bodyL;
+  const bodyH = bottom - bodyT;
+  if (bodyW <= 0 || bodyH <= 0) return out;
+
+  const cols = acrossDates ? dateCount : crossCount;
+  const rows = acrossDates ? crossCount : dateCount;
+  const colW = bodyW / cols;
+  const rowH = bodyH / rows;
+
+  out.push({ type: 'rect', x: left, y: gridTop, w: width, h: bottom - gridTop, stroke: RULE, strokeMm: 0.2 });
+  if (gutter > 0) out.push({ type: 'line', x1: bodyL, y1: gridTop, x2: bodyL, y2: bottom, stroke: RULE, strokeMm: 0.2 });
+  if (header > 0) out.push({ type: 'line', x1: left, y1: bodyT, x2: right, y2: bodyT, stroke: RULE, strokeMm: 0.2 });
+
+  // Rules only where they can still be told apart.
+  if (colW >= 1.2) {
+    for (let c = 1; c < cols; c++) {
+      const x = bodyL + colW * c;
+      out.push({ type: 'line', x1: x, y1: gridTop, x2: x, y2: bottom, stroke: RULE_LIGHT, strokeMm: 0.1 });
+    }
+  }
+  if (rowH >= 1.2) {
+    for (let r = 1; r < rows; r++) {
+      const y = bodyT + rowH * r;
+      out.push({ type: 'line', x1: left, y1: y, x2: right, y2: y, stroke: RULE_LIGHT, strokeMm: 0.15 });
+    }
+  }
+
+  // The dates themselves.
+  for (let i = 0; i < dateCount; i++) {
+    const size = Math.min(4.6, (acrossDates ? colW : rowH) * 1.8);
+    if (size < 2.4) break;
+    if (acrossDates) {
+      out.push({
+        type: 'text', x: bodyL + colW * (i + 0.5), y: bodyT - 0.9,
+        text: dateText(i), sizePt: size, color: dateTone(i), align: 'center',
+      });
+    } else {
+      out.push({
+        type: 'text', x: left + 0.8, y: bodyT + rowH * i + rowH * 0.66,
+        text: dateText(i), sizePt: size, color: dateTone(i), align: 'left',
+      });
+    }
+  }
+
+  // The hours, when there are any.
+  if (timed) {
+    for (let i = 0; i < crossCount; i++) {
+      const size = Math.min(4, (acrossDates ? rowH : colW) * 1.5);
+      if (size < 2.2) break;
+      if (acrossDates) {
+        out.push({
+          type: 'text', x: bodyL - 0.8, y: bodyT + rowH * i + rowH * 0.7,
+          text: crossText(i), sizePt: size, color: INK_SOFT, align: 'right',
+        });
+      } else {
+        out.push({
+          type: 'text', x: bodyL + colW * (i + 0.5), y: bodyT - 0.9,
+          text: crossText(i), sizePt: size, color: INK_SOFT, align: 'center',
+        });
+      }
+    }
+  }
+  return out;
+}
+
+// What the tray's stamps actually are: the same grid with different arguments.
+// The names people use, not the parameters underneath.
+const DATE_GRIDS: Partial<Record<PartKind, (l: Layout) => DateGridSpec>> = {
+  habit: l => ({
+    title: 'HABIT', dates: 'columns', span: 'month',
+    cross: { kind: 'lanes', count: Math.max(1, l.habitCount), named: true },
+  }),
+  gantt: () => ({
+    title: 'GANTT', dates: 'columns', span: 'month',
+    cross: { kind: 'lanes', count: 8, named: true },
+  }),
+  weekvert: () => ({
+    title: 'WEEKLY', dates: 'columns', span: 'week',
+    cross: { kind: 'time', fromHour: 6, toHour: 24 },
+  }),
+  weekhoriz: () => ({
+    title: 'WEEKLY', dates: 'rows', span: 'week',
+    cross: { kind: 'lanes', count: 1, named: false },
+  }),
+};
+
 export function drawPart(kind: PartKind, area: Rect, layout: Layout): Primitive[] {
+  const grid = DATE_GRIDS[kind];
+  if (grid) return drawDateGrid(area, layout, grid(layout));
+
   switch (kind) {
     case 'monthly':
       return drawMonthly(area, layout, { cols: [0, 7], rows: [0, weekCount(layout)], monthLabel: 'show' });
     case 'daylist': return drawDayList(area, layout);
-    case 'habit': return drawHabit(area, layout);
     case 'todo': return drawTodo(area);
     case 'goal': return drawGoal(area);
     case 'budget': return drawBudget(area);
     case 'grid': return drawGrid(area);
     case 'lines': return drawLines(area);
     case 'memo': return drawMemo(area);
+    // Everything with a date on an axis was handled above.
+    default: return [];
   }
 }

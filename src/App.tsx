@@ -30,6 +30,9 @@ const SHEET_MINI = 'h-[52px] w-[34px] shrink-0 rounded-sm border border-line-str
 const TRAY: { kind: PartKind; label: string; glyph: string }[] = [
   { kind: 'monthly', label: 'マンスリー', glyph: '31' },
   { kind: 'daylist', label: '日付リスト', glyph: '日' },
+  { kind: 'weekvert', label: 'バーチカル', glyph: '時' },
+  { kind: 'weekhoriz', label: 'ウィークリー', glyph: '週' },
+  { kind: 'gantt', label: 'ガント', glyph: '▤' },
   { kind: 'habit', label: 'ハビット', glyph: '✓' },
   { kind: 'todo', label: 'TODO', glyph: '☐' },
   { kind: 'goal', label: '目標', glyph: '◎' },
@@ -45,7 +48,9 @@ const TAUGHT_KEY = 'ringcraft.dividerTaught';
 const CLEAR_INSET = 17;
 
 const PART_LABEL: Record<PartKind, string> = {
-  monthly: 'マンスリー', daylist: '日付リスト', habit: 'ハビットトラッカー', todo: 'TODOリスト',
+  monthly: 'マンスリー', daylist: '日付リスト',
+  weekvert: '週間バーチカル', weekhoriz: '週間ホリゾンタル', gantt: 'ガントチャート',
+  habit: 'ハビットトラッカー', todo: 'TODOリスト',
   goal: '今月の目標', budget: '家計', grid: '方眼', lines: '罫線', memo: 'メモ',
 };
 
