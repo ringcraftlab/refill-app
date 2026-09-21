@@ -42,7 +42,9 @@ export interface PartFit {
 }
 
 export const PART_FIT: Record<PartKind, PartFit> = {
-  monthly: { minWMm: 52, minHMm: 40, prefer: 'any' },
+  // Seven columns at about 6mm each. Micro 5 leaves 51mm on a single page,
+  // which is the tightest real refill there is; below this the dates collide.
+  monthly: { minWMm: 44, minHMm: 40, prefer: 'any' },
   habit:   { minWMm: 76, minHMm: 18, prefer: 'wide' },
   todo:    { minWMm: 18, minHMm: 28, prefer: 'tall' },
   goal:    { minWMm: 26, minHMm: 18, prefer: 'any' },

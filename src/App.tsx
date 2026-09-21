@@ -1,4 +1,5 @@
-import { useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
 import type { Layout, PartKind, RefillSize, SizeSpec, SpanPattern } from './types';
 import { MAX_PARTS, SCHEMA_VERSION } from './types';
 import { holeCentres, SIZES } from './lib/sizes';
@@ -462,7 +463,34 @@ function CanvasScreen({ layout, setLayout, onBack }: {
   // One button per removable thing, at the outer top corner of the whole
   // block. A part straddling the gutter is still one part, and its button
   // belongs at the edge of the spread rather than in the middle of it.
-  const clears: { key: string; label: string; left: number; top: number; run: () => void }[] = [];
+  const clears: {
+    key: string; label: string; left: number; top: number;
+    run: () => void;
+    // A calendar can be turned a quarter turn. Burying that in a settings
+    // sheet hides the one thing people expect to be able to do to a page.
+    rotate?: () => void;
+  }[] = [];
+
+  // A spread turns by splitting the weeks instead of the weekdays; a single
+  // page just turns. Either way it is the same gesture to the person doing it.
+  const turnSpread = () => setLayout(l => {
+    if (!l.spanning) return l;
+    const pattern: SpanPattern = l.spanning.pattern === 2 ? 1 : 2;
+    return {
+      ...l,
+      // The two patterns leave different amounts of room, so the band resets
+      // to what this one would have taken.
+      spanning: {
+        ...l.spanning,
+        pattern,
+        ratio: l.surface.placed.length === 0 ? 1 : (pattern === 2 ? 0.48 : 0.72),
+      },
+    };
+  });
+  const turnPage = () => setLayout(l => ({
+    ...l,
+    monthlyOrientation: l.monthlyOrientation === 'landscape' ? 'portrait' : 'landscape',
+  }));
 
   const spanCorners = geo.pages.flatMap((pg, i) => {
     if (!pg.spanRect) return [];
@@ -474,6 +502,7 @@ function CanvasScreen({ layout, setLayout, onBack }: {
     clears.push({
       key: 'span', label: 'マンスリー', left: c.right - CLEAR_INSET, top: c.top + 3,
       run: () => setLayout(l => ({ ...l, spanning: null })),
+      rotate: turnSpread,
     });
   }
 
@@ -485,6 +514,7 @@ function CanvasScreen({ layout, setLayout, onBack }: {
       key: `p${slot}`, label: PART_LABEL[kind],
       left: b.left + b.width - CLEAR_INSET, top: b.top + 3,
       run: () => removePart(slot),
+      rotate: kind === 'monthly' && !layout.spread ? turnPage : undefined,
     });
   });
   const teachDivider = !taught && dividerBoxes.length > 0;
@@ -560,22 +590,32 @@ function CanvasScreen({ layout, setLayout, onBack }: {
           ))}
 
           {clears.map(c => (
-            <ClearButton
-              key={c.key}
-              left={c.left}
-              top={c.top}
-              label={c.label}
-              onClick={() => askRemove(c.label, c.run)}
-            />
+            <Fragment key={c.key}>
+              {c.rotate && (
+                <RoundButton
+                  hook="rotatemini"
+                  left={c.left - 20}
+                  top={c.top}
+                  label={`${c.label}を回転`}
+                  onClick={c.rotate}
+                >↻</RoundButton>
+              )}
+              <RoundButton
+                left={c.left}
+                top={c.top}
+                label={`${c.label}を外す`}
+                onClick={() => askRemove(c.label, c.run)}
+              >×</RoundButton>
+            </Fragment>
           ))}
 
           {miniCell && (
-            <ClearButton
+            <RoundButton
               left={pageOrigin(0).x + (miniCell.x + miniCell.w) * scale - CLEAR_INSET}
               top={pageOrigin(0).y + miniCell.y * scale + 2}
-              label="翌月のカレンダー"
+              label="翌月のカレンダーを外す"
               onClick={() => askRemove('翌月のカレンダー', () => setLayout(l => ({ ...l, showNextMonth: false })))}
-            />
+            >×</RoundButton>
           )}
 
           {dividerBoxes.map(b => (
@@ -669,18 +709,21 @@ function CanvasScreen({ layout, setLayout, onBack }: {
   );
 }
 
-// The small X over a block on the sheet. Positioned onto a drawing rather than
-// laid out, so it is not an ordinary Button.
-function ClearButton({ left, top, label, onClick }: {
+// A small round control sitting over a block on the sheet. Positioned onto a
+// drawing rather than laid out, so it is not an ordinary Button.
+function RoundButton({ left, top, label, onClick, hook = 'clearmini', children }: {
   left: number; top: number; label: string; onClick: () => void;
+  // Names the control for the checking scripts, which count them by kind.
+  hook?: 'clearmini' | 'rotatemini';
+  children: ReactNode;
 }) {
   return (
     <button
-      className="clearmini absolute z-[5] size-4 rounded-full bg-[rgba(58,54,46,0.34)] p-0 text-[10px] leading-4 text-white active:bg-[rgba(58,54,46,0.7)]"
+      className={`${hook} absolute z-[5] size-4 rounded-full bg-[rgba(58,54,46,0.34)] p-0 text-[10px] leading-4 text-white active:bg-[rgba(58,54,46,0.7)]`}
       style={{ left, top }}
       onClick={onClick}
-      aria-label={`${label}を外す`}
-    >×</button>
+      aria-label={label}
+    >{children}</button>
   );
 }
 
