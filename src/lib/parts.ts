@@ -180,7 +180,9 @@ function drawMiniMonth(cell: Rect, layout: Layout): Primitive[] {
 
 // Where that mini calendar sits, so the editor can offer to clear it.
 export function nextMonthCell(area: Rect, layout: Layout): Rect | null {
-  if (layout.spanning?.pattern !== 1) return null;
+  // The mini calendar lives in the index column, which only the upright
+  // spread has.
+  if (!layout.spanning || layout.orientation !== 'portrait') return null;
   const weeks = weekCount(layout);
   if (weeks < 2) return null;
   const { left, right, top, bottom } = inset(area);
@@ -195,7 +197,7 @@ export function nextMonthCell(area: Rect, layout: Layout): Rect | null {
 
 export function drawSpanningMonthly(area: Rect, page: PageKey, layout: Layout): Primitive[] {
   const rows = weekCount(layout);
-  if (layout.spanning?.pattern === 2) {
+  if (layout.orientation === 'landscape') {
     // Five weeks go three on the first page and two on the second, which
     // leaves the second page room to write.
     const [topRows] = weekSplit(rows);

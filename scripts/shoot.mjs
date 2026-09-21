@@ -104,10 +104,8 @@ await page.getByRole('button', { name: 'この構成で作る' }).click();
 await page.locator('.page').first().waitFor();
 const left3 = page.locator('.page').first();
 await drag(await centerOf(await stamp('マンスリー')), await centerOf(left3));
-await page.getByRole('button', { name: 'マンスリーの設定' }).first().click();
-await page.getByRole('button', { name: '週で分ける（横向き）' }).click();
-// Near the top, because the sheet itself now covers most of the scrim.
-await page.locator('.scrim').click({ position: { x: 100, y: 20 } });
+// Turning belongs to the refill, so it is one button on the sheet area.
+await page.getByRole('button', { name: 'リフィルを回転' }).click();
 await shot('10-横向きの週分割');
 
 // Parts share the calendar's page while they are there; take them away and

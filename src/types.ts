@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 7;
+export const SCHEMA_VERSION = 8;
 
 export type RefillSize = 'M5' | 'M6' | 'BIBLE' | 'NARROW' | 'A5SLIM' | 'A5';
 
@@ -54,13 +54,13 @@ export const PART_FIT: Record<PartKind, PartFit> = {
   memo:    { minWMm: 16, minHMm: 10, prefer: 'any' },
 };
 
-// A spread monthly is one calendar across both pages.
-//   1: split the weekday columns (Mon-Wed | Thu-Sun), pages stay portrait
-//   2: split the week rows, pages turn landscape and stack
-export type SpanPattern = 1 | 2;
+// Whether the refill is used upright or turned a quarter turn. This belongs
+// to the paper, not to whatever is printed on it: a memo-only refill can be
+// landscape just as a calendar can. It also decides how a spread reads --
+// upright pages sit side by side, turned pages stack.
+export type Orientation = 'portrait' | 'landscape';
 
 export interface Spanning {
-  pattern: SpanPattern;
   // Share of the usable page height the calendar takes. It stays at 1 — the
   // whole page — until another part actually joins it.
   ratio: number;
@@ -95,7 +95,7 @@ export interface Layout {
   month: number; // 1-12
   monthCount: number;
   weekStart: WeekStart;
-  monthlyOrientation: 'portrait' | 'landscape';
+  orientation: Orientation;
   // Printed refills usually tuck next month's dates into the spread's index
   // column, so it is on unless the user clears it.
   showNextMonth: boolean;

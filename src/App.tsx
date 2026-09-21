@@ -1,6 +1,6 @@
 import { Fragment, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import type { Layout, PartKind, RefillSize, SizeSpec, SpanPattern } from './types';
+import type { Layout, PartKind, RefillSize, SizeSpec } from './types';
 import { MAX_PARTS, SCHEMA_VERSION } from './types';
 import { holeCentres, SIZES } from './lib/sizes';
 import { buildGeometry, MAX_RATIO, MIN_RATIO, placeParts as planPlacement, regionAt } from './lib/layout';
@@ -62,7 +62,7 @@ function createLayout(): Layout {
     month: now.getMonth() + 1,
     monthCount: 12,
     weekStart: 1,
-    monthlyOrientation: 'portrait',
+    orientation: 'portrait',
     showNextMonth: true,
     habitCount: 4,
     updatedAt: now.toISOString(),
@@ -466,31 +466,26 @@ function CanvasScreen({ layout, setLayout, onBack }: {
   const clears: {
     key: string; label: string; left: number; top: number;
     run: () => void;
-    // A calendar can be turned a quarter turn. Burying that in a settings
-    // sheet hides the one thing people expect to be able to do to a page.
-    rotate?: () => void;
   }[] = [];
 
-  // A spread turns by splitting the weeks instead of the weekdays; a single
-  // page just turns. Either way it is the same gesture to the person doing it.
-  const turnSpread = () => setLayout(l => {
-    if (!l.spanning) return l;
-    const pattern: SpanPattern = l.spanning.pattern === 2 ? 1 : 2;
+  // Turning the refill is a property of the paper, so it works on a blank
+  // sheet and on one with only a memo. A calendar follows along: an upright
+  // spread splits the weekdays, a turned one splits the weeks.
+  const turn = () => setLayout(l => {
+    const orientation = l.orientation === 'landscape' ? 'portrait' : 'landscape';
     return {
       ...l,
-      // The two patterns leave different amounts of room, so the band resets
-      // to what this one would have taken.
-      spanning: {
-        ...l.spanning,
-        pattern,
-        ratio: l.surface.placed.length === 0 ? 1 : (pattern === 2 ? 0.48 : 0.72),
-      },
+      orientation,
+      // The two ways of splitting leave different amounts of room, so the
+      // calendar's band resets to what this one would have taken.
+      spanning: l.spanning
+        ? {
+            ...l.spanning,
+            ratio: l.surface.placed.length === 0 ? 1 : (orientation === 'landscape' ? 0.48 : 0.72),
+          }
+        : null,
     };
   });
-  const turnPage = () => setLayout(l => ({
-    ...l,
-    monthlyOrientation: l.monthlyOrientation === 'landscape' ? 'portrait' : 'landscape',
-  }));
 
   const spanCorners = geo.pages.flatMap((pg, i) => {
     if (!pg.spanRect) return [];
@@ -502,7 +497,6 @@ function CanvasScreen({ layout, setLayout, onBack }: {
     clears.push({
       key: 'span', label: 'マンスリー', left: c.right - CLEAR_INSET, top: c.top + 3,
       run: () => setLayout(l => ({ ...l, spanning: null })),
-      rotate: turnSpread,
     });
   }
 
@@ -514,7 +508,6 @@ function CanvasScreen({ layout, setLayout, onBack }: {
       key: `p${slot}`, label: PART_LABEL[kind],
       left: b.left + b.width - CLEAR_INSET, top: b.top + 3,
       run: () => removePart(slot),
-      rotate: kind === 'monthly' && !layout.spread ? turnPage : undefined,
     });
   });
   const teachDivider = !taught && dividerBoxes.length > 0;
@@ -543,7 +536,15 @@ function CanvasScreen({ layout, setLayout, onBack }: {
         </button>
       )}
 
-      <div className="flex min-h-0 grow items-center justify-center px-3 py-2" ref={boxRef}>
+      <div className="relative flex min-h-0 grow items-center justify-center px-3 py-2" ref={boxRef}>
+        <button
+          className="rotate absolute right-3 top-1 z-10 flex items-center gap-1 rounded-full border border-line-strong bg-white px-2.5 py-1 text-[11px] text-label"
+          onClick={turn}
+          aria-label="リフィルを回転"
+        >
+          <span className="text-[13px] leading-none">↻</span>
+          {layout.orientation === 'landscape' ? '縦にする' : '横にする'}
+        </button>
         <div
           className="flex items-center justify-center"
           ref={setRef}
@@ -590,23 +591,13 @@ function CanvasScreen({ layout, setLayout, onBack }: {
           ))}
 
           {clears.map(c => (
-            <Fragment key={c.key}>
-              {c.rotate && (
-                <RoundButton
-                  hook="rotatemini"
-                  left={c.left - 20}
-                  top={c.top}
-                  label={`${c.label}を回転`}
-                  onClick={c.rotate}
-                >↻</RoundButton>
-              )}
-              <RoundButton
-                left={c.left}
-                top={c.top}
-                label={`${c.label}を外す`}
-                onClick={() => askRemove(c.label, c.run)}
-              >×</RoundButton>
-            </Fragment>
+            <RoundButton
+              key={c.key}
+              left={c.left}
+              top={c.top}
+              label={`${c.label}を外す`}
+              onClick={() => askRemove(c.label, c.run)}
+            >×</RoundButton>
           ))}
 
           {miniCell && (
@@ -887,24 +878,6 @@ function PartSheet({ target, layout, setLayout, onClose, onRemove, onRemoveSpann
           />
         )}
 
-        {target === 'spanning' && layout.spanning && (
-          <Choice
-            label="見開きの分け方"
-            options={[{ v: 1, label: '曜日で分ける' }, { v: 2, label: '週で分ける（横向き）' }]}
-            value={layout.spanning.pattern}
-            // The two patterns leave different amounts of room, so the band
-            // resets to what this one would have taken.
-            onPick={v => setLayout(l => ({
-              ...l,
-              spanning: l.spanning ? {
-                ...l.spanning,
-                pattern: v as SpanPattern,
-                ratio: l.surface.placed.length === 0 ? 1 : (v === 2 ? 0.48 : 0.72),
-              } : null,
-            }))}
-          />
-        )}
-
         {(target === 'spanning' || kind === 'monthly') && (
           <>
             <Field label="開始月">
@@ -922,21 +895,12 @@ function PartSheet({ target, layout, setLayout, onClose, onRemove, onRemoveSpann
           </>
         )}
 
-        {target === 'spanning' && layout.spanning?.pattern === 1 && (
+        {target === 'spanning' && layout.orientation === 'portrait' && (
           <Choice
             label="翌月のミニカレンダー"
             options={[{ v: 'on', label: '入れる' }, { v: 'off', label: '入れない' }]}
             value={layout.showNextMonth ? 'on' : 'off'}
             onPick={v => setLayout(l => ({ ...l, showNextMonth: v === 'on' }))}
-          />
-        )}
-
-        {kind === 'monthly' && !layout.spread && (
-          <Choice
-            label="ページの向き（リング位置も変わります）"
-            options={[{ v: 'portrait', label: '縦' }, { v: 'landscape', label: '横（回転）' }]}
-            value={layout.monthlyOrientation}
-            onPick={v => setLayout(l => ({ ...l, monthlyOrientation: v as 'portrait' | 'landscape' }))}
           />
         )}
 

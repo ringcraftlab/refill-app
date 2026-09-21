@@ -89,10 +89,7 @@ export function weekSplit(totalRows: number): [number, number] {
 
 // Landscape is the planner turned a quarter turn. It never transposes a
 // calendar grid — only the page shape and the ring edge change.
-export function isLandscape(layout: Layout): boolean {
-  if (layout.spread) return layout.spanning?.pattern === 2;
-  return layout.surface.placed.includes('monthly') && layout.monthlyOrientation === 'landscape';
-}
+export const isLandscape = (layout: Layout): boolean => layout.orientation === 'landscape';
 
 function ringEdgeFor(spread: boolean, landscape: boolean, key: PageKey, flip: boolean): RingEdge {
   // A single sheet binds on its outer edge. In a spread the binding is always
@@ -219,7 +216,7 @@ export function buildGeometry(layout: Layout, size: SizeSpec, flipBinding = fals
   const bandOf = (key: PageKey): number => {
     if (!span) return 0;
     const top = usableH * span.ratio;
-    if (span.pattern !== 2) return top;
+    if (!landscape) return top;
     const [topRows, bottomRows] = weekSplit(totalRows);
     const rowH = (top - MONTHLY_HEADER_MM) / topRows;
     return key === 'left' ? top : MONTHLY_HEADER_MM + rowH * bottomRows;
@@ -312,13 +309,13 @@ export function placeParts(
   // On a spread the calendar is one part across both pages, so it becomes the
   // band rather than a surface region.
   if (prev.spread && !spanning && kinds.includes('monthly')) {
-    spanning = { pattern: 1, ratio: 1 };
+    spanning = { ratio: 1 };
     rest = kinds.filter(k => k !== 'monthly');
   }
   // The calendar keeps the whole page until something else actually joins it —
   // space is never reserved in advance.
   if (spanning && rest.length > 0 && spanning.ratio >= 0.95) {
-    spanning = { ...spanning, ratio: spanning.pattern === 2 ? 0.48 : 0.72 };
+    spanning = { ...spanning, ratio: isLandscape(prev) ? 0.48 : 0.72 };
   }
 
   const cur = prev.surface;

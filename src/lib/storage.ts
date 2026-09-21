@@ -1,15 +1,33 @@
 import type { Layout } from '../types';
 import { SCHEMA_VERSION } from '../types';
 
+// Version 7 kept the orientation inside the calendar: a spread said it through
+// its span pattern, a single page through a field of its own. Version 8 puts it
+// on the refill, where it belongs. Converting is cheap, and throwing away
+// someone's saved layouts over a field we can work out is not acceptable.
+function migrate(raw: Record<string, unknown>): Layout | null {
+  if (raw.version === SCHEMA_VERSION) return raw as unknown as Layout;
+  if (raw.version !== 7) return null;
+  const span = raw.spanning as { pattern?: number; ratio: number } | null;
+  const landscape = raw.spread ? span?.pattern === 2 : raw.monthlyOrientation === 'landscape';
+  const { monthlyOrientation, ...rest } = raw;
+  void monthlyOrientation;
+  return {
+    ...rest,
+    version: SCHEMA_VERSION,
+    orientation: landscape ? 'landscape' : 'portrait',
+    spanning: span ? { ratio: span.ratio } : null,
+  } as unknown as Layout;
+}
+
 const KEY = 'refill-app.layouts';
 
 function load(): Layout[] {
   try {
     const raw = localStorage.getItem(KEY);
     if (!raw) return [];
-    const layouts = JSON.parse(raw).layouts as Layout[];
-    // Earlier schemas belonged to a different editor and cannot be converted.
-    return layouts.filter(l => l.version === SCHEMA_VERSION);
+    const stored = JSON.parse(raw).layouts as Record<string, unknown>[];
+    return stored.map(migrate).filter((l): l is Layout => l !== null);
   } catch {
     return [];
   }
