@@ -31,7 +31,7 @@ const stamp = async (label) => {
 let bad = 0;
 for (const combo of COMBOS) {
   await page.goto(BASE);
-  await page.locator('.sizerow', { hasText: 'ミニ6' }).click();
+  await page.locator('.sizerow', { hasText: 'M6' }).click();
   await page.locator('.card', { hasText: '見開き' }).click();
   await page.getByRole('button', { name: 'この構成で作る' }).click();
   await page.locator('.page').first().waitFor();

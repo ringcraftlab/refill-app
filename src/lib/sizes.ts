@@ -5,6 +5,7 @@ import type { HoleSpec, RefillSize, SizeSpec } from '../types';
 // middle gap and the end margin change. Each pattern adds up to its paper
 // height exactly, which is the check to redo if a number ever moves:
 //   A5      32×2 + 19×4 + 70 = 210
+//   A5 slim 32×2 + 19×4 + 70 = 210   (A5's punch on a narrower sheet)
 //   Bible   21.5×2 + 19×4 + 51 = 170
 //   Narrow  21.5×2 + 19×4 + 51 = 170   (same height, same punch)
 //   Mini 6  16.5×2 + 19×5 = 128        (one even run, no middle gap)
@@ -29,6 +30,11 @@ export const SIZES: Record<RefillSize, SizeSpec> = {
   BIBLE: {
     id: 'BIBLE', label: 'バイブル', widthMm: 95, heightMm: 170, ringMarginMm: 10,
     holes: { count: 6, diameterMm: 5.5, pitchMm: 19, marginMm: 21.5, centreGapMm: 51 },
+  },
+  // Same height and the same punch as A5, just narrower.
+  A5SLIM: {
+    id: 'A5SLIM', label: 'A5スリム', widthMm: 125, heightMm: 210, ringMarginMm: 12,
+    holes: { count: 6, diameterMm: 5.5, pitchMm: 19, marginMm: 32, centreGapMm: 70 },
   },
   A5: {
     id: 'A5', label: 'A5', widthMm: 148, heightMm: 210, ringMarginMm: 12,

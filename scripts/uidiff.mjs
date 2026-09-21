@@ -31,7 +31,7 @@ async function measure(base) {
   await grab('h1', 'h1');
   await grab('sizerow', '.sizerow');
 
-  await page.locator('.sizerow', { hasText: 'ミニ6' }).click();
+  await page.locator('.sizerow', { hasText: 'M6' }).click();
   await grab('card', '.card');
   await page.locator('.card', { hasText: '見開き' }).click();
   await page.getByRole('button', { name: 'この構成で作る' }).click();

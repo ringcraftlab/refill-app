@@ -95,7 +95,7 @@ export function App() {
 
 // Smallest first, drawn to one scale so the list itself shows how the sizes
 // compare.
-const SIZE_ORDER: RefillSize[] = ['M5', 'M6', 'NARROW', 'BIBLE', 'A5'];
+const SIZE_ORDER: RefillSize[] = ['M5', 'M6', 'NARROW', 'BIBLE', 'A5SLIM', 'A5'];
 // A colour per size, so a glance tells them apart even before the millimetres
 // are read. Muted enough to still look like paper on the warm background.
 const SIZE_TINT: Record<RefillSize, { fill: string; line: string }> = {
@@ -103,9 +103,11 @@ const SIZE_TINT: Record<RefillSize, { fill: string; line: string }> = {
   M6: { fill: '#F8E8CC', line: '#C6A26B' },
   NARROW: { fill: '#DFE8D8', line: '#94AC86' },
   BIBLE: { fill: '#D9E3EE', line: '#8699AF' },
+  A5SLIM: { fill: '#EDDDE6', line: '#B38DA6' },
   A5: { fill: '#E6DDEE', line: '#9D8DB4' },
 };
 const SIZE_NOTE: Record<RefillSize, string> = {
+  A5SLIM: '細長',
   A5: '書き込み',
   BIBLE: '王道',
   NARROW: '細身',
@@ -114,7 +116,7 @@ const SIZE_NOTE: Record<RefillSize, string> = {
 };
 // The short name people actually say. The full Japanese name goes underneath.
 const SIZE_CODE: Record<RefillSize, string> = {
-  M5: 'M5', M6: 'M6', NARROW: 'ナロー', BIBLE: 'バイブル', A5: 'A5',
+  M5: 'M5', M6: 'M6', NARROW: 'ナロー', BIBLE: 'バイブル', A5SLIM: 'A5スリム', A5: 'A5',
 };
 // Millimetres to pixels for the picker. Every sheet is drawn to this one
 // scale, so a tile's height is the paper's height: the grid itself is the
@@ -147,31 +149,6 @@ function SizeIcon({ size, tint }: { size: SizeSpec; tint: { fill: string; line: 
 }
 
 function SizeScreen({ selected, onPick }: { selected: RefillSize; onPick: (s: RefillSize) => void }) {
-  const widest = Math.max(...SIZE_ORDER.map(id => SIZES[id].widthMm)) * PICKER_SCALE;
-
-  // Bottom aligned and all to one scale, so a glance down the grid compares
-  // the sizes. No panel behind it: the sheet is the thing being shown.
-  const paper = (id: RefillSize, s: SizeSpec, wide: boolean) => (
-    <span
-      className={`flex shrink-0 items-end ${wide ? 'justify-end' : 'w-full justify-center'}`}
-      style={wide ? { width: widest } : undefined}
-    >
-      <SizeIcon size={s} tint={SIZE_TINT[id]} />
-    </span>
-  );
-
-  const info = (id: RefillSize, s: SizeSpec) => (
-    <span className="flex flex-col gap-1">
-      <strong className="text-[26px] font-light leading-none tracking-tight">{SIZE_CODE[id]}</strong>
-      {/* M5 and M6 are what the code says; the Japanese name is what people
-          say. Narrow and Bible are the same word twice. */}
-      <small className="text-[11px] leading-snug text-faint">
-        {SIZE_CODE[id] !== s.label && `${s.label} ・ `}{s.widthMm}×{s.heightMm}mm ・ {s.holes.count}穴
-      </small>
-      <small className="text-[11px] text-accent">{SIZE_NOTE[id]}</small>
-    </span>
-  );
-
   return (
     <div className={SCREEN_PAD}>
       <div className="text-[13px] font-bold tracking-[0.04em] text-muted">RingCraftLab</div>
@@ -183,18 +160,24 @@ function SizeScreen({ selected, onPick }: { selected: RefillSize; onPick: (s: Re
         <div className="m-auto grid w-full grid-cols-2 gap-2 py-1">
           {SIZE_ORDER.map((id, i) => {
             const s = SIZES[id];
-            // An odd count leaves the last one alone on its row, so it takes
-            // the whole width and lays out the other way round.
-            const wide = i === SIZE_ORDER.length - 1 && SIZE_ORDER.length % 2 === 1;
+            // An odd count leaves the last one alone on its row. It keeps a
+            // column's width and sits in the middle, so the row of sheets
+            // still reads as one run of sizes.
+            const alone = i === SIZE_ORDER.length - 1 && SIZE_ORDER.length % 2 === 1;
             return (
               <button
                 key={id}
                 onClick={() => onPick(id)}
-                className={`sizerow flex gap-2 rounded-[20px] border-2 bg-white p-3 text-left ${
-                  wide ? 'col-span-2 items-center justify-between' : 'flex-col'
+                className={`sizerow flex flex-col items-center gap-3 rounded-[20px] border-2 bg-white p-3 ${
+                  alone ? 'col-span-2 w-[calc(50%-4px)] justify-self-center' : ''
                 } ${selected === id ? 'border-ink' : 'border-line'}`}
               >
-                {wide ? <>{info(id, s)}{paper(id, s, true)}</> : <>{paper(id, s, false)}{info(id, s)}</>}
+                {/* Bottom aligned and all to one scale, so a glance down the
+                    grid compares the sizes. */}
+                <span className="flex w-full flex-1 items-end justify-center">
+                  <SizeIcon size={s} tint={SIZE_TINT[id]} />
+                </span>
+                <strong className="text-[24px] font-light leading-none tracking-tight">{SIZE_CODE[id]}</strong>
               </button>
             );
           })}
