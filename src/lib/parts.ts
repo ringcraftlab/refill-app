@@ -683,20 +683,23 @@ export function drawPartAcross(kind: PartKind, a: Rect, b: Rect, layout: Layout)
   const grid = DATE_GRIDS[kind];
   if (grid) {
     const spec = grid(layout);
-    // Dates down the side carry on across the gutter the way ruled lines do.
-    if (spec.dates !== 'columns') return null;
-    // A week is read as a week. Split across stacked sheets it stops being
-    // one, so it stays on the page that can hold it.
-    if (stacked && spec.span === 'days') return drawPart(kind, wider, layout);
     const total = spec.span === 'month'
       ? daysInMonth(layout.year, layout.month)
       : Math.max(1, layout.daysPerSheet);
-    const { cut } = shareColumns(a.w, b.w, total, false);
-    return [
+    // Half the days on each page, split the way the two pages actually lie.
+    // Pages side by side can let a row run on across the gutter -- the day
+    // keeps its label at the left and gains writing room -- but pages that
+    // stack cannot: the second one would be a blank continuation of the
+    // first. There the days divide instead.
+    const split = (cut: number): Primitive[] => [
       ...drawDateGrid(a, layout, { ...spec, range: [0, cut] }),
       // The title belongs to the part, not to each page of it.
       ...drawDateGrid(b, layout, { ...spec, title: '', range: [cut, total] }),
     ];
+    if (spec.dates === 'rows') {
+      return stacked ? split(shareColumns(a.h, b.h, total, false).cut) : null;
+    }
+    return split(shareColumns(a.w, b.w, total, false).cut);
   }
   return null;
 }
