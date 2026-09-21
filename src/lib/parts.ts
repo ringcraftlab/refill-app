@@ -1,7 +1,7 @@
 import type { Layout, PageKey, PartKind } from '../types';
 import type { Color, Primitive } from './draw';
 import { INK, INK_SOFT, RULE, RULE_LIGHT, SATURDAY, SUNDAY } from './draw';
-import { monthGrid, orderedWeekdays, rokuyoLabel, weekdayLabel } from './dates';
+import { daysInMonth, monthGrid, orderedWeekdays, rokuyoLabel, weekdayLabel } from './dates';
 import { MONTHLY_HEADER_MM, weekSplit } from './layout';
 import type { Rect } from './layout';
 
@@ -234,6 +234,45 @@ function ruled(area: Rect, title: string | null, pitch: number): Primitive[] {
 export const drawMemo = (area: Rect): Primitive[] => ruled(area, 'MEMO', 5);
 export const drawLines = (area: Rect): Primitive[] => ruled(area, null, 6);
 
+// The month as one column of days, which list-style refills use beside a grid
+// calendar. Every day gets a row whether or not anything happens on it, so the
+// row height is the whole design: too short and the dates touch.
+export function drawDayList(area: Rect, layout: Layout): Primitive[] {
+  const { left, right, top, bottom } = inset(area);
+  const days = daysInMonth(layout.year, layout.month);
+  const gridTop = top + MONTH_LABEL_H;
+  const rowH = (bottom - gridTop) / days;
+  const width = right - left;
+  if (rowH <= 0 || width <= 0) return [];
+
+  const out: Primitive[] = [{
+    type: 'text', x: left, y: top + MONTH_LABEL_H - 1.3,
+    text: `${layout.month}月`, sizePt: 7, color: INK, align: 'left',
+  }];
+
+  // A narrow column for the date and its weekday, the rest to write in.
+  const gutter = Math.min(9, width * 0.34);
+  out.push({ type: 'rect', x: left, y: gridTop, w: width, h: bottom - gridTop, stroke: RULE, strokeMm: 0.25 });
+  out.push({ type: 'line', x1: left + gutter, y1: gridTop, x2: left + gutter, y2: bottom, stroke: RULE_LIGHT, strokeMm: 0.15 });
+
+  for (let d = 1; d <= days; d++) {
+    const date = new Date(layout.year, layout.month - 1, d);
+    const y = gridTop + rowH * (d - 1);
+    if (d > 1) out.push({ type: 'line', x1: left, y1: y, x2: right, y2: y, stroke: RULE_LIGHT, strokeMm: 0.12 });
+    const colour = dowColor(date.getDay());
+    const base = y + rowH * 0.74;
+    out.push({
+      type: 'text', x: left + 0.8, y: base, text: String(d),
+      sizePt: Math.min(6.5, rowH * 1.7), color: colour, align: 'left',
+    });
+    out.push({
+      type: 'text', x: left + gutter - 0.8, y: base, text: weekdayLabel(date.getDay())[0],
+      sizePt: Math.min(4.5, rowH * 1.2), color: colour, align: 'right',
+    });
+  }
+  return out;
+}
+
 export function drawTodo(area: Rect): Primitive[] {
   const { left, right, top, bottom } = inset(area);
   const out: Primitive[] = [
@@ -322,6 +361,7 @@ export function drawPart(kind: PartKind, area: Rect, layout: Layout): Primitive[
   switch (kind) {
     case 'monthly':
       return drawMonthly(area, layout, { cols: [0, 7], rows: [0, weekCount(layout)], monthLabel: 'show' });
+    case 'daylist': return drawDayList(area, layout);
     case 'habit': return drawHabit(area, layout);
     case 'todo': return drawTodo(area);
     case 'goal': return drawGoal(area);

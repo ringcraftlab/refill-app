@@ -1,4 +1,4 @@
-import type { Layout, PageKey, PartKind, SizeSpec, Surface } from '../types';
+import type { Layout, PageKey, PartKind, SizeSpec, Spanning, Surface } from '../types';
 import { MAX_PARTS, PART_FIT } from '../types';
 import type { SheetRotation } from './draw';
 import { monthGrid } from './dates';
@@ -314,9 +314,18 @@ export function placeParts(
   }
   // The calendar keeps the whole page until something else actually joins it —
   // space is never reserved in advance.
-  if (spanning && rest.length > 0 && spanning.ratio >= 0.95) {
-    spanning = { ...spanning, ratio: isLandscape(prev) ? 0.48 : 0.72 };
-  }
+  const joining = !!spanning && rest.length > 0;
+  const bandStart = joining && spanning!.ratio >= 0.95
+    ? (isLandscape(prev) ? 0.48 : 0.72)
+    : spanning?.ratio ?? 0;
+  // If that share still leaves too little, the calendar gives up more rather
+  // than the part being refused. A share is a preference; a part that fits
+  // nowhere is a dead end. Micro 5 is the case that made this necessary: the
+  // fixed 72% left 27.7mm against a to-do list's 28mm.
+  const bands: (Spanning | null)[] = spanning
+    ? (joining ? [bandStart, bandStart * 0.85, bandStart * 0.7] : [bandStart])
+        .map(ratio => ({ ...spanning!, ratio: Math.max(MIN_RATIO, ratio) }))
+    : [null];
 
   const cur = prev.surface;
   const room = MAX_PARTS - cur.placed.length;
@@ -357,9 +366,21 @@ export function placeParts(
     }
   }
 
-  for (const surface of candidates) {
-    const layout = { ...prev, spanning, surface };
-    if (everyPartFits(layout, size)) return { layout, overflow };
+  // An even split is only a preference. A wide part beside a narrow one is
+  // refused by a 50/50 cut although the sheet has room for both, so the main
+  // division is tried off-centre as well -- even first, so a deliberate
+  // arrangement is never quietly skewed.
+  const offCentre = (c: Surface): Surface[] =>
+    [undefined, 0.66, 0.34].map(a => (a === undefined ? c : { ...c, ratios: { ...c.ratios, a } }));
+
+  // Widest calendar first, so it only narrows when the arrangement needs it.
+  for (const band of bands) {
+    for (const candidate of candidates) {
+      for (const surface of offCentre(candidate)) {
+        const layout = { ...prev, spanning: band, surface };
+        if (everyPartFits(layout, size)) return { layout, overflow };
+      }
+    }
   }
   return null;
 }

@@ -29,7 +29,7 @@ export interface SizeSpec {
 export type WeekStart = 0 | 1;
 
 export type PartKind =
-  | 'monthly' | 'habit' | 'todo' | 'goal' | 'budget' | 'grid' | 'lines' | 'memo';
+  | 'monthly' | 'daylist' | 'habit' | 'todo' | 'goal' | 'budget' | 'grid' | 'lines' | 'memo';
 
 // What a part needs to stay usable, and which way it wants to be shaped. The
 // habit tracker carries 31 day columns, so it needs width or its ticks become
@@ -45,6 +45,9 @@ export const PART_FIT: Record<PartKind, PartFit> = {
   // Seven columns at about 6mm each. Micro 5 leaves 51mm on a single page,
   // which is the tightest real refill there is; below this the dates collide.
   monthly: { minWMm: 44, minHMm: 40, prefer: 'any' },
+  // Thirty-one rows is what it is: the height decides whether this is usable
+  // at all, so it asks for a tall column and refuses a short one.
+  daylist: { minWMm: 20, minHMm: 90, prefer: 'tall' },
   habit:   { minWMm: 76, minHMm: 18, prefer: 'wide' },
   todo:    { minWMm: 18, minHMm: 28, prefer: 'tall' },
   goal:    { minWMm: 26, minHMm: 18, prefer: 'any' },
