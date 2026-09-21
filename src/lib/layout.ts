@@ -301,7 +301,31 @@ function orderings<T>(items: T[]): T[][] {
 
 // Works out where a dropped part goes, and refuses rather than squeezing it
 // into a region too small to write in. Returns null when nothing fits.
+//
+// A spread can carry its calendar two ways. Normally it is one calendar across
+// both pages -- the band -- which is what printed refills do when the month is
+// the whole point of the spread. But a month on one page facing a list of days
+// on the other is just as standard, and there the calendar is an ordinary part
+// holding one page. The band is tried first; when nothing fits underneath it,
+// the calendar gives up spanning and becomes a part like any other.
 export function placeParts(
+  prev: Layout, size: SizeSpec, kinds: PartKind[], at: { sx: number; sy: number } | null,
+): { layout: Layout; overflow: number } | null {
+  const spanned = attempt(prev, size, kinds, at);
+  if (spanned) return spanned;
+
+  if (!prev.spread || !prev.spanning) return null;
+  const onOnePage: Layout = {
+    ...prev,
+    spanning: null,
+    // First, so an even split hands it the left page.
+    surface: { ...prev.surface, placed: ['monthly', ...prev.surface.placed], ratios: {} },
+  };
+  if (onOnePage.surface.placed.length > MAX_PARTS) return null;
+  return attempt(onOnePage, size, kinds, at);
+}
+
+function attempt(
   prev: Layout, size: SizeSpec, kinds: PartKind[], at: { sx: number; sy: number } | null,
 ): { layout: Layout; overflow: number } | null {
   let spanning = prev.spanning;
