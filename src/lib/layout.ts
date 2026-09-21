@@ -313,32 +313,44 @@ export function placeParts(
 ): { layout: Layout; overflow: number } | null {
   const spanned = attempt(prev, size, kinds, at);
   if (spanned) return spanned;
+  if (!prev.spread) return null;
 
-  if (!prev.spread || !prev.spanning) return null;
-  const onOnePage: Layout = {
-    ...prev,
-    spanning: null,
-    // First, so an even split hands it the left page.
-    surface: { ...prev.surface, placed: ['monthly', ...prev.surface.placed], ratios: {} },
-  };
-  if (onOnePage.surface.placed.length > MAX_PARTS) return null;
-  return attempt(onOnePage, size, kinds, at);
+  // The calendar is already the band, so take it out of the band and let it
+  // queue for a region like anything else.
+  if (prev.spanning) {
+    const onOnePage: Layout = {
+      ...prev,
+      spanning: null,
+      // First, so an even split hands it the left page.
+      surface: { ...prev.surface, placed: ['monthly', ...prev.surface.placed], ratios: {} },
+    };
+    if (onOnePage.surface.placed.length > MAX_PARTS) return null;
+    return attempt(onOnePage, size, kinds, at, true);
+  }
+  // The calendar is arriving now and no band fits around what is already
+  // here, so it lands as an ordinary part instead of being refused.
+  if (kinds.includes('monthly')) return attempt(prev, size, kinds, at, true);
+  return null;
 }
 
 function attempt(
   prev: Layout, size: SizeSpec, kinds: PartKind[], at: { sx: number; sy: number } | null,
+  monthlyAsPart = false,
 ): { layout: Layout; overflow: number } | null {
   let spanning = prev.spanning;
   let rest = kinds;
   // On a spread the calendar is one part across both pages, so it becomes the
   // band rather than a surface region.
-  if (prev.spread && !spanning && kinds.includes('monthly')) {
+  if (prev.spread && !spanning && !monthlyAsPart && kinds.includes('monthly')) {
     spanning = { ratio: 1 };
     rest = kinds.filter(k => k !== 'monthly');
   }
   // The calendar keeps the whole page until something else actually joins it —
   // space is never reserved in advance.
-  const joining = !!spanning && rest.length > 0;
+  // Anything sharing the sheet counts, whether it is arriving now or was
+  // already here: a calendar that keeps the whole page would leave the parts
+  // under it nothing to stand on.
+  const joining = !!spanning && (rest.length > 0 || prev.surface.placed.length > 0);
   const bandStart = joining && spanning!.ratio >= 0.95
     ? (isLandscape(prev) ? 0.48 : 0.72)
     : spanning?.ratio ?? 0;
@@ -355,7 +367,15 @@ function attempt(
   const room = MAX_PARTS - cur.placed.length;
   const toAdd = rest.slice(0, room);
   const overflow = rest.length - toAdd.length;
-  if (toAdd.length === 0) return { layout: { ...prev, spanning }, overflow };
+  if (toAdd.length === 0) {
+    // Nothing new to arrange, but the band has changed shape, so what is
+    // already placed still has to fit under it.
+    for (const band of bands) {
+      const layout = { ...prev, spanning: band };
+      if (everyPartFits(layout, size)) return { layout, overflow };
+    }
+    return null;
+  }
 
   const candidates: Surface[] = [];
   if (cur.placed.length === 1 && toAdd.length === 1) {

@@ -46,6 +46,9 @@ interface MonthlySlice {
   // three-column side being fatter. Printed refills do the same and use that
   // column for the month block and a free cell per week.
   indexColumn?: boolean;
+  // The index column carries next month's mini calendar, but only the band
+  // has a clear button for it, so anywhere else it stays off.
+  miniMonth?: boolean;
 }
 
 export function drawMonthly(area: Rect, layout: Layout, slice: MonthlySlice): Primitive[] {
@@ -102,7 +105,7 @@ export function drawMonthly(area: Rect, layout: Layout, slice: MonthlySlice): Pr
       type: 'text', x: cx, y: bodyTop + Math.min(rowH * 0.8, 13),
       text: EN_MONTH[layout.month - 1], sizePt: 6, color: INK_SOFT, align: 'center',
     });
-    if (layout.showNextMonth && weeks.length >= 2) {
+    if (slice.miniMonth !== false && layout.showNextMonth && weeks.length >= 2) {
       out.push(...drawMiniMonth({ x: left, y: bodyTop + rowH, w: colW, h: rowH }, layout));
     }
   }
@@ -214,6 +217,7 @@ export function drawSpanningMonthly(area: Rect, page: PageKey, layout: Layout): 
     rows: [0, rows],
     monthLabel: 'none',
     indexColumn: page === 'left',
+    miniMonth: true,
   });
 }
 
@@ -237,9 +241,13 @@ export const drawLines = (area: Rect): Primitive[] => ruled(area, null, 6);
 // The month as one column of days, which list-style refills use beside a grid
 // calendar. Every day gets a row whether or not anything happens on it, so the
 // row height is the whole design: too short and the dates touch.
-export function drawDayList(area: Rect, layout: Layout): Primitive[] {
+// `range` is the run of dates this page carries, 1-based and inclusive. A
+// spread hands each page half the month rather than cutting every row down
+// the middle.
+export function drawDayList(area: Rect, layout: Layout, range?: [number, number]): Primitive[] {
   const { left, right, top, bottom } = inset(area);
-  const days = daysInMonth(layout.year, layout.month);
+  const [first, last] = range ?? [1, daysInMonth(layout.year, layout.month)];
+  const days = last - first + 1;
   const gridTop = top + MONTH_LABEL_H;
   const rowH = (bottom - gridTop) / days;
   const width = right - left;
@@ -255,10 +263,10 @@ export function drawDayList(area: Rect, layout: Layout): Primitive[] {
   out.push({ type: 'rect', x: left, y: gridTop, w: width, h: bottom - gridTop, stroke: RULE, strokeMm: 0.25 });
   out.push({ type: 'line', x1: left + gutter, y1: gridTop, x2: left + gutter, y2: bottom, stroke: RULE_LIGHT, strokeMm: 0.15 });
 
-  for (let d = 1; d <= days; d++) {
+  for (let d = first; d <= last; d++) {
     const date = new Date(layout.year, layout.month - 1, d);
-    const y = gridTop + rowH * (d - 1);
-    if (d > 1) out.push({ type: 'line', x1: left, y1: y, x2: right, y2: y, stroke: RULE_LIGHT, strokeMm: 0.12 });
+    const y = gridTop + rowH * (d - first);
+    if (d > first) out.push({ type: 'line', x1: left, y1: y, x2: right, y2: y, stroke: RULE_LIGHT, strokeMm: 0.12 });
     const colour = dowColor(date.getDay());
     const base = y + rowH * 0.74;
     out.push({
@@ -374,6 +382,9 @@ export interface DateGridSpec {
   cross:
     | { kind: 'time'; fromHour: number; toHour: number }
     | { kind: 'lanes'; count: number; named: boolean };
+  // Which slice of the date axis this grid draws, when a spread gives each
+  // page some of the days. Omitted means all of them.
+  range?: [number, number];
 }
 
 const TITLE_H = 4.4;
@@ -382,17 +393,20 @@ const AXIS_H = 3.2;
 export function drawDateGrid(area: Rect, layout: Layout, spec: DateGridSpec): Primitive[] {
   const { left, right, top, bottom } = inset(area);
   const width = right - left;
-  const out: Primitive[] = [
-    { type: 'text', x: left, y: top + 2.8, text: spec.title, sizePt: 5.5, color: INK_SOFT, align: 'left' },
-  ];
+  const out: Primitive[] = [];
+  if (spec.title) {
+    out.push({ type: 'text', x: left, y: top + 2.8, text: spec.title, sizePt: 5.5, color: INK_SOFT, align: 'left' });
+  }
 
   const dows = orderedWeekdays(layout.weekStart);
   const dated = spec.span === 'month';
-  const dateCount = dated ? daysInMonth(layout.year, layout.month) : 7;
+  const all = dated ? daysInMonth(layout.year, layout.month) : 7;
+  const [from, to] = spec.range ?? [0, all];
+  const dateCount = to - from;
   const dateText = (i: number) =>
-    dated ? String(i + 1) : weekdayLabel(dows[i]);
+    dated ? String(from + i + 1) : weekdayLabel(dows[from + i]);
   const dateTone = (i: number) =>
-    dated ? dowColor(new Date(layout.year, layout.month - 1, i + 1).getDay()) : dowColor(dows[i]);
+    dated ? dowColor(new Date(layout.year, layout.month - 1, from + i + 1).getDay()) : dowColor(dows[from + i]);
 
   // Bound once so the kind narrows; reading spec.cross each time does not.
   const cross = spec.cross;
@@ -517,4 +531,73 @@ export function drawPart(kind: PartKind, area: Rect, layout: Layout): Primitive[
     // Everything with a date on an axis was handled above.
     default: return [];
   }
+}
+
+// A part narrower than this either side of the gutter is barely on that page
+// at all; breaking its content into the sliver reads worse than letting the
+// page edge trim it.
+const ACROSS_MIN_MM = 8;
+
+// Gives each page a whole number of columns, as near the same width as the
+// division allows. The three-and-four a printed refill uses falls out of this
+// when the gutter lands in the middle: the narrower side takes the index
+// column and every weekday comes out the same width.
+function shareColumns(aW: number, bW: number, total: number, allowIndex: boolean) {
+  let best = { cut: Math.max(1, Math.round(total / 2)), index: false, cost: Infinity };
+  for (const index of allowIndex ? [false, true] : [false]) {
+    for (let cut = 1; cut < total; cut++) {
+      const cost = Math.abs(aW / (cut + (index ? 1 : 0)) - bW / (total - cut));
+      if (cost < best.cost - 1e-9) best = { cut, index, cost };
+    }
+  }
+  return best;
+}
+
+// What a part looks like when its area crosses the gutter. Crossing is fine --
+// printed refills do it all the time -- but the two halves are separate sheets
+// with a ring binder between them, so a day must not be cut down the middle:
+// each page takes whole days instead. Parts with nothing to break along, like
+// a memo, return null and are simply trimmed by the page edge.
+export function drawPartAcross(kind: PartKind, a: Rect, b: Rect, layout: Layout): Primitive[] | null {
+  if (a.w < ACROSS_MIN_MM || b.w < ACROSS_MIN_MM) return null;
+
+  if (kind === 'monthly') {
+    const rows = weekCount(layout);
+    const { cut, index } = shareColumns(a.w, b.w, 7, true);
+    return [
+      ...drawMonthly(a, layout, {
+        cols: [0, cut], rows: [0, rows],
+        monthLabel: index ? 'none' : 'show', indexColumn: index, miniMonth: false,
+      }),
+      ...drawMonthly(b, layout, {
+        cols: [cut, 7], rows: [0, rows], monthLabel: index ? 'none' : 'reserve',
+      }),
+    ];
+  }
+
+  if (kind === 'daylist') {
+    // Half the month a page: the row count is what decides this, not the
+    // widths, and it is the split printed month-on-a-spread refills use.
+    const days = daysInMonth(layout.year, layout.month);
+    const cut = Math.ceil(days / 2);
+    return [
+      ...drawDayList(a, layout, [1, cut]),
+      ...drawDayList(b, layout, [cut + 1, days]),
+    ];
+  }
+
+  const grid = DATE_GRIDS[kind];
+  if (grid) {
+    const spec = grid(layout);
+    // Dates down the side carry on across the gutter the way ruled lines do.
+    if (spec.dates !== 'columns') return null;
+    const total = spec.span === 'month' ? daysInMonth(layout.year, layout.month) : 7;
+    const { cut } = shareColumns(a.w, b.w, total, false);
+    return [
+      ...drawDateGrid(a, layout, { ...spec, range: [0, cut] }),
+      // The title belongs to the part, not to each page of it.
+      ...drawDateGrid(b, layout, { ...spec, title: '', range: [cut, total] }),
+    ];
+  }
+  return null;
 }

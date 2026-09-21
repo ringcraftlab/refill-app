@@ -1,8 +1,9 @@
-import type { Layout, SizeSpec } from '../../types';
+import type { Layout, PartKind, SizeSpec } from '../../types';
 import type { Color, Page, Primitive } from '../draw';
 import { clipToBand, flattenToSheet, RING_BAND, RING_HOLE } from '../draw';
 import { buildGeometry } from '../layout';
-import { drawGrid, drawLines, drawMemo, drawPart, drawSpanningMonthly } from '../parts';
+import type { Rect, SurfaceSlice } from '../layout';
+import { drawGrid, drawLines, drawMemo, drawPart, drawPartAcross, drawSpanningMonthly } from '../parts';
 import { holeCentres } from '../sizes';
 import { addMonths } from '../dates';
 import { DEFAULT_IMPOSE, impose, tilesPerPage } from './impose';
@@ -24,7 +25,7 @@ export function buildPages(layout: Layout, size: SizeSpec, flipBinding = false):
         if (!region) return;
         // Draw across the part's whole region, then keep this page's piece.
         primitives.push(...clipToBand(
-          drawPart(kind, region, layout),
+          drawnPart(kind, region, layout, geo.surface.slices),
           slice.fromMm, slice.toMm,
           slice.ox - slice.fromMm, slice.oy,
         ));
@@ -42,6 +43,25 @@ export function buildPages(layout: Layout, size: SizeSpec, flipBinding = false):
       sheet: pg.sheet,
     };
   });
+}
+
+// A region that crosses the gutter covers two sheets. The part gets a say in
+// how it breaks there, because trimming a calendar at the page edge would
+// leave a day half on one sheet and half on the other.
+function drawnPart(kind: PartKind, region: Rect, layout: Layout, slices: SurfaceSlice[]): Primitive[] {
+  for (const s of slices) {
+    const at = s.toMm;
+    if (region.x < at - 0.5 && region.x + region.w > at + 0.5) {
+      const across = drawPartAcross(
+        kind,
+        { ...region, w: at - region.x },
+        { ...region, x: at, w: region.x + region.w - at },
+        layout,
+      );
+      if (across) return across;
+    }
+  }
+  return drawPart(kind, region, layout);
 }
 
 export type BackFill = 'blank' | 'grid' | 'lines' | 'memo';
