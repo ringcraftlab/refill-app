@@ -21,6 +21,16 @@ export interface Rect { x: number; y: number; w: number; h: number }
 
 export type DividerKey = 'span' | 'a' | 'b' | 'c';
 
+// Where a part was dropped, in surface millimetres. `band` is set when the
+// pointer was over the calendar rather than over the surface, and says how
+// far down the calendar it landed: near its foot means under it, anywhere
+// else means beside it.
+export interface DropPoint {
+  sx: number;
+  sy: number;
+  band?: number;
+}
+
 export interface Divider {
   id: string;
   key: DividerKey;
@@ -74,6 +84,9 @@ const EVEN = 0.5;
 // reading as cramped without eating the page.
 export const OUTER_MM = 3;
 export const MIN_RATIO = 0.18;
+// How far down the calendar a drop stops meaning "beside it" and starts
+// meaning "under it".
+export const BESIDE_BAND = 0.75;
 export const MAX_RATIO = 0.82;
 
 // The calendar's weekday header. It lives here because the spread geometry has
@@ -316,26 +329,41 @@ function orderings<T>(items: T[]): T[][] {
 // by the page it landed on rather than by its millimetres. Without this a part
 // dropped on the right page can come out on the left.
 function remapDrop(
-  at: { sx: number; sy: number }, prev: Layout, next: Layout, size: SizeSpec,
-): { sx: number; sy: number } {
+  at: DropPoint, prev: Layout, next: Layout, size: SizeSpec,
+): DropPoint {
   const a = buildGeometry(prev, size).surface;
   const b = buildGeometry(next, size).surface;
-  if (!a.slices.length || !b.slices.length || a.heightMm <= 0) return at;
+  // A drop on the calendar itself sits above the surface, so the height ratio
+  // would carry it outside the new one. It lands on the page the pointer was
+  // over, at whatever height that page has.
+  const sy = Math.max(0, Math.min(b.heightMm,
+    a.heightMm > 0 ? (at.sy / a.heightMm) * b.heightMm : at.sy));
+  // With the calendar over the whole spread there are no slices to map from;
+  // the drop already carries the page in its width.
+  if (!a.slices.length || !b.slices.length) return { sx: at.sx, sy };
   const from = a.slices.find(s => at.sx >= s.fromMm && at.sx <= s.toMm) ?? a.slices[a.slices.length - 1];
   const to = b.slices.find(s => s.key === from.key) ?? b.slices[0];
   const across = from.toMm - from.fromMm;
   const share = across > 0 ? (at.sx - from.fromMm) / across : 0.5;
-  return {
-    sx: to.fromMm + share * (to.toMm - to.fromMm),
-    sy: (at.sy / a.heightMm) * b.heightMm,
-  };
+  return { sx: to.fromMm + share * (to.toMm - to.fromMm), sy };
 }
 
 export function placeParts(
-  prev: Layout, size: SizeSpec, kinds: PartKind[], at: { sx: number; sy: number } | null,
+  prev: Layout, size: SizeSpec, kinds: PartKind[], at: DropPoint | null,
 ): { layout: Layout; overflow: number } | null {
-  const spanned = attempt(prev, size, kinds, at);
-  if (spanned) return spanned;
+  // Dropping onto the calendar, rather than under it, asks for a place beside
+  // it. The band runs the full width of the spread, so there is no side of it
+  // to be on: the only arrangement that answers the gesture is the calendar
+  // holding one page and the new part the other. A drop near the calendar's
+  // foot still means underneath -- that is where the part would land -- so
+  // only the upper part of it counts as beside.
+  const beside = !!at && at.band !== undefined && at.band < BESIDE_BAND
+    && prev.spread && !!prev.spanning;
+
+  if (!beside) {
+    const spanned = attempt(prev, size, kinds, at);
+    if (spanned) return spanned;
+  }
   if (!prev.spread) return null;
 
   // The calendar is already the band, so take it out of the band and let it
@@ -347,8 +375,13 @@ export function placeParts(
       // First, so an even split hands it the left page.
       surface: { ...prev.surface, placed: ['monthly', ...prev.surface.placed], ratios: {} },
     };
-    if (onOnePage.surface.placed.length > MAX_PARTS) return null;
-    return attempt(onOnePage, size, kinds, at && remapDrop(at, prev, onOnePage, size), true);
+    const sideways = onOnePage.surface.placed.length <= MAX_PARTS
+      ? attempt(onOnePage, size, kinds, at && remapDrop(at, prev, onOnePage, size), true)
+      : null;
+    if (sideways) return sideways;
+    // Nothing fits beside the calendar after all, so the band was the better
+    // answer to begin with.
+    return beside ? attempt(prev, size, kinds, { sx: at!.sx, sy: 0 }) : null;
   }
   // The calendar is arriving now and no band fits around what is already
   // here, so it lands as an ordinary part instead of being refused.
@@ -357,7 +390,7 @@ export function placeParts(
 }
 
 function attempt(
-  prev: Layout, size: SizeSpec, kinds: PartKind[], at: { sx: number; sy: number } | null,
+  prev: Layout, size: SizeSpec, kinds: PartKind[], at: DropPoint | null,
   monthlyAsPart = false,
 ): { layout: Layout; overflow: number } | null {
   let spanning = prev.spanning;

@@ -4,7 +4,7 @@ import type { Layout, PartKind, RefillSize, SizeSpec } from './types';
 import { MAX_PARTS, SCHEMA_VERSION } from './types';
 import { holeCentres, SIZES } from './lib/sizes';
 import { buildGeometry, MAX_RATIO, MIN_RATIO, placeParts as planPlacement, regionAt } from './lib/layout';
-import type { Divider } from './lib/layout';
+import type { Divider, DropPoint } from './lib/layout';
 import { nextMonthCell } from './lib/parts';
 import { addMonths } from './lib/dates';
 import { buildPages, buildPrintSheets, DEFAULT_PRINT, hasDatedPart, perPaperCount } from './lib/render/pages';
@@ -293,7 +293,7 @@ function CanvasScreen({ layout, setLayout, onBack }: {
 
   // Client point → surface millimetres, or null when the point is off the
   // pages or on a page the calendar has filled.
-  const toSurface = (cx: number, cy: number): { sx: number; sy: number } | null => {
+  const toSurface = (cx: number, cy: number): DropPoint | null => {
     const el = setRef.current;
     if (!el) return null;
     const r = el.getBoundingClientRect();
@@ -301,12 +301,27 @@ function CanvasScreen({ layout, setLayout, onBack }: {
     for (let i = 0; i < geo.pages.length; i++) {
       const o = pageOrigin(i);
       if (lx < o.x || lx > o.x + pw || ly < o.y || ly > o.y + ph) continue;
+      const span = geo.pages[i].spanRect;
+      // How far down the calendar the pointer landed, when it landed on it at
+      // all. Dropping on the calendar is how you ask for a place beside it,
+      // so the gesture has to survive the trip to the layout.
+      const inBand = span && span.h > 0
+        ? ((ly - o.y) / scale - span.y) / span.h
+        : null;
+      const band = inBand !== null && inBand >= 0 && inBand <= 1 ? inBand : undefined;
       const s = geo.surface.slices.find(sl => sl.key === geo.pages[i].key);
-      if (!s) return null;
-      return {
-        sx: (lx - o.x) / scale - s.ox + s.fromMm,
-        sy: (ly - o.y) / scale - s.oy,
-      };
+      if (s) {
+        return {
+          sx: (lx - o.x) / scale - s.ox + s.fromMm,
+          sy: (ly - o.y) / scale - s.oy,
+          band,
+        };
+      }
+      // No slice at all means the calendar has taken this whole sheet, so
+      // there is no surface to measure against; the page itself is the
+      // position.
+      if (!span) return null;
+      return { sx: span.w * i + (lx - o.x) / scale - span.x, sy: -1, band };
     }
     return null;
   };
@@ -318,7 +333,7 @@ function CanvasScreen({ layout, setLayout, onBack }: {
     return cx >= r.left && cx <= r.right && cy >= r.top && cy <= r.bottom;
   };
 
-  const placeParts = (kinds: PartKind[], at: { sx: number; sy: number } | null) => {
+  const placeParts = (kinds: PartKind[], at: DropPoint | null) => {
     setLayout(prev => {
       const planned = planPlacement(prev, size, kinds, at);
       if (!planned) {
