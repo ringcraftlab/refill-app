@@ -25,6 +25,15 @@ export type DividerKey = 'span' | 'a' | 'b' | 'c';
 // pointer was over the calendar rather than over the surface, and says how
 // far down the calendar it landed: near its foot means under it, anywhere
 // else means beside it.
+// What a drop works out to. `landed` is the region the first dropped part
+// ends up in, so the editor can show where it is going before the finger
+// comes off the glass.
+export interface Placement {
+  layout: Layout;
+  overflow: number;
+  landed: number | null;
+}
+
 export interface DropPoint {
   sx: number;
   sy: number;
@@ -290,6 +299,20 @@ export function buildGeometry(layout: Layout, size: SizeSpec, flipBinding = fals
   };
 }
 
+// How much of a side-by-side split a column-shaped part should take. Only
+// one of the two can be a column -- two columns side by side is just an even
+// split -- and it gets the width its content needs rather than half the
+// sheet. The extra quarter over the bare minimum is writing room.
+function columnShare(surface: Surface, totalMm: number): number | null {
+  const [a, b] = surface.placed;
+  const tall = (k: PartKind) => PART_FIT[k].prefer === 'tall';
+  if (tall(a) === tall(b) || totalMm <= 0) return null;
+  const column = tall(a) ? a : b;
+  const share = (PART_FIT[column].minWMm * 1.25) / totalMm;
+  if (share >= EVEN) return null;
+  return tall(a) ? Math.max(MIN_RATIO, share) : Math.min(MAX_RATIO, 1 - share);
+}
+
 function fits(kind: PartKind, r: Rect): boolean {
   const f = PART_FIT[kind];
   // Any shape the part can take is a fit. A day list refused for being 50mm
@@ -350,7 +373,7 @@ function remapDrop(
 
 export function placeParts(
   prev: Layout, size: SizeSpec, kinds: PartKind[], at: DropPoint | null,
-): { layout: Layout; overflow: number } | null {
+): Placement | null {
   // Dropping onto the calendar, rather than under it, asks for a place beside
   // it. The band runs the full width of the spread, so there is no side of it
   // to be on: the only arrangement that answers the gesture is the calendar
@@ -392,7 +415,7 @@ export function placeParts(
 function attempt(
   prev: Layout, size: SizeSpec, kinds: PartKind[], at: DropPoint | null,
   monthlyAsPart = false,
-): { layout: Layout; overflow: number } | null {
+): Placement | null {
   let spanning = prev.spanning;
   let rest = kinds;
   // On a spread the calendar is one part across both pages, so it becomes the
@@ -428,7 +451,7 @@ function attempt(
     // already placed still has to fit under it.
     for (const band of bands) {
       const layout = { ...prev, spanning: band };
-      if (everyPartFits(layout, size)) return { layout, overflow };
+      if (everyPartFits(layout, size)) return { layout, overflow, landed: null };
     }
     return null;
   }
@@ -468,17 +491,26 @@ function attempt(
 
   // An even split is only a preference. A wide part beside a narrow one is
   // refused by a 50/50 cut although the sheet has room for both, so the main
-  // division is tried off-centre as well -- even first, so a deliberate
-  // arrangement is never quietly skewed.
+  // division is tried off-centre as well. A part that stacks items down a
+  // column comes first, though: a 31-row list wants a strip about as wide as
+  // its dates, not half the sheet, and half the sheet is not what a printed
+  // refill gives it either.
+  const { widthMm: surfaceW } = buildGeometry(prev, size).surface;
+  const shares = (c: Surface): (number | undefined)[] => {
+    const narrow = c.split === 'v' && c.placed.length === 2 ? columnShare(c, surfaceW) : null;
+    return narrow === null ? [undefined, 0.66, 0.34] : [narrow, undefined, 0.66, 0.34];
+  };
   const offCentre = (c: Surface): Surface[] =>
-    [undefined, 0.66, 0.34].map(a => (a === undefined ? c : { ...c, ratios: { ...c.ratios, a } }));
+    shares(c).map(a => (a === undefined ? c : { ...c, ratios: { ...c.ratios, a } }));
 
   // Widest calendar first, so it only narrows when the arrangement needs it.
   for (const band of bands) {
     for (const candidate of candidates) {
       for (const surface of offCentre(candidate)) {
         const layout = { ...prev, spanning: band, surface };
-        if (everyPartFits(layout, size)) return { layout, overflow };
+        if (everyPartFits(layout, size)) {
+          return { layout, overflow, landed: surface.placed.indexOf(toAdd[0]) };
+        }
       }
     }
   }

@@ -4,7 +4,7 @@ import type { Layout, PartKind, RefillSize, SizeSpec } from './types';
 import { MAX_PARTS, SCHEMA_VERSION } from './types';
 import { holeCentres, SIZES } from './lib/sizes';
 import { buildGeometry, MAX_RATIO, MIN_RATIO, placeParts as planPlacement, regionAt } from './lib/layout';
-import type { Divider, DropPoint } from './lib/layout';
+import type { Divider, DropPoint, Geometry } from './lib/layout';
 import { nextMonthCell } from './lib/parts';
 import { addMonths } from './lib/dates';
 import { buildPages, buildPrintSheets, DEFAULT_PRINT, hasDatedPart, perPaperCount } from './lib/render/pages';
@@ -17,6 +17,8 @@ import { Field, Segmented, Stepper } from './ui/Field';
 import { Dialog, Sheet, Toast } from './ui/Overlay';
 
 type Stage = 'size' | 'sides' | 'canvas';
+// A rectangle on screen, in the page area's own pixels.
+type Box = { key: string; left: number; top: number; width: number; height: number };
 type SheetTarget = { slot: number } | 'spanning' | 'load' | 'print' | null;
 
 const GAP = 6;
@@ -245,6 +247,10 @@ function CanvasScreen({ layout, setLayout, onBack }: {
   const [sheet, setSheet] = useState<SheetTarget>(null);
   const [toast, setToast] = useState('');
   const [ghost, setGhost] = useState<{ x: number; y: number; kinds: PartKind[] } | null>(null);
+  // Where the part being dragged would land. Two arrangements are possible
+  // from the same drop -- beside the calendar or under it -- so the sheet has
+  // to say which one the finger is currently asking for.
+  const [preview, setPreview] = useState<Box[] | null>(null);
   // Taking a part out reflows every other part on the sheet, so nothing is
   // removed without a plain question first.
   const [confirm, setConfirm] = useState<{ what: string; run: () => void } | null>(null);
@@ -381,11 +387,23 @@ function CanvasScreen({ layout, setLayout, onBack }: {
     if (!d.moved && Math.abs(e.clientX - d.startX) + Math.abs(e.clientY - d.startY) < 8) return;
     d.moved = true;
     setGhost({ x: e.clientX, y: e.clientY, kinds: d.kinds });
+    // Only a single part coming from the tray has a landing place to show:
+    // dragging a part already on the sheet swaps two of them, and several at
+    // once are arranged automatically wherever they fit.
+    if (d.fromSlot !== null || d.kinds.length !== 1) return;
+    const at = toSurface(e.clientX, e.clientY);
+    const planned = at && overPages(e.clientX, e.clientY)
+      ? planPlacement(layout, size, d.kinds, at)
+      : null;
+    setPreview(planned && planned.landed !== null
+      ? regionBoxes(buildGeometry(planned.layout, size), planned.landed)
+      : null);
   };
   const endTrayDrag = (e: React.PointerEvent, kind: PartKind) => {
     const d = dragRef.current;
     dragRef.current = null;
     setGhost(null);
+    setPreview(null);
     if (!d) return;
     if (!d.moved) {
       setTraySelected(prev => prev.includes(kind) ? prev.filter(k => k !== kind) : [...prev, kind]);
@@ -401,6 +419,7 @@ function CanvasScreen({ layout, setLayout, onBack }: {
     const d = dragRef.current;
     dragRef.current = null;
     setGhost(null);
+    setPreview(null);
     if (!d) return;
     if (!d.moved) { setSheet({ slot }); return; }
     const at = toSurface(e.clientX, e.clientY);
@@ -434,6 +453,28 @@ function CanvasScreen({ layout, setLayout, onBack }: {
     downloadPdf(await sheetsToPdf(sheets, layout.name), `${layout.name || 'refill'}.pdf`);
     setSheet(null);
     say(opts.impose ? `A4 ${sheets.length}枚を書き出しました` : `原寸 ${sheets.length}枚を書き出しました`);
+  };
+
+  // A region crossing the gutter shows up on both pages, so one region can be
+  // more than one box on screen.
+  const regionBoxes = (g: Geometry, slot: number): Box[] => {
+    const out: Box[] = [];
+    const region = g.surface.regions[slot];
+    if (!region) return out;
+    g.surface.slices.forEach(sl => {
+      const i = g.pages.findIndex(pg => pg.key === sl.key);
+      const o = pageOrigin(i);
+      const lo = Math.max(region.x, sl.fromMm), hi = Math.min(region.x + region.w, sl.toMm);
+      if (hi <= lo) return;
+      out.push({
+        key: `${slot}-${sl.key}`,
+        left: o.x + (lo - sl.fromMm + sl.ox) * scale,
+        top: o.y + (region.y + sl.oy) * scale,
+        width: (hi - lo) * scale,
+        height: region.h * scale,
+      });
+    });
+    return out;
   };
 
   // Hit areas and borders are drawn over the sheets rather than inside them, so
@@ -598,6 +639,14 @@ function CanvasScreen({ layout, setLayout, onBack }: {
               スタンプをドラッグして<br />ここに配置
             </div>
           )}
+
+          {preview?.map(b => (
+            <div
+              key={`preview-${b.key}`}
+              className="pointer-events-none absolute z-[3] rounded-[3px] border-[1.5px] border-accent/55 bg-accent-soft/55"
+              style={{ left: b.left, top: b.top, width: b.width, height: b.height }}
+            />
+          ))}
 
           {partBoxes.map(b => (
             <div
