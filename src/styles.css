@@ -165,15 +165,27 @@ h2 { font-size: 14px; margin: 0; }
   .divider.teach .knob { animation: none; }
 }
 
-/* Editor affordance only; it never prints. */
+/* Editor affordance only; it never prints. Small and quiet, because it sits
+   over the refill itself and there is one for every block on the sheet. */
 .clearmini {
   position: absolute;
-  width: 18px; height: 18px;
+  width: 16px; height: 16px;
   border-radius: 50%; border: none;
-  background: rgba(58, 54, 46, 0.5); color: #fff;
-  font-size: 11px; line-height: 18px; padding: 0;
+  background: rgba(58, 54, 46, 0.34); color: #fff;
+  font-size: 10px; line-height: 16px; padding: 0;
   z-index: 5;
 }
+.clearmini:active { background: rgba(58, 54, 46, 0.7); }
+
+/* The months this run covers, kept in sight above the sheets. */
+.range {
+  flex-shrink: 0; align-self: flex-start;
+  margin: 0 0 2px 14px; padding: 6px 12px;
+  display: flex; align-items: center; gap: 8px;
+  border-radius: 999px; border: 1px solid var(--line-strong);
+  background: #fff; color: var(--ink); font-size: 11px;
+}
+.range em { font-style: normal; color: var(--faint); }
 
 .hint { flex-shrink: 0; margin: 0; padding: 4px 14px; font-size: 10px; color: var(--faint); }
 .hint.active { color: var(--accent); }

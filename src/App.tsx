@@ -29,6 +29,9 @@ const TRAY: { kind: PartKind; label: string; glyph: string }[] = [
 ];
 
 const TAUGHT_KEY = 'ringcraft.dividerTaught';
+// How far the clear button sits in from the block's right edge. It has to
+// overlap a little to read as attached, without sitting on top of a date.
+const CLEAR_INSET = 17;
 
 const PART_LABEL: Record<PartKind, string> = {
   monthly: 'マンスリー', habit: 'ハビットトラッカー', todo: 'TODOリスト',
@@ -403,11 +406,39 @@ function CanvasScreen({ layout, setLayout, onBack }: {
 
   const empty = layout.surface.placed.length === 0 && !layout.spanning;
 
-  // One button per part, not per page: a part straddling the gutter is still
-  // one part, and two X's over it would suggest otherwise.
-  const clearBoxes = partBoxes.filter(
-    (b, i) => partBoxes.findIndex(o => o.slot === b.slot) === i,
-  );
+  const dated = hasDatedPart(layout);
+  const lastMonth = addMonths(layout.year, layout.month, Math.max(1, layout.monthCount) - 1);
+  const monthlySlot = layout.surface.placed.indexOf('monthly');
+  const monthlyTarget: SheetTarget = layout.spanning ? 'spanning' : { slot: monthlySlot };
+
+  // One button per removable thing, at the outer top corner of the whole
+  // block. A part straddling the gutter is still one part, and its button
+  // belongs at the edge of the spread rather than in the middle of it.
+  const clears: { key: string; label: string; left: number; top: number; run: () => void }[] = [];
+
+  const spanCorners = geo.pages.flatMap((pg, i) => {
+    if (!pg.spanRect) return [];
+    const o = pageOrigin(i);
+    return [{ right: o.x + (pg.spanRect.x + pg.spanRect.w) * scale, top: o.y + pg.spanRect.y * scale }];
+  });
+  if (spanCorners.length) {
+    const c = spanCorners.reduce((a, b) => (b.right > a.right ? b : a));
+    clears.push({
+      key: 'span', label: 'マンスリー', left: c.right - CLEAR_INSET, top: c.top + 3,
+      run: () => setLayout(l => ({ ...l, spanning: null })),
+    });
+  }
+
+  layout.surface.placed.forEach((kind, slot) => {
+    const boxes = partBoxes.filter(b => b.slot === slot);
+    if (boxes.length === 0) return;
+    const b = boxes.reduce((a, x) => (x.left + x.width > a.left + a.width ? x : a));
+    clears.push({
+      key: `p${slot}`, label: PART_LABEL[kind],
+      left: b.left + b.width - CLEAR_INSET, top: b.top + 3,
+      run: () => removePart(slot),
+    });
+  });
   const teachDivider = !taught && dividerBoxes.length > 0;
 
   // The next-month calendar is part of the monthly rather than a part of its
@@ -421,6 +452,15 @@ function CanvasScreen({ layout, setLayout, onBack }: {
         <button className="icon" onClick={onBack} aria-label="戻る">←</button>
         <span>{size.label} {size.widthMm}×{size.heightMm}mm ・ {layout.spread ? '見開き' : '片面'}</span>
       </header>
+
+      {dated && (
+        // Which months this makes is a design decision, not a printing one,
+        // so it belongs in sight rather than inside the export sheet.
+        <button className="range" onClick={() => setSheet(monthlyTarget)}>
+          {layout.year}年{layout.month}月 → {lastMonth.year}年{lastMonth.month}月
+          <em>{layout.monthCount}ヶ月分</em>
+        </button>
+      )}
 
       <div className="stage" ref={boxRef}>
         <div
@@ -442,17 +482,7 @@ function CanvasScreen({ layout, setLayout, onBack }: {
                   aria-label="マンスリーの設定"
                 />
               )}
-              {pg.spanRect && i === 0 && (
-                <button
-                  className="clearmini"
-                  style={{
-                    left: (pg.spanRect.x + pg.spanRect.w) * scale - 22,
-                    top: pg.spanRect.y * scale + 4,
-                  }}
-                  onClick={() => askRemove('マンスリー', () => setLayout(l => ({ ...l, spanning: null })))}
-                  aria-label="マンスリーを外す"
-                >×</button>
-              )}
+
             </div>
           ))}
 
@@ -470,24 +500,21 @@ function CanvasScreen({ layout, setLayout, onBack }: {
             />
           ))}
 
-          {clearBoxes.map(b => {
-            const label = PART_LABEL[layout.surface.placed[b.slot]];
-            return (
-              <button
-                key={`clear-${b.slot}`}
-                className="clearmini"
-                style={{ left: b.left + b.width - 22, top: b.top + 4 }}
-                onClick={() => askRemove(label, () => removePart(b.slot))}
-                aria-label={`${label}を外す`}
-              >×</button>
-            );
-          })}
+          {clears.map(c => (
+            <button
+              key={c.key}
+              className="clearmini"
+              style={{ left: c.left, top: c.top }}
+              onClick={() => askRemove(c.label, c.run)}
+              aria-label={`${c.label}を外す`}
+            >×</button>
+          ))}
 
           {miniCell && (
             <button
               className="clearmini"
               style={{
-                left: pageOrigin(0).x + (miniCell.x + miniCell.w) * scale - 20,
+                left: pageOrigin(0).x + (miniCell.x + miniCell.w) * scale - CLEAR_INSET,
                 top: pageOrigin(0).y + miniCell.y * scale + 2,
               }}
               onClick={() => askRemove('翌月のカレンダー', () => setLayout(l => ({ ...l, showNextMonth: false })))}

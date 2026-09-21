@@ -57,5 +57,12 @@ await shot('04-入らないときの案内');
 // The bottom sheet's own handle must not have caught the border handle's style.
 await page.locator('.hitbox.part').first().click();
 await shot('05-設定シート');
+await page.locator('.scrim').click({ position: { x: 100, y: 20 } });
+
+// The month range is readable without opening anything, and tapping it goes
+// straight to where it is set.
+console.log('range says:', await page.locator('.range').textContent());
+await page.locator('.range').click();
+await shot('06-開始月と終了月');
 
 await browser.close();
