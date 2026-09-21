@@ -238,7 +238,28 @@ function ruled(area: Rect, title: string | null, pitch: number): Primitive[] {
 export const drawMemo = (area: Rect): Primitive[] => ruled(area, 'MEMO', 5);
 export const drawLines = (area: Rect): Primitive[] => ruled(area, null, 6);
 
-// The month as one column of days, which list-style refills use beside a grid
+// A row this short is a line you cannot write on. It is what a 31-row list
+// in the 90mm column the fit rule asks for comes out at, so it is the floor
+// everywhere else too.
+export const DAYLIST_MIN_ROW_MM = 2.5;
+// The date and its weekday need this much before any writing space starts.
+export const DAYLIST_MIN_COL_MM = 17.6;
+
+// How many columns the month is folded into. One is the usual list. A turned
+// refill is 62mm tall, where 31 rows would be 1.4mm each, so the days fold
+// into two or three columns the way a printed one-month list does -- the
+// area decides, nothing is set by hand.
+export function dayListColumns(area: Rect, days: number): number {
+  const w = area.w - PAD * 2;
+  const h = area.h - PAD * 2 - MONTH_LABEL_H;
+  for (let n = 1; n <= 3; n++) {
+    const rows = Math.ceil(days / n);
+    if (h / rows >= DAYLIST_MIN_ROW_MM && w / n >= DAYLIST_MIN_COL_MM) return n;
+  }
+  return 1;
+}
+
+// The month as a list of days, which list-style refills use beside a grid
 // calendar. Every day gets a row whether or not anything happens on it, so the
 // row height is the whole design: too short and the dates touch.
 // `range` is the run of dates this page carries, 1-based and inclusive. A
@@ -249,32 +270,45 @@ export function drawDayList(area: Rect, layout: Layout, range?: [number, number]
   const [first, last] = range ?? [1, daysInMonth(layout.year, layout.month)];
   const days = last - first + 1;
   const gridTop = top + MONTH_LABEL_H;
-  const rowH = (bottom - gridTop) / days;
   const width = right - left;
-  if (rowH <= 0 || width <= 0) return [];
+  const cols = dayListColumns(area, days);
+  const rows = Math.ceil(days / cols);
+  const colW = width / cols;
+  const rowH = (bottom - gridTop) / rows;
+  if (rowH <= 0 || colW <= 0) return [];
 
   const out: Primitive[] = [{
     type: 'text', x: left, y: top + MONTH_LABEL_H - 1.3,
     text: `${layout.month}月`, sizePt: 7, color: INK, align: 'left',
   }];
 
-  // A narrow column for the date and its weekday, the rest to write in.
-  const gutter = Math.min(9, width * 0.34);
   out.push({ type: 'rect', x: left, y: gridTop, w: width, h: bottom - gridTop, stroke: RULE, strokeMm: 0.25 });
-  out.push({ type: 'line', x1: left + gutter, y1: gridTop, x2: left + gutter, y2: bottom, stroke: RULE_LIGHT, strokeMm: 0.15 });
 
-  for (let d = first; d <= last; d++) {
+  // A narrow column for the date and its weekday, the rest to write in.
+  const gutter = Math.min(9, colW * 0.34);
+  for (let c = 0; c < cols; c++) {
+    const x = left + colW * c;
+    if (c > 0) out.push({ type: 'line', x1: x, y1: gridTop, x2: x, y2: bottom, stroke: RULE, strokeMm: 0.2 });
+    out.push({ type: 'line', x1: x + gutter, y1: gridTop, x2: x + gutter, y2: bottom, stroke: RULE_LIGHT, strokeMm: 0.15 });
+  }
+
+  for (let i = 0; i < days; i++) {
+    const d = first + i;
     const date = new Date(layout.year, layout.month - 1, d);
-    const y = gridTop + rowH * (d - first);
-    if (d > first) out.push({ type: 'line', x1: left, y1: y, x2: right, y2: y, stroke: RULE_LIGHT, strokeMm: 0.12 });
+    const col = Math.floor(i / rows);
+    const x = left + colW * col;
+    const y = gridTop + rowH * (i % rows);
+    if (i % rows > 0) {
+      out.push({ type: 'line', x1: x, y1: y, x2: x + colW, y2: y, stroke: RULE_LIGHT, strokeMm: 0.12 });
+    }
     const colour = dowColor(date.getDay());
     const base = y + rowH * 0.74;
     out.push({
-      type: 'text', x: left + 0.8, y: base, text: String(d),
+      type: 'text', x: x + 0.8, y: base, text: String(d),
       sizePt: Math.min(6.5, rowH * 1.7), color: colour, align: 'left',
     });
     out.push({
-      type: 'text', x: left + gutter - 0.8, y: base, text: weekdayLabel(date.getDay())[0],
+      type: 'text', x: x + gutter - 0.8, y: base, text: weekdayLabel(date.getDay())[0],
       sizePt: Math.min(4.5, rowH * 1.2), color: colour, align: 'right',
     });
   }

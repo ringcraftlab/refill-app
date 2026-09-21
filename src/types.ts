@@ -40,15 +40,23 @@ export interface PartFit {
   minWMm: number;
   minHMm: number;
   prefer: 'wide' | 'tall' | 'any';
+  // Some parts can be folded, trading width for height. The day list is the
+  // case: 31 rows need a 90mm column, but the same month folds into two or
+  // three columns, which is what fits a refill turned on its side.
+  alt?: { minWMm: number; minHMm: number }[];
 }
 
 export const PART_FIT: Record<PartKind, PartFit> = {
   // Seven columns at about 6mm each. Micro 5 leaves 51mm on a single page,
   // which is the tightest real refill there is; below this the dates collide.
   monthly: { minWMm: 44, minHMm: 40, prefer: 'any' },
-  // Thirty-one rows is what it is: the height decides whether this is usable
-  // at all, so it asks for a tall column and refuses a short one.
-  daylist: { minWMm: 20, minHMm: 90, prefer: 'tall' },
+  // Thirty-one rows down one column need the height, but a wider area folds
+  // them into two or three columns instead -- the shapes a printed one-month
+  // list comes in. Kept in step with dayListColumns().
+  daylist: {
+    minWMm: 20, minHMm: 90, prefer: 'tall',
+    alt: [{ minWMm: 38, minHMm: 48 }, { minWMm: 56, minHMm: 35 }],
+  },
   // Seven day columns and a run of hours down the side.
   weekvert: { minWMm: 52, minHMm: 58, prefer: 'any' },
   // Seven day rows, each wide enough to write a line in.

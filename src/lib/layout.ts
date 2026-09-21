@@ -279,7 +279,9 @@ export function buildGeometry(layout: Layout, size: SizeSpec, flipBinding = fals
 
 function fits(kind: PartKind, r: Rect): boolean {
   const f = PART_FIT[kind];
-  return r.w >= f.minWMm && r.h >= f.minHMm;
+  // Any shape the part can take is a fit. A day list refused for being 50mm
+  // short of a 31-row column still fits as two columns of sixteen.
+  return [f, ...(f.alt ?? [])].some(s => r.w >= s.minWMm && r.h >= s.minHMm);
 }
 
 function everyPartFits(layout: Layout, size: SizeSpec): boolean {
@@ -308,6 +310,27 @@ function orderings<T>(items: T[]): T[][] {
 // on the other is just as standard, and there the calendar is an ordinary part
 // holding one page. The band is tried first; when nothing fits underneath it,
 // the calendar gives up spanning and becomes a part like any other.
+// A drop point is in the surface space of the layout the user was looking at.
+// When the calendar leaves the band that surface changes shape -- a strip
+// under the calendar becomes the whole spread -- so the point is carried over
+// by the page it landed on rather than by its millimetres. Without this a part
+// dropped on the right page can come out on the left.
+function remapDrop(
+  at: { sx: number; sy: number }, prev: Layout, next: Layout, size: SizeSpec,
+): { sx: number; sy: number } {
+  const a = buildGeometry(prev, size).surface;
+  const b = buildGeometry(next, size).surface;
+  if (!a.slices.length || !b.slices.length || a.heightMm <= 0) return at;
+  const from = a.slices.find(s => at.sx >= s.fromMm && at.sx <= s.toMm) ?? a.slices[a.slices.length - 1];
+  const to = b.slices.find(s => s.key === from.key) ?? b.slices[0];
+  const across = from.toMm - from.fromMm;
+  const share = across > 0 ? (at.sx - from.fromMm) / across : 0.5;
+  return {
+    sx: to.fromMm + share * (to.toMm - to.fromMm),
+    sy: (at.sy / a.heightMm) * b.heightMm,
+  };
+}
+
 export function placeParts(
   prev: Layout, size: SizeSpec, kinds: PartKind[], at: { sx: number; sy: number } | null,
 ): { layout: Layout; overflow: number } | null {
@@ -325,7 +348,7 @@ export function placeParts(
       surface: { ...prev.surface, placed: ['monthly', ...prev.surface.placed], ratios: {} },
     };
     if (onOnePage.surface.placed.length > MAX_PARTS) return null;
-    return attempt(onOnePage, size, kinds, at, true);
+    return attempt(onOnePage, size, kinds, at && remapDrop(at, prev, onOnePage, size), true);
   }
   // The calendar is arriving now and no band fits around what is already
   // here, so it lands as an ordinary part instead of being refused.
