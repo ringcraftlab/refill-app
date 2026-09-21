@@ -290,6 +290,18 @@ function everyPartFits(layout: Layout, size: SizeSpec): boolean {
   return layout.surface.placed.every((kind, i) => !!regions[i] && fits(kind, regions[i]));
 }
 
+// Every order of the parts. Four land at once at most, so this tops out at
+// twenty-four arrangements to try.
+function orderings<T>(items: T[]): T[][] {
+  if (items.length <= 1) return [items];
+  const out: T[][] = [];
+  items.forEach((item, i) => {
+    const rest = [...items.slice(0, i), ...items.slice(i + 1)];
+    for (const tail of orderings(rest)) out.push([item, ...tail]);
+  });
+  return out;
+}
+
 // Works out where a dropped part goes, and refuses rather than squeezing it
 // into a region too small to write in. Returns null when nothing fits.
 export function placeParts(
@@ -336,7 +348,16 @@ export function placeParts(
       });
     }
   } else {
-    candidates.push({ placed: [...cur.placed, ...toAdd], ratios: {}, split: cur.split });
+    // Several at once. Dropping the same parts one by one lets each drop pick
+    // a direction and a slot, so a single gesture has to search that same
+    // space -- otherwise it refuses arrangements that plainly work by hand.
+    const { widthMm, heightMm } = buildGeometry(prev, size).surface;
+    const keep = cur.placed.length > 0 ? cur.split : splitFor(widthMm, heightMm);
+    for (const split of [keep, keep === 'h' ? 'v' : 'h'] as const) {
+      for (const order of orderings(toAdd)) {
+        candidates.push({ placed: [...cur.placed, ...order], ratios: {}, split });
+      }
+    }
   }
 
   for (const surface of candidates) {
