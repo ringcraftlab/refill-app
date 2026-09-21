@@ -73,7 +73,7 @@ function Primitives({ items }: { items: Primitive[] }) {
 export function PageSvg({ page, scale = 3, showGuides = true }: { page: Page; scale?: number; showGuides?: boolean }) {
   return (
     <svg
-      className="page-shadow"
+      className="block"
       width={`${page.widthMm * scale}px`}
       height={`${page.heightMm * scale}px`}
       viewBox={`0 0 ${page.widthMm} ${page.heightMm}`}
@@ -89,10 +89,13 @@ export function PageSvg({ page, scale = 3, showGuides = true }: { page: Page; sc
 // One sheet of paper exactly as it will come out of the printer: tiles,
 // cut lines and all. Nothing is added here that the PDF does not carry, so
 // what this shows is what prints.
-export function SheetSvg({ sheet, boxPx }: { sheet: SheetContent; boxPx: number }) {
+export function SheetSvg({ sheet, boxPx, className = '' }: {
+  sheet: SheetContent; boxPx: number; className?: string;
+}) {
   const scale = Math.min(boxPx / sheet.widthMm, (boxPx * 1.42) / sheet.heightMm);
   return (
     <svg
+      className={className}
       width={`${sheet.widthMm * scale}px`}
       height={`${sheet.heightMm * scale}px`}
       viewBox={`0 0 ${sheet.widthMm} ${sheet.heightMm}`}

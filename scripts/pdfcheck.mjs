@@ -46,7 +46,7 @@ await drag(await centerOf(await stamp('メモ')), { x: lp.x + lp.width / 2, y: l
 await page.getByRole('button', { name: 'PDF出力プレビュー' }).click();
 // Two copies of the spread, so the tiling has four refills to place.
 await page.locator('.stepper button').filter({ hasText: '＋' }).first().click();
-console.log('sheet says:', await page.locator('.sheet .muted').textContent());
+console.log('sheet says:', await page.locator('.print-summary').textContent());
 
 const dl = page.waitForEvent('download');
 await page.getByRole('button', { name: '書き出す' }).click();

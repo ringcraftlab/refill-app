@@ -1,329 +1,60 @@
-:root {
-  --bg: #F4F1EC;
-  --paper: #FFFDF7;
-  --ink: #3A362E;
-  --muted: #8A8375;
-  --faint: #B9B2A2;
-  --line: #EFEBE2;
-  --line-strong: #E4DFD3;
-  --accent: #C1734A;
+@import "tailwindcss";
+
+/* The palette is the app's whole visual identity: warm paper, soft rules, one
+   accent. Declared here so utilities like `bg-paper` and `text-faint` exist
+   and nothing has to remember a hex code. */
+@theme {
+  --color-bg: #F4F1EC;
+  --color-paper: #FFFDF7;
+  --color-ink: #3A362E;
+  --color-muted: #8A8375;
+  --color-faint: #B9B2A2;
+  --color-line: #EFEBE2;
+  --color-line-strong: #E4DFD3;
+  --color-accent: #C1734A;
+  --color-accent-soft: #FBF1EA;
+  /* Reads as ink on a label, but lighter, so a row of controls does not shout. */
+  --color-label: #6B6656;
+  --color-danger: #A8553B;
+
+  --font-sans: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic", sans-serif;
+
+  /* Tailwind pairs each size with a line-height. This is a dense phone UI laid
+     out against a drawing, where a label one line-box taller pushes the sheet
+     itself out of place, so sizes set the size and nothing else. Anything that
+     wants roomier lines asks with `leading-*`. */
+  --text-xs--line-height: normal;
+  --text-sm--line-height: normal;
+  --text-base--line-height: normal;
+  --text-lg--line-height: normal;
+
+  /* Until someone has dragged a border once, its handle asks to be dragged. */
+  --animate-knob: knobPulse 1.9s ease-in-out infinite;
 }
 
-* { box-sizing: border-box; }
-
-html, body, #root { height: 100%; }
-
-body {
-  margin: 0;
-  /* Everything here is dragged; a stray text selection during a drag both
-     looks broken and swallows the gesture. */
-  -webkit-user-select: none;
-  user-select: none;
-  background: var(--bg);
-  color: var(--ink);
-  font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic", sans-serif;
-  -webkit-font-smoothing: antialiased;
-}
-
-button { font: inherit; color: inherit; cursor: pointer; }
-
-.screen {
-  height: 100%;
-  max-width: 430px;
-  margin: 0 auto;
-  display: flex;
-  flex-direction: column;
-  background: var(--bg);
-  position: relative;
-  overflow: hidden;
-}
-.screen.pad { padding: 28px 22px; gap: 18px; }
-
-.brand { font-size: 13px; font-weight: 700; color: var(--muted); letter-spacing: 0.04em; }
-h1 { font-size: 19px; margin: 0; }
-h2 { font-size: 14px; margin: 0; }
-.muted { color: var(--faint); font-size: 13px; }
-
-.link { border: none; background: none; color: var(--muted); font-size: 12px; padding: 0; align-self: flex-start; }
-
-/* Drawn to one scale, bottom aligned, so the row reads as a size comparison.
-   The holes come from the same spec the refill is punched to. */
-/* Stacked tight, so the icons read as one run of increasing sizes rather than
-   five unrelated rows. */
-.sizelist { flex: 1; min-height: 0; display: flex; flex-direction: column; justify-content: center; gap: 2px; }
-.sizerow {
-  display: flex;
-  align-items: flex-end;
-  gap: 14px;
-  padding: 3px 8px;
-  border: 1.5px solid transparent;
-  border-radius: 10px;
-  background: none;
-  text-align: left;
-}
-.sizerow.on { border-color: var(--ink); background: #fff; }
-.sizerow .art { flex-shrink: 0; display: flex; justify-content: flex-start; }
-.sizerow svg { display: block; }
-.sizerow .meta { display: flex; flex-direction: column; gap: 1px; padding-bottom: 3px; }
-.sizerow strong { font-size: 15px; }
-.sizerow small { font-size: 11px; color: var(--faint); }
-.sizerow .note { color: var(--accent); }
-
-.cards { display: flex; flex-direction: column; gap: 10px; }
-.card {
-  display: flex; align-items: center; gap: 14px;
-  padding: 14px; border-radius: 14px;
-  border: 1.5px solid var(--line); background: #fff; text-align: left;
-}
-.card.on { border-color: var(--ink); }
-.card-text { display: flex; flex-direction: column; gap: 2px; }
-.card-text strong { font-size: 14px; }
-.card-text small { font-size: 11px; color: var(--faint); }
-.mini-single { width: 34px; height: 52px; background: #fff; border: 1px solid var(--line-strong); border-radius: 2px; flex-shrink: 0; }
-.mini-spread { display: flex; gap: 3px; flex-shrink: 0; }
-.mini-spread i { width: 34px; height: 52px; background: #fff; border: 1px solid var(--line-strong); border-radius: 2px; }
-
-.primary {
-  padding: 14px; border-radius: 12px; border: none;
-  background: var(--accent); color: #fff; font-size: 14px; font-weight: 700;
-}
-.bottom { margin-top: auto; }
-
-.bar {
-  flex-shrink: 0; display: flex; align-items: center; gap: 8px;
-  padding: 12px 16px 8px; font-size: 12px; font-weight: 600; color: #6B6656;
-}
-.icon { border: none; background: none; font-size: 18px; padding: 0 4px; line-height: 1; }
-
-.stage {
-  flex-grow: 1; min-height: 0;
-  display: flex; align-items: center; justify-content: center;
-  padding: 8px 12px;
-}
-.sheetset { display: flex; align-items: center; justify-content: center; }
-
-.page {
-  position: relative;
-  flex-shrink: 0;
-  background: #fff;
-  border-radius: 2px;
-  box-shadow: 0 10px 30px rgba(58, 54, 46, 0.16);
-  overflow: hidden;
-  touch-action: none;
-}
-.page svg { display: block; }
-
-.drop-hint {
-  position: absolute; inset: 0;
-  display: flex; align-items: center; justify-content: center;
-  text-align: center; font-size: 11px; line-height: 1.7; color: var(--faint);
-  pointer-events: none;
-}
-
-.hitbox { position: absolute; background: none; border: none; padding: 0; }
-.part { touch-action: none; }
-.part:active { background: rgba(193, 115, 74, 0.08); }
-
-/* The whole point of the app: drag a border and one part gives room to the
-   other. The hit area is much taller than the printed line so a finger can
-   catch it. */
-.divider { position: absolute; display: flex; align-items: center; justify-content: center; touch-action: none; z-index: 4; }
-.divider i { background: var(--line-strong); border-radius: 2px; display: block; }
-.divider.h { cursor: row-resize; }
-.divider.h i { width: 100%; height: 3px; }
-.divider.v { cursor: col-resize; }
-.divider.v i { width: 3px; height: 100%; }
-.divider:active i { background: var(--accent); }
-
-/* A bare rule reads as something printed, so nobody thinks to touch it. The
-   grab handle is what tells a first-time user that this border is the control,
-   and it is the one thing in the app that must not be missed. */
-.knob {
-  position: absolute;
-  display: flex; align-items: center; justify-content: center; gap: 2px;
-  background: #fff;
-  border: 1px solid var(--line-strong);
-  border-radius: 7px;
-  box-shadow: 0 1px 3px rgba(58, 54, 46, 0.18);
-}
-.knob span { background: var(--faint); border-radius: 1px; display: block; }
-.divider.h .knob { width: 34px; height: 13px; flex-direction: column; }
-.divider.h .knob span { width: 14px; height: 1.5px; }
-.divider.v .knob { width: 13px; height: 34px; }
-.divider.v .knob span { width: 1.5px; height: 14px; }
-.divider:active .knob { border-color: var(--accent); }
-.divider:active .knob span { background: var(--accent); }
-
-/* Until someone has dragged a border once, the handle asks to be dragged. */
-.divider.teach .knob { border-color: var(--accent); animation: gripPulse 1.9s ease-in-out infinite; }
-.divider.teach .knob span { background: var(--accent); }
-@keyframes gripPulse {
+@keyframes knobPulse {
   0%, 100% { box-shadow: 0 1px 3px rgba(58, 54, 46, 0.18), 0 0 0 0 rgba(193, 115, 74, 0.4); }
   60% { box-shadow: 0 1px 3px rgba(58, 54, 46, 0.18), 0 0 0 8px rgba(193, 115, 74, 0); }
 }
-@media (prefers-reduced-motion: reduce) {
-  .divider.teach .knob { animation: none; }
-}
 
-/* Editor affordance only; it never prints. Small and quiet, because it sits
-   over the refill itself and there is one for every block on the sheet. */
-.clearmini {
-  position: absolute;
-  width: 16px; height: 16px;
-  border-radius: 50%; border: none;
-  background: rgba(58, 54, 46, 0.34); color: #fff;
-  font-size: 10px; line-height: 16px; padding: 0;
-  z-index: 5;
-}
-.clearmini:active { background: rgba(58, 54, 46, 0.7); }
+@layer base {
+  html, body, #root { height: 100%; }
 
-/* The months this run covers, kept in sight above the sheets. */
-.range {
-  flex-shrink: 0; align-self: flex-start;
-  margin: 0 0 2px 14px; padding: 6px 12px;
-  display: flex; align-items: center; gap: 8px;
-  border-radius: 999px; border: 1px solid var(--line-strong);
-  background: #fff; color: var(--ink); font-size: 11px;
-}
-.range em { font-style: normal; color: var(--faint); }
+  /* Preflight sets 1.5 here. This app is a dense phone UI of 9-13px labels
+     laid out against a drawing, and every one of them was measured against
+     the browser default. Anything that wants roomier lines asks for it. */
+  html { line-height: normal; }
 
-.hint { flex-shrink: 0; margin: 0; padding: 4px 14px; font-size: 10px; color: var(--faint); }
-.hint.active { color: var(--accent); }
+  body {
+    /* Everything here is dragged; a stray text selection during a drag both
+       looks broken and swallows the gesture. */
+    -webkit-user-select: none;
+    user-select: none;
+    background: var(--color-bg);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
 
-.tray {
-  flex-shrink: 0; display: flex; gap: 10px;
-  padding: 8px 12px 10px; overflow-x: auto;
-  background: var(--paper); border-top: 1px solid var(--line);
+  button { cursor: pointer; }
 }
-.stamp {
-  position: relative; flex-shrink: 0;
-  width: 60px; padding: 9px 0;
-  display: flex; flex-direction: column; align-items: center; gap: 4px;
-  border-radius: 12px; border: 1.5px solid var(--line); background: #fff;
-  font-size: 9px; font-weight: 600;
-  touch-action: none;
-}
-.stamp.on { border-color: var(--accent); background: #FBF1EA; }
-.stamp .glyph { font-size: 15px; line-height: 1; }
-.badge {
-  position: absolute; top: -5px; right: -5px;
-  width: 17px; height: 17px; border-radius: 50%;
-  background: var(--accent); color: #fff;
-  font-size: 9px; font-style: normal; line-height: 17px;
-}
-
-.actions { flex-shrink: 0; display: flex; gap: 8px; padding: 8px 12px 14px; background: var(--paper); }
-.actions button {
-  flex: 1; padding: 12px 0; border-radius: 10px;
-  border: 1px solid var(--line-strong); background: #fff; color: #6B6656;
-  font-size: 12px; font-weight: 600;
-}
-.actions .primary { flex: 1.3; border: none; }
-
-.ghost {
-  position: fixed; transform: translate(-50%, -140%);
-  background: var(--ink); color: #fff; font-size: 11px;
-  padding: 7px 12px; border-radius: 20px; white-space: nowrap;
-  pointer-events: none; z-index: 40;
-}
-
-.toast {
-  position: absolute; left: 50%; bottom: 96px; transform: translateX(-50%);
-  background: var(--ink); color: #fff; font-size: 12px;
-  padding: 8px 16px; border-radius: 20px; white-space: nowrap;
-  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.18); z-index: 20;
-}
-
-.scrim { position: absolute; inset: 0; background: rgba(58, 54, 46, 0.28); z-index: 30; }
-.sheet {
-  position: absolute; left: 0; right: 0; bottom: 0; z-index: 31;
-  background: #fff; border-radius: 18px 18px 0 0;
-  padding: 10px 18px 22px;
-  display: flex; flex-direction: column; gap: 14px;
-  box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.14);
-  /* The export sheet is taller than a phone; without this its top half is
-     simply unreachable. */
-  max-height: 88%;
-  overflow-y: auto;
-}
-.grip { width: 36px; height: 4px; background: var(--line-strong); border-radius: 2px; margin: 0 auto; }
-
-.field { display: flex; flex-direction: column; gap: 8px; }
-.field-label { font-size: 11px; color: var(--muted); }
-.segmented { display: flex; gap: 8px; }
-.segmented button {
-  flex: 1; padding: 11px 4px; border-radius: 9px;
-  border: 1px solid var(--line-strong); background: #fff; color: #6B6656;
-  font-size: 12px; font-weight: 600;
-}
-.segmented button.on { background: var(--ink); border-color: var(--ink); color: #fff; }
-
-.stepper { display: flex; align-items: center; gap: 10px; }
-.stepper button { width: 38px; height: 38px; border-radius: 8px; border: 1px solid var(--line-strong); background: var(--bg); font-size: 16px; }
-.stepper strong { min-width: 84px; text-align: center; font-size: 13px; }
-
-.saved { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; max-height: 240px; overflow-y: auto; }
-.saved li { display: flex; gap: 8px; }
-.saved .grow { flex: 1; text-align: left; padding: 11px 12px; border-radius: 9px; border: 1px solid var(--line-strong); background: #fff; font-size: 13px; }
-.ghostbtn { padding: 11px 12px; border-radius: 9px; border: 1px solid var(--line-strong); background: var(--bg); font-size: 12px; color: var(--muted); }
-
-.danger { padding: 12px; border-radius: 10px; border: 1px solid var(--line-strong); background: #fff; color: #A8553B; font-size: 13px; font-weight: 600; }
-
-/* Removing a part reflows the whole sheet, so it asks first. */
-.confirm {
-  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
-  z-index: 31; width: 264px;
-  background: #fff; border-radius: 16px; padding: 22px 18px 16px;
-  display: flex; flex-direction: column; gap: 18px;
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.2);
-}
-.confirm p { margin: 0; font-size: 14px; text-align: center; line-height: 1.5; }
-.confirm-row { display: flex; gap: 10px; }
-.confirm-row button { flex: 1; }
-.confirm-row .ghostbtn { padding: 12px; font-size: 13px; font-weight: 600; }
-
-/* What will actually come out of the printer, shown before committing ink. */
-.preview { display: flex; gap: 10px; overflow-x: auto; padding: 2px 0 4px; }
-.preview figure { margin: 0; flex-shrink: 0; display: flex; flex-direction: column; align-items: center; gap: 4px; }
-.preview figure button { padding: 0; border: none; background: none; display: block; }
-.preview svg { border: 1px solid var(--line-strong); border-radius: 2px; display: block; background: #fff; }
-.preview figcaption { font-size: 10px; color: var(--muted); white-space: nowrap; }
-.preview .more {
-  flex-shrink: 0; width: 110px; min-height: 142px;
-  display: flex; align-items: center; justify-content: center; text-align: center;
-  border: 1px dashed var(--line-strong); border-radius: 2px;
-  font-size: 10px; color: var(--faint); line-height: 1.6;
-}
-.note { margin: 0; font-size: 10px; color: var(--faint); line-height: 1.7; }
-
-/* A thumbnail shows the arrangement; this shows the page. */
-.lightbox {
-  position: fixed; inset: 0; z-index: 50;
-  background: rgba(28, 26, 22, 0.9);
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
-  gap: 12px; padding: 54px 16px 18px;
-}
-.lightbox-close {
-  position: absolute; top: 12px; right: 14px;
-  width: 34px; height: 34px; padding: 0;
-  border: none; border-radius: 50%;
-  background: rgba(255, 255, 255, 0.18); color: #fff;
-  font-size: 17px; line-height: 34px;
-}
-.lightbox-page { background: #fff; border-radius: 2px; overflow: auto; }
-/* Both maxima with auto sizing, so the page shrinks to fit whichever runs out
-   first and keeps its proportions. Setting a width and capping the height
-   instead leaves the sheet floating in white space. */
-.lightbox-page svg {
-  display: block; width: auto; height: auto;
-  max-width: calc(100vw - 32px);
-  max-height: calc(100vh - 128px);
-}
-.lightbox-page.zoom { width: calc(100vw - 32px); height: calc(100vh - 128px); }
-.lightbox-page.zoom svg { max-width: none; max-height: none; width: calc((100vw - 32px) * 2.4); }
-
-.lightbox-bar { display: flex; align-items: center; gap: 14px; color: #fff; font-size: 12px; }
-.lightbox-bar span { display: flex; flex-direction: column; align-items: center; gap: 2px; text-align: center; }
-.lightbox-bar em { font-style: normal; font-size: 10px; color: rgba(255, 255, 255, 0.55); }
-.lightbox-bar button { min-width: 52px; }
-.lightbox-bar button:disabled { opacity: 0.35; }

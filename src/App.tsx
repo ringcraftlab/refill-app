@@ -11,11 +11,20 @@ import type { BackFill, PrintOptions } from './lib/render/pages';
 import { PageSvg, SheetSvg } from './lib/render/svg';
 import { downloadPdf, sheetsToPdf } from './lib/render/pdf';
 import { deleteLayout, listLayouts, newId, saveLayout } from './lib/storage';
+import { Button } from './ui/Button';
+import { Field, Segmented, Stepper } from './ui/Field';
+import { Dialog, Sheet, Toast } from './ui/Overlay';
 
 type Stage = 'size' | 'sides' | 'canvas';
 type SheetTarget = { slot: number } | 'spanning' | 'load' | 'print' | null;
 
 const GAP = 6;
+
+// The app is one phone-width column whatever it is shown on. Layout only —
+// anything pressable comes from ui/.
+const SCREEN = 'relative mx-auto flex h-full max-w-[430px] flex-col overflow-hidden bg-bg';
+const SCREEN_PAD = `${SCREEN} gap-[18px] px-[22px] py-7`;
+const SHEET_MINI = 'h-[52px] w-[34px] shrink-0 rounded-sm border border-line-strong bg-white';
 
 const TRAY: { kind: PartKind; label: string; glyph: string }[] = [
   { kind: 'monthly', label: 'マンスリー', glyph: '31' },
@@ -105,6 +114,7 @@ function SizeIcon({ size }: { size: SizeSpec }) {
       width={size.widthMm * PICKER_SCALE}
       height={size.heightMm * PICKER_SCALE}
       viewBox={`0 0 ${size.widthMm} ${size.heightMm}`}
+      className="block"
       aria-hidden="true"
     >
       <rect
@@ -127,19 +137,25 @@ function SizeScreen({ selected, onPick }: { selected: RefillSize; onPick: (s: Re
   // read as a stack and only their size differs.
   const widest = Math.max(...SIZE_ORDER.map(id => SIZES[id].widthMm)) * PICKER_SCALE;
   return (
-    <div className="screen pad">
-      <div className="brand">RingCraftLab</div>
-      <h1>手帳のサイズを選ぶ</h1>
-      <div className="sizelist">
+    <div className={SCREEN_PAD}>
+      <div className="text-[13px] font-bold tracking-[0.04em] text-muted">RingCraftLab</div>
+      <h1 className="text-[19px] font-bold">手帳のサイズを選ぶ</h1>
+      <div className="flex min-h-0 flex-1 flex-col justify-center gap-0.5">
         {SIZE_ORDER.map(id => {
           const s = SIZES[id];
           return (
-            <button key={id} className={`sizerow${selected === id ? ' on' : ''}`} onClick={() => onPick(id)}>
-              <span className="art" style={{ width: widest }}><SizeIcon size={s} /></span>
-              <span className="meta">
-                <strong>{s.label}</strong>
-                <small>{s.widthMm}×{s.heightMm}mm ・ {s.holes.count}穴</small>
-                <small className="note">{SIZE_NOTE[id]}</small>
+            <button
+              key={id}
+              onClick={() => onPick(id)}
+              className={`sizerow flex items-end gap-3.5 rounded-[10px] border-[1.5px] px-2 py-[3px] text-left ${
+                selected === id ? 'border-ink bg-white' : 'border-transparent'
+              }`}
+            >
+              <span className="flex shrink-0 justify-start" style={{ width: widest }}><SizeIcon size={s} /></span>
+              <span className="flex flex-col gap-px pb-[3px]">
+                <strong className="text-[15px]">{s.label}</strong>
+                <small className="text-[11px] text-faint">{s.widthMm}×{s.heightMm}mm ・ {s.holes.count}穴</small>
+                <small className="text-[11px] text-accent">{SIZE_NOTE[id]}</small>
               </span>
             </button>
           );
@@ -152,21 +168,31 @@ function SizeScreen({ selected, onPick }: { selected: RefillSize; onPick: (s: Re
 function SidesScreen({ spread, onPick, onBack, onConfirm }: {
   spread: boolean; onPick: (v: boolean) => void; onBack: () => void; onConfirm: () => void;
 }) {
+  const card = (on: boolean) =>
+    `card flex items-center gap-3.5 rounded-[14px] border-[1.5px] bg-white p-3.5 text-left ${
+      on ? 'border-ink' : 'border-line'
+    }`;
   return (
-    <div className="screen pad">
-      <button className="link" onClick={onBack}>← サイズを選び直す</button>
-      <h1>ページ構成を選ぶ</h1>
-      <div className="cards">
-        <button className={`card${spread ? ' on' : ''}`} onClick={() => onPick(true)}>
-          <span className="mini-spread"><i /><i /></span>
-          <span className="card-text"><strong>見開き（2ページ）</strong><small>左右セットで1ヶ月分</small></span>
+    <div className={SCREEN_PAD}>
+      <button className="self-start p-0 text-xs text-muted" onClick={onBack}>← サイズを選び直す</button>
+      <h1 className="text-[19px] font-bold">ページ構成を選ぶ</h1>
+      <div className="flex flex-col gap-2.5">
+        <button className={card(spread)} onClick={() => onPick(true)}>
+          <span className="flex shrink-0 gap-[3px]"><i className={SHEET_MINI} /><i className={SHEET_MINI} /></span>
+          <span className="flex flex-col gap-0.5">
+            <strong className="text-sm">見開き（2ページ）</strong>
+            <small className="text-[11px] text-faint">左右セットで1ヶ月分</small>
+          </span>
         </button>
-        <button className={`card${!spread ? ' on' : ''}`} onClick={() => onPick(false)}>
-          <span className="mini-single" />
-          <span className="card-text"><strong>片面（1ページ）</strong><small>1ページで完結</small></span>
+        <button className={card(!spread)} onClick={() => onPick(false)}>
+          <span className={SHEET_MINI} />
+          <span className="flex flex-col gap-0.5">
+            <strong className="text-sm">片面（1ページ）</strong>
+            <small className="text-[11px] text-faint">1ページで完結</small>
+          </span>
         </button>
       </div>
-      <button className="primary bottom" onClick={onConfirm}>この構成で作る</button>
+      <Button variant="cta" className="mt-auto" onClick={onConfirm}>この構成で作る</Button>
     </div>
   );
 }
@@ -447,33 +473,40 @@ function CanvasScreen({ layout, setLayout, onBack }: {
   const miniCell = layout.showNextMonth && leftSpan ? nextMonthCell(leftSpan, layout) : null;
 
   return (
-    <div className="screen">
-      <header className="bar">
-        <button className="icon" onClick={onBack} aria-label="戻る">←</button>
+    <div className={SCREEN}>
+      <header className="flex shrink-0 items-center gap-2 px-4 pb-2 pt-3 text-xs font-semibold text-label">
+        <Button variant="icon" onClick={onBack} aria-label="戻る">←</Button>
         <span>{size.label} {size.widthMm}×{size.heightMm}mm ・ {layout.spread ? '見開き' : '片面'}</span>
       </header>
 
       {dated && (
         // Which months this makes is a design decision, not a printing one,
         // so it belongs in sight rather than inside the export sheet.
-        <button className="range" onClick={() => setSheet(monthlyTarget)}>
+        <button
+          className="range mb-0.5 ml-3.5 flex shrink-0 items-center gap-2 self-start rounded-full border border-line-strong bg-white px-3 py-1.5 text-[11px] text-ink"
+          onClick={() => setSheet(monthlyTarget)}
+        >
           {layout.year}年{layout.month}月 → {lastMonth.year}年{lastMonth.month}月
-          <em>{layout.monthCount}ヶ月分</em>
+          <em className="not-italic text-faint">{layout.monthCount}ヶ月分</em>
         </button>
       )}
 
-      <div className="stage" ref={boxRef}>
+      <div className="flex min-h-0 grow items-center justify-center px-3 py-2" ref={boxRef}>
         <div
-          className="sheetset"
+          className="flex items-center justify-center"
           ref={setRef}
           style={{ flexDirection: geo.flow, gap: GAP, position: 'relative' }}
         >
           {geo.pages.map((pg, i) => (
-            <div key={pg.key} className="page" style={{ width: pw, height: ph }}>
+            <div
+              key={pg.key}
+              className="page relative shrink-0 touch-none overflow-hidden rounded-sm bg-white shadow-[0_10px_30px_rgba(58,54,46,0.16)]"
+              style={{ width: pw, height: ph }}
+            >
               <PageSvg page={pages[i]} scale={scale} showGuides />
               {pg.spanRect && (
                 <button
-                  className="hitbox"
+                  className="hitbox absolute p-0"
                   onClick={() => setSheet('spanning')}
                   style={{
                     left: pg.spanRect.x * scale, top: pg.spanRect.y * scale,
@@ -486,12 +519,16 @@ function CanvasScreen({ layout, setLayout, onBack }: {
             </div>
           ))}
 
-          {empty && <div className="drop-hint">スタンプをドラッグして<br />ここに配置</div>}
+          {empty && (
+            <div className="pointer-events-none absolute inset-0 flex items-center justify-center text-center text-[11px] leading-[1.7] text-faint">
+              スタンプをドラッグして<br />ここに配置
+            </div>
+          )}
 
           {partBoxes.map(b => (
             <div
               key={b.key}
-              className="hitbox part"
+              className="hitbox part absolute touch-none p-0 active:bg-[rgba(193,115,74,0.08)]"
               style={{ left: b.left, top: b.top, width: b.width, height: b.height }}
               onPointerDown={e => startDrag(e, [layout.surface.placed[b.slot]], b.slot)}
               onPointerMove={moveDrag}
@@ -501,45 +538,40 @@ function CanvasScreen({ layout, setLayout, onBack }: {
           ))}
 
           {clears.map(c => (
-            <button
+            <ClearButton
               key={c.key}
-              className="clearmini"
-              style={{ left: c.left, top: c.top }}
+              left={c.left}
+              top={c.top}
+              label={c.label}
               onClick={() => askRemove(c.label, c.run)}
-              aria-label={`${c.label}を外す`}
-            >×</button>
+            />
           ))}
 
           {miniCell && (
-            <button
-              className="clearmini"
-              style={{
-                left: pageOrigin(0).x + (miniCell.x + miniCell.w) * scale - CLEAR_INSET,
-                top: pageOrigin(0).y + miniCell.y * scale + 2,
-              }}
+            <ClearButton
+              left={pageOrigin(0).x + (miniCell.x + miniCell.w) * scale - CLEAR_INSET}
+              top={pageOrigin(0).y + miniCell.y * scale + 2}
+              label="翌月のカレンダー"
               onClick={() => askRemove('翌月のカレンダー', () => setLayout(l => ({ ...l, showNextMonth: false })))}
-              aria-label="翌月のカレンダーを外す"
-            >×</button>
+            />
           )}
 
           {dividerBoxes.map(b => (
-            <div
+            <DividerHandle
               key={b.key}
-              className={`divider ${b.d.axis}${taught ? '' : ' teach'}`}
-              style={{ left: b.left, top: b.top, width: b.width, height: b.height }}
-              onPointerDown={e => startDivider(e, b.d)}
-              onPointerMove={moveDivider}
-              onPointerUp={endDivider}
-              onPointerCancel={endDivider}
-            >
-              <i />
-              <b className="knob"><span /><span /></b>
-            </div>
+              box={b}
+              teach={!taught}
+              onDown={e => startDivider(e, b.d)}
+              onMove={moveDivider}
+              onUp={endDivider}
+            />
           ))}
         </div>
       </div>
 
-      <p className={`hint${traySelected.length > 1 || teachDivider ? ' active' : ''}`}>
+      <p className={`m-0 shrink-0 px-3.5 py-1 text-[10px] ${
+        traySelected.length > 1 || teachDivider ? 'text-accent' : 'text-faint'
+      }`}>
         {teachDivider
           ? 'つまみを上下にドラッグすると、パーツの広さを変えられます'
           : traySelected.length > 1
@@ -547,50 +579,55 @@ function CanvasScreen({ layout, setLayout, onBack }: {
             : 'タップで複数選択 → まとめてドラッグで自動配置'}
       </p>
 
-      <div className="tray">
+      <div className="flex shrink-0 gap-2.5 overflow-x-auto border-t border-line bg-paper px-3 pb-2.5 pt-2">
         {TRAY.map(t => {
           const idx = traySelected.indexOf(t.kind);
           return (
             <button
               key={t.kind}
-              className={`stamp${idx >= 0 ? ' on' : ''}`}
+              className={`stamp relative flex w-[60px] shrink-0 touch-none flex-col items-center gap-1 rounded-xl border-[1.5px] py-[9px] text-[9px] font-semibold ${
+                idx >= 0 ? 'border-accent bg-accent-soft' : 'border-line bg-white'
+              }`}
               onPointerDown={e => startDrag(e, idx >= 0 && traySelected.length > 1 ? [...traySelected] : [t.kind], null)}
               onPointerMove={moveDrag}
               onPointerUp={e => endTrayDrag(e, t.kind)}
             >
-              {idx >= 0 && <i className="badge">{idx + 1}</i>}
-              <span className="glyph">{t.glyph}</span>
+              {idx >= 0 && (
+                <i className="absolute -right-[5px] -top-[5px] size-[17px] rounded-full bg-accent text-[9px] not-italic leading-[17px] text-white">
+                  {idx + 1}
+                </i>
+              )}
+              <span className="text-[15px] leading-none">{t.glyph}</span>
               <span>{t.label}</span>
             </button>
           );
         })}
       </div>
 
-      <div className="actions">
-        <button onClick={() => setSheet('load')}>読み込み</button>
-        <button onClick={() => { saveLayout(layout); say('レイアウトを保存しました'); }}>保存</button>
-        <button className="primary" onClick={() => setSheet('print')}>PDF出力プレビュー</button>
+      <div className="flex shrink-0 gap-2 bg-paper px-3 pb-3.5 pt-2">
+        <Button onClick={() => setSheet('load')}>読み込み</Button>
+        <Button onClick={() => { saveLayout(layout); say('レイアウトを保存しました'); }}>保存</Button>
+        <Button variant="actionWide" onClick={() => setSheet('print')}>PDF出力プレビュー</Button>
       </div>
 
       {ghost && (
-        <div className="ghost" style={{ left: ghost.x, top: ghost.y }}>
+        <div
+          className="pointer-events-none fixed z-40 -translate-x-1/2 -translate-y-[140%] whitespace-nowrap rounded-[20px] bg-ink px-3 py-[7px] text-[11px] text-white"
+          style={{ left: ghost.x, top: ghost.y }}
+        >
           {ghost.kinds.map(k => PART_LABEL[k]).join(' + ')}
         </div>
       )}
 
-      {toast && <div className="toast">{toast}</div>}
+      {toast && <Toast>{toast}</Toast>}
 
       {confirm && (
-        <>
-          <div className="scrim" onClick={() => setConfirm(null)} />
-          <div className="confirm">
-            <p>{confirm.what}を外していいですか？</p>
-            <div className="confirm-row">
-              <button className="ghostbtn" onClick={() => setConfirm(null)}>やめる</button>
-              <button className="danger" onClick={() => { confirm.run(); setConfirm(null); }}>外す</button>
-            </div>
-          </div>
-        </>
+        <Dialog
+          message={`${confirm.what}を外していいですか？`}
+          confirmLabel="外す"
+          onConfirm={() => { confirm.run(); setConfirm(null); }}
+          onCancel={() => setConfirm(null)}
+        />
       )}
 
       {sheet && (
@@ -606,6 +643,58 @@ function CanvasScreen({ layout, setLayout, onBack }: {
           onExport={onExport}
         />
       )}
+    </div>
+  );
+}
+
+// The small X over a block on the sheet. Positioned onto a drawing rather than
+// laid out, so it is not an ordinary Button.
+function ClearButton({ left, top, label, onClick }: {
+  left: number; top: number; label: string; onClick: () => void;
+}) {
+  return (
+    <button
+      className="clearmini absolute z-[5] size-4 rounded-full bg-[rgba(58,54,46,0.34)] p-0 text-[10px] leading-4 text-white active:bg-[rgba(58,54,46,0.7)]"
+      style={{ left, top }}
+      onClick={onClick}
+      aria-label={`${label}を外す`}
+    >×</button>
+  );
+}
+
+// The border between two parts, and the grab handle that says so. Until
+// someone has dragged one, the handle asks to be dragged.
+function DividerHandle({ box, teach, onDown, onMove, onUp }: {
+  box: { d: Divider; left: number; top: number; width: number; height: number };
+  teach: boolean;
+  onDown: (e: React.PointerEvent) => void;
+  onMove: (e: React.PointerEvent) => void;
+  onUp: () => void;
+}) {
+  const horizontal = box.d.axis === 'h';
+  return (
+    <div
+      className={`divider ${box.d.axis} group absolute z-[4] flex touch-none items-center justify-center ${
+        horizontal ? 'cursor-row-resize' : 'cursor-col-resize'
+      }`}
+      style={{ left: box.left, top: box.top, width: box.width, height: box.height }}
+      onPointerDown={onDown}
+      onPointerMove={onMove}
+      onPointerUp={onUp}
+      onPointerCancel={onUp}
+    >
+      <i className={`block rounded-sm bg-line-strong group-active:bg-accent ${
+        horizontal ? 'h-[3px] w-full' : 'h-full w-[3px]'
+      }`} />
+      <b className={`absolute flex items-center justify-center gap-0.5 rounded-[7px] border bg-white shadow-[0_1px_3px_rgba(58,54,46,0.18)] group-active:border-accent ${
+        horizontal ? 'h-[13px] w-[34px] flex-col' : 'h-[34px] w-[13px]'
+      } ${teach ? 'animate-knob border-accent' : 'border-line-strong'}`}>
+        {[0, 1].map(i => (
+          <span key={i} className={`block rounded-[1px] group-active:bg-accent ${
+            horizontal ? 'h-[1.5px] w-[14px]' : 'h-[14px] w-[1.5px]'
+          } ${teach ? 'bg-accent' : 'bg-faint'}`} />
+        ))}
+      </b>
     </div>
   );
 }
@@ -632,20 +721,19 @@ function PartSheet({ target, layout, setLayout, onClose, onRemove, onRemoveSpann
     : kind ? PART_LABEL[kind] : 'パーツ';
 
   return (
-    <>
-      <div className="scrim" onClick={onClose} />
-      <div className="sheet">
-        <span className="grip" />
-        <h2>{title}</h2>
+    <Sheet title={title} onClose={onClose}>
 
         {target === 'load' && (
           saved.length === 0
-            ? <p className="muted">まだ保存されていません</p>
-            : <ul className="saved">
+            ? <p className="text-[13px] text-faint">まだ保存されていません</p>
+            : <ul className="m-0 flex max-h-60 list-none flex-col gap-1.5 overflow-y-auto p-0">
                 {saved.map(l => (
-                  <li key={l.id}>
-                    <button className="grow" onClick={() => onLoad(l)}>{l.name}</button>
-                    <button className="ghostbtn" onClick={() => { deleteLayout(l.id); onClose(); }}>削除</button>
+                  <li key={l.id} className="flex gap-2">
+                    <button
+                      className="flex-1 rounded-[9px] border border-line-strong bg-white px-3 py-[11px] text-left text-[13px]"
+                      onClick={() => onLoad(l)}
+                    >{l.name}</button>
+                    <Button variant="quiet" onClick={() => { deleteLayout(l.id); onClose(); }}>削除</Button>
                   </li>
                 ))}
               </ul>
@@ -660,7 +748,9 @@ function PartSheet({ target, layout, setLayout, onClose, onRemove, onRemoveSpann
               value={print.impose ? 'a4' : 'exact'}
               onPick={v => setPrint(p => ({ ...p, impose: v === 'a4' }))}
             />
-            <p className="muted">
+            {/* The browser's own paragraph margin, kept deliberately: it is the
+                breathing room between the paper choice and the print options. */}
+            <p className="print-summary my-[13px] text-[13px] text-faint">
               {hasDatedPart(layout) && `${layout.year}年${layout.month}月から${layout.monthCount}ヶ月分・`}
               {print.impose && `A4 1枚に ${perPaperCount(size)} 面`}
             </p>
@@ -691,14 +781,12 @@ function PartSheet({ target, layout, setLayout, onClose, onRemove, onRemoveSpann
               onPick={v => setPrint(p => ({ ...p, punchGuides: v === 'on' }))}
             />
 
-            <div className="field">
-              <span className="field-label">部数</span>
-              <div className="stepper">
-                <button onClick={() => setPrint(p => ({ ...p, copies: Math.max(1, p.copies - 1) }))}>−</button>
-                <strong>{print.copies}</strong>
-                <button onClick={() => setPrint(p => ({ ...p, copies: Math.min(24, p.copies + 1) }))}>＋</button>
-              </div>
-            </div>
+            <Field label="部数">
+              <Stepper
+                value={print.copies}
+                onStep={n => setPrint(p => ({ ...p, copies: Math.min(24, Math.max(1, p.copies + n)) }))}
+              />
+            </Field>
 
             {print.impose && (
               <Choice
@@ -710,17 +798,18 @@ function PartSheet({ target, layout, setLayout, onClose, onRemove, onRemoveSpann
             )}
 
             {print.impose && (
-              <div className="field">
-                <span className="field-label">倍率補正（刷って穴位置がずれるとき）</span>
-                <div className="stepper">
-                  <button onClick={() => setPrint(p => ({ ...p, scalePercent: Math.max(95, +(p.scalePercent - 0.5).toFixed(1)) }))}>−</button>
-                  <strong>{print.scalePercent.toFixed(1)}%</strong>
-                  <button onClick={() => setPrint(p => ({ ...p, scalePercent: Math.min(105, +(p.scalePercent + 0.5).toFixed(1)) }))}>＋</button>
-                </div>
-              </div>
+              <Field label="倍率補正（刷って穴位置がずれるとき）">
+                <Stepper
+                  value={`${print.scalePercent.toFixed(1)}%`}
+                  onStep={n => setPrint(p => ({
+                    ...p,
+                    scalePercent: Math.min(105, Math.max(95, +(p.scalePercent + n * 0.5).toFixed(1))),
+                  }))}
+                />
+              </Field>
             )}
 
-            <button className="primary" onClick={() => onExport(print)}>書き出す</button>
+            <Button variant="cta" onClick={() => onExport(print)}>書き出す</Button>
           </>
         )}
 
@@ -753,22 +842,18 @@ function PartSheet({ target, layout, setLayout, onClose, onRemove, onRemoveSpann
 
         {(target === 'spanning' || kind === 'monthly') && (
           <>
-            <div className="field">
-              <span className="field-label">開始月</span>
-              <div className="stepper">
-                <button onClick={() => setLayout(l => ({ ...l, ...addMonths(l.year, l.month, -1) }))}>−</button>
-                <strong>{layout.year}年{layout.month}月</strong>
-                <button onClick={() => setLayout(l => ({ ...l, ...addMonths(l.year, l.month, 1) }))}>＋</button>
-              </div>
-            </div>
-            <div className="field">
-              <span className="field-label">終了月（{layout.monthCount}ヶ月分）</span>
-              <div className="stepper">
-                <button onClick={() => setLayout(l => ({ ...l, monthCount: Math.max(1, l.monthCount - 1) }))}>−</button>
-                <strong>{lastMonth.year}年{lastMonth.month}月</strong>
-                <button onClick={() => setLayout(l => ({ ...l, monthCount: Math.min(36, l.monthCount + 1) }))}>＋</button>
-              </div>
-            </div>
+            <Field label="開始月">
+              <Stepper
+                value={`${layout.year}年${layout.month}月`}
+                onStep={n => setLayout(l => ({ ...l, ...addMonths(l.year, l.month, n) }))}
+              />
+            </Field>
+            <Field label={`終了月（${layout.monthCount}ヶ月分）`}>
+              <Stepper
+                value={`${lastMonth.year}年${lastMonth.month}月`}
+                onStep={n => setLayout(l => ({ ...l, monthCount: Math.min(36, Math.max(1, l.monthCount + n)) }))}
+              />
+            </Field>
           </>
         )}
 
@@ -800,24 +885,21 @@ function PartSheet({ target, layout, setLayout, onClose, onRemove, onRemoveSpann
         )}
 
         {kind === 'habit' && (
-          <div className="field">
-            <span className="field-label">習慣の数</span>
-            <div className="stepper">
-              <button onClick={() => setLayout(l => ({ ...l, habitCount: Math.max(1, l.habitCount - 1) }))}>−</button>
-              <strong>{layout.habitCount}</strong>
-              <button onClick={() => setLayout(l => ({ ...l, habitCount: Math.min(8, l.habitCount + 1) }))}>＋</button>
-            </div>
-          </div>
+          <Field label="習慣の数">
+            <Stepper
+              value={layout.habitCount}
+              onStep={n => setLayout(l => ({ ...l, habitCount: Math.min(8, Math.max(1, l.habitCount + n)) }))}
+            />
+          </Field>
         )}
 
         {typeof target !== 'string' && (
-          <button className="danger" onClick={() => onRemove(target.slot)}>このパーツを外す</button>
+          <Button variant="danger" onClick={() => onRemove(target.slot)}>このパーツを外す</Button>
         )}
         {target === 'spanning' && (
-          <button className="danger" onClick={onRemoveSpanning}>このパーツを外す</button>
+          <Button variant="danger" onClick={onRemoveSpanning}>このパーツを外す</Button>
         )}
-      </div>
-    </>
+    </Sheet>
   );
 }
 
@@ -847,53 +929,74 @@ function PrintPreview({ layout, size, print }: { layout: Layout; size: SizeSpec;
   };
 
   return (
-    <div className="field">
-      <span className="field-label">刷り上がり（全{sheets.length}ページ・タップで拡大）</span>
-      <div className="preview">
+    <Field label={`刷り上がり（全${sheets.length}ページ・タップで拡大）`}>
+      <div className="preview flex gap-2.5 overflow-x-auto pb-1 pt-0.5">
         {shown.map((sheet, i) => (
-          <figure key={i}>
-            <button onClick={() => { setZoom(false); setOpen(i); }} aria-label={`${label(i)}を拡大`}>
-              <SheetSvg sheet={sheet} boxPx={110} />
+          <figure key={i} className="m-0 flex shrink-0 flex-col items-center gap-1">
+            <button className="block p-0" onClick={() => { setZoom(false); setOpen(i); }} aria-label={`${label(i)}を拡大`}>
+              <SheetSvg sheet={sheet} boxPx={110} className="block rounded-sm border border-line-strong bg-white" />
             </button>
-            <figcaption>{label(i)}</figcaption>
+            <figcaption className="whitespace-nowrap text-[10px] text-muted">{label(i)}</figcaption>
           </figure>
         ))}
         {sheets.length > shown.length && (
-          <button className="more" onClick={() => { setZoom(false); setOpen(PREVIEW_PAGES); }}>
+          <button
+            className="flex min-h-[142px] w-[110px] shrink-0 items-center justify-center rounded-sm border border-dashed border-line-strong text-center text-[10px] leading-[1.6] text-faint"
+            onClick={() => { setZoom(false); setOpen(PREVIEW_PAGES); }}
+          >
             ほか<br />{sheets.length - shown.length}ページ
           </button>
         )}
       </div>
       {print.duplex && layout.spread && hasDatedPart(layout) && (
-        <p className="note">
+        <p className="m-0 text-[10px] leading-[1.7] text-faint">
           見開きは左ページが必ず裏面に来るので、最初の表と最後の裏だけが余ります。
           そのまま両面で刷って、切り取って順に重ねてください。
         </p>
       )}
 
       {open !== null && sheets[open] && (
-        <div className="lightbox" onClick={() => setOpen(null)}>
-          <button className="lightbox-close" onClick={() => setOpen(null)} aria-label="閉じる">×</button>
+        <div
+          className="lightbox fixed inset-0 z-50 flex flex-col items-center justify-center gap-3 bg-[rgba(28,26,22,0.9)] px-4 pb-[18px] pt-[54px]"
+          onClick={() => setOpen(null)}
+        >
+          <button
+            className="absolute right-3.5 top-3 size-[34px] rounded-full bg-white/20 p-0 text-[17px] leading-[34px] text-white"
+            onClick={() => setOpen(null)}
+            aria-label="閉じる"
+          >×</button>
           <div
-            className={`lightbox-page${zoom ? ' zoom' : ''}`}
+            className={`overflow-auto rounded-sm bg-white ${
+              zoom ? 'h-[calc(100vh-128px)] w-[calc(100vw-32px)]' : ''
+            }`}
             onClick={e => { e.stopPropagation(); setZoom(z => !z); }}
           >
-            <SheetSvg sheet={sheets[open]} boxPx={1400} />
+            {/* Both maxima with auto sizing, so the page shrinks to fit whichever
+                runs out first and keeps its proportions. */}
+            <SheetSvg
+              sheet={sheets[open]}
+              boxPx={1400}
+              className={zoom
+                ? 'block w-[calc((100vw-32px)*2.4)] max-w-none'
+                : 'block h-auto w-auto max-h-[calc(100vh-128px)] max-w-[calc(100vw-32px)]'}
+            />
           </div>
-          <div className="lightbox-bar" onClick={e => e.stopPropagation()}>
-            <button className="ghostbtn" disabled={open === 0} onClick={() => step(-1)} aria-label="前のページ">←</button>
-            <span>
+          <div className="lightbox-bar flex items-center gap-3.5 text-xs text-white" onClick={e => e.stopPropagation()}>
+            <Button variant="quiet" className="min-w-[52px] disabled:opacity-35" disabled={open === 0} onClick={() => step(-1)} aria-label="前のページ">←</Button>
+            <span className="flex flex-col items-center gap-0.5 text-center">
               {label(open)}　{open + 1}/{sheets.length}
-              <em>{zoom ? 'タップで全体' : 'タップで拡大'}</em>
+              <em className="not-italic text-[10px] text-white/55">{zoom ? 'タップで全体' : 'タップで拡大'}</em>
             </span>
-            <button className="ghostbtn" disabled={open === sheets.length - 1} onClick={() => step(1)} aria-label="次のページ">→</button>
+            <Button variant="quiet" className="min-w-[52px] disabled:opacity-35" disabled={open === sheets.length - 1} onClick={() => step(1)} aria-label="次のページ">→</Button>
           </div>
         </div>
       )}
-    </div>
+    </Field>
   );
 }
 
+// Kept as a name because every setting reads as one, but it is only the
+// shared Field and Segmented underneath.
 function Choice<T extends string | number>({ label, options, value, onPick }: {
   label: string;
   options: { v: T; label: string }[];
@@ -901,13 +1004,8 @@ function Choice<T extends string | number>({ label, options, value, onPick }: {
   onPick: (v: T) => void;
 }) {
   return (
-    <div className="field">
-      <span className="field-label">{label}</span>
-      <div className="segmented">
-        {options.map(o => (
-          <button key={String(o.v)} className={o.v === value ? 'on' : ''} onClick={() => onPick(o.v)}>{o.label}</button>
-        ))}
-      </div>
-    </div>
+    <Field label={label}>
+      <Segmented options={options} value={value} onPick={onPick} />
+    </Field>
   );
 }
