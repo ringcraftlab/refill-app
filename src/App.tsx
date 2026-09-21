@@ -103,10 +103,14 @@ const SIZE_NOTE: Record<RefillSize, string> = {
   M6: '携帯性',
   M5: 'メモ帳',
 };
-// Millimetres to pixels for the picker. The whole row has to fit a phone.
-// Stacked, so this is bounded by the screen's height rather than by five
-// sheets' combined width — which caps a side-by-side row at about 0.75.
-const PICKER_SCALE = 0.71;
+// The short name people actually say. The full Japanese name goes underneath.
+const SIZE_CODE: Record<RefillSize, string> = {
+  M5: 'M5', M6: 'M6', NARROW: 'ナロー', BIBLE: 'バイブル', A5: 'A5',
+};
+// Millimetres to pixels for the picker. Every sheet is drawn to this one
+// scale, so a tile's height is the paper's height: the list itself is the
+// size comparison. Bounded by five stacked sheets fitting a phone.
+const PICKER_SCALE = 0.6;
 
 function SizeIcon({ size }: { size: SizeSpec }) {
   return (
@@ -133,33 +137,47 @@ function SizeIcon({ size }: { size: SizeSpec }) {
 }
 
 function SizeScreen({ selected, onPick }: { selected: RefillSize; onPick: (s: RefillSize) => void }) {
-  // One icon column with every binding edge on the same line, so the sheets
-  // read as a stack and only their size differs.
+  // One icon column, so the sheets read as a stack and only their size differs.
   const widest = Math.max(...SIZE_ORDER.map(id => SIZES[id].widthMm)) * PICKER_SCALE;
   return (
     <div className={SCREEN_PAD}>
       <div className="text-[13px] font-bold tracking-[0.04em] text-muted">RingCraftLab</div>
       <h1 className="text-[19px] font-bold">手帳のサイズを選ぶ</h1>
-      <div className="flex min-h-0 flex-1 flex-col justify-center gap-0.5">
+      {/* `justify-center` on a scrolling column puts the first tile above the
+          scroll origin when it overflows, where nothing can reach it. Centring
+          with `m-auto` on the inner block falls back to the top instead. */}
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+        <div className="m-auto flex w-full flex-col gap-1.5 py-1">
         {SIZE_ORDER.map(id => {
           const s = SIZES[id];
           return (
             <button
               key={id}
               onClick={() => onPick(id)}
-              className={`sizerow flex items-end gap-3.5 rounded-[10px] border-[1.5px] px-2 py-[3px] text-left ${
-                selected === id ? 'border-ink bg-white' : 'border-transparent'
+              className={`sizerow flex shrink-0 items-center justify-between gap-3 rounded-[20px] border-2 bg-white px-4 py-2 text-left ${
+                selected === id ? 'border-ink' : 'border-line'
               }`}
             >
-              <span className="flex shrink-0 justify-start" style={{ width: widest }}><SizeIcon size={s} /></span>
-              <span className="flex flex-col gap-px pb-[3px]">
-                <strong className="text-[15px]">{s.label}</strong>
-                <small className="text-[11px] text-faint">{s.widthMm}×{s.heightMm}mm ・ {s.holes.count}穴</small>
+              <span className="flex flex-col gap-1">
+                <strong className="text-[26px] font-light leading-none tracking-tight">{SIZE_CODE[id]}</strong>
+                {/* M5 and M6 are what the code says; the Japanese name is what
+                    people say. Narrow and Bible are the same word twice. */}
+                <small className="text-[11px] text-faint">
+                  {SIZE_CODE[id] !== s.label && `${s.label} ・ `}{s.widthMm}×{s.heightMm}mm ・ {s.holes.count}穴
+                </small>
                 <small className="text-[11px] text-accent">{SIZE_NOTE[id]}</small>
+              </span>
+              {/* The sheet sits on the desk colour, so it reads as paper. */}
+              <span
+                className="flex shrink-0 items-end justify-end rounded-xl bg-bg p-1.5"
+                style={{ width: widest + 12 }}
+              >
+                <SizeIcon size={s} />
               </span>
             </button>
           );
         })}
+        </div>
       </div>
     </div>
   );
