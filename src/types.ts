@@ -1,7 +1,7 @@
 export const SCHEMA_VERSION = 8;
 
 export type RefillSize =
-  | 'CARD3' | 'M5' | 'M5SQ' | 'M6' | 'BIBLE' | 'NARROW' | 'A5SLIM' | 'A5';
+  | 'MINI3' | 'CARD3' | 'M5' | 'M5SQ' | 'M6' | 'BIBLE' | 'NARROW' | 'A5SLIM' | 'A5';
 
 // Punch pattern along the binding edge. The 19mm pitch is the worldwide
 // standard; what differs per size is the hole count, whether they run evenly

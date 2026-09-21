@@ -1,8 +1,9 @@
 import type { HoleSpec, RefillSize, SizeSpec } from '../types';
 
 // Punch patterns taken from a refill dimension sheet. The 19mm pitch is the
-// worldwide standard and is the same on every size; only the hole count, the
-// middle gap and the end margin change. Each pattern adds up to its paper
+// worldwide standard and is the same on every six-ring size; the small
+// three-hole binders are the exception and carry their own pitch. Otherwise
+// only the hole count, the middle gap and the end margin change. Each pattern adds up to its paper
 // height exactly, which is the check to redo if a number ever moves:
 //   A5      32×2 + 19×4 + 70 = 210
 //   A5 slim 32×2 + 19×4 + 70 = 210   (A5's punch on a narrower sheet)
@@ -12,11 +13,19 @@ import type { HoleSpec, RefillSize, SizeSpec } from '../types';
 //   Micro 5 14.5×2 + 19×4 = 105        (five holes, not six)
 //   M5 sq   14.5×2 + 19×4 = 105        (Micro 5's punch on a square sheet)
 //   Card    26.5×2 + 19×2 = 91         (three holes, centred)
+//   Mini 3  11.5×2 + 28.5×2 = 80        (three holes at a wider pitch)
 //
 // Hole diameter is measured, not derived: the ring wire gets thinner as the
 // binder gets smaller, so the small sizes punch smaller. It does not enter the
 // sums above, which are centre to centre.
 export const SIZES: Record<RefillSize, SizeSpec> = {
+  // The small three-hole loose-leaf binders. The pitch is 28.5mm here, not
+  // the 19mm every ring binder uses, so nothing about this one can be
+  // borrowed from the sizes below it.
+  MINI3: {
+    id: 'MINI3', label: 'ミニ3穴（60×80）', widthMm: 60, heightMm: 80, ringMarginMm: 8,
+    holes: { count: 3, diameterMm: 4, pitchMm: 28.5, marginMm: 11.5 },
+  },
   // A business card with three holes down its long edge. Centring three holes
   // at the standard pitch puts them on the middle three rings of a Micro 5
   // binder -- 26.5 from the card's edge is 33.5 from the sheet's once the card
