@@ -104,11 +104,13 @@ export function App() {
 
 // Smallest first, drawn to one scale so the list itself shows how the sizes
 // compare.
-const SIZE_ORDER: RefillSize[] = ['M5', 'M6', 'NARROW', 'BIBLE', 'A5SLIM', 'A5'];
+const SIZE_ORDER: RefillSize[] = ['CARD3', 'M5', 'M5SQ', 'M6', 'NARROW', 'BIBLE', 'A5SLIM', 'A5'];
 // A colour per size, so a glance tells them apart even before the millimetres
 // are read. Muted enough to still look like paper on the warm background.
 const SIZE_TINT: Record<RefillSize, { fill: string; line: string }> = {
+  CARD3: { fill: '#D7E7E6', line: '#87A9A6' },
   M5: { fill: '#F6DCD3', line: '#C39284' },
+  M5SQ: { fill: '#E8E2D6', line: '#A69C89' },
   M6: { fill: '#F8E8CC', line: '#C6A26B' },
   NARROW: { fill: '#DFE8D8', line: '#94AC86' },
   BIBLE: { fill: '#D9E3EE', line: '#8699AF' },
@@ -116,6 +118,8 @@ const SIZE_TINT: Record<RefillSize, { fill: string; line: string }> = {
   A5: { fill: '#E6DDEE', line: '#9D8DB4' },
 };
 const SIZE_NOTE: Record<RefillSize, string> = {
+  CARD3: 'カード',
+  M5SQ: '正方形',
   A5SLIM: '細長',
   A5: '書き込み',
   BIBLE: '王道',
@@ -125,7 +129,8 @@ const SIZE_NOTE: Record<RefillSize, string> = {
 };
 // The short name people actually say. The full Japanese name goes underneath.
 const SIZE_CODE: Record<RefillSize, string> = {
-  M5: 'M5', M6: 'M6', NARROW: 'ナロー', BIBLE: 'バイブル', A5SLIM: 'A5スリム', A5: 'A5',
+  CARD3: '名刺3穴', M5: 'M5', M5SQ: 'M5スクエア', M6: 'M6',
+  NARROW: 'ナロー', BIBLE: 'バイブル', A5SLIM: 'A5スリム', A5: 'A5',
 };
 // Millimetres to pixels for the picker. Every sheet is drawn to this one
 // scale, so a tile's height is the paper's height: the grid itself is the

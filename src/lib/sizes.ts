@@ -10,13 +10,29 @@ import type { HoleSpec, RefillSize, SizeSpec } from '../types';
 //   Narrow  21.5×2 + 19×4 + 51 = 170   (same height, same punch)
 //   Mini 6  16.5×2 + 19×5 = 128        (one even run, no middle gap)
 //   Micro 5 14.5×2 + 19×4 = 105        (five holes, not six)
+//   M5 sq   14.5×2 + 19×4 = 105        (Micro 5's punch on a square sheet)
+//   Card    26.5×2 + 19×2 = 91         (three holes, centred)
 //
 // Hole diameter is measured, not derived: the ring wire gets thinner as the
 // binder gets smaller, so the small sizes punch smaller. It does not enter the
 // sums above, which are centre to centre.
 export const SIZES: Record<RefillSize, SizeSpec> = {
+  // A business card with three holes down its long edge. Centring three holes
+  // at the standard pitch puts them on the middle three rings of a Micro 5
+  // binder -- 26.5 from the card's edge is 33.5 from the sheet's once the card
+  // sits centred -- which is what makes it fit those binders at all.
+  CARD3: {
+    id: 'CARD3', label: '名刺サイズ（3穴）', widthMm: 55, heightMm: 91, ringMarginMm: 8,
+    holes: { count: 3, diameterMm: 3.5, pitchMm: 19, marginMm: 26.5 },
+  },
   M5: {
     id: 'M5', label: 'マイクロ5', widthMm: 62, heightMm: 105, ringMarginMm: 8,
+    holes: { count: 5, diameterMm: 3.5, pitchMm: 19, marginMm: 14.5 },
+  },
+  // Micro 5's punch on a square sheet: the binding edge is the same 105mm, so
+  // the same five rings hold it.
+  M5SQ: {
+    id: 'M5SQ', label: 'M5スクエア', widthMm: 105, heightMm: 105, ringMarginMm: 8,
     holes: { count: 5, diameterMm: 3.5, pitchMm: 19, marginMm: 14.5 },
   },
   M6: {
