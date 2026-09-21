@@ -4,7 +4,7 @@ import { INK, INK_SOFT, RULE, RULE_LIGHT, SATURDAY, SUNDAY } from './draw';
 import {
   daysInMonth, holidayOf, monthGrid, orderedWeekdays, rokuyoLabel, sheetDays, weekdayLabel,
 } from './dates';
-import { isLandscape, MONTHLY_HEADER_MM, weekSplit } from './layout';
+import { MONTHLY_HEADER_MM, ringsOnTop, weekSplit } from './layout';
 import type { Rect } from './layout';
 
 // Every part draws into whatever millimetre rectangle the layout hands it. A
@@ -201,9 +201,9 @@ function drawMiniMonth(cell: Rect, layout: Layout): Primitive[] {
 
 // Where that mini calendar sits, so the editor can offer to clear it.
 export function nextMonthCell(area: Rect, layout: Layout): Rect | null {
-  // The mini calendar lives in the index column, which only the upright
-  // spread has.
-  if (!layout.spanning || layout.orientation !== 'portrait') return null;
+  // The mini calendar lives in the index column, which only a spread whose
+  // pages sit side by side has.
+  if (!layout.spanning || ringsOnTop(layout)) return null;
   const weeks = weekCount(layout);
   if (weeks < 2) return null;
   const { left, right, top, bottom } = inset(area);
@@ -218,9 +218,9 @@ export function nextMonthCell(area: Rect, layout: Layout): Rect | null {
 
 export function drawSpanningMonthly(area: Rect, page: PageKey, layout: Layout): Primitive[] {
   const rows = weekCount(layout);
-  if (layout.orientation === 'landscape') {
-    // Five weeks go three on the first page and two on the second, which
-    // leaves the second page room to write.
+  if (ringsOnTop(layout)) {
+    // The pages stack, so five weeks go three on the first and two on the
+    // second, which leaves the second page room to write.
     const [topRows] = weekSplit(rows);
     return drawMonthly(area, layout, {
       cols: [0, 7],
@@ -635,7 +635,7 @@ export function drawPartAcross(kind: PartKind, a: Rect, b: Rect, layout: Layout)
   // Pages side by side read as one wide page, so a week can run across the
   // gutter. Pages that stack cannot: the far end of the week would sit on the
   // sheet below, which no calendar does.
-  const stacked = isLandscape(layout);
+  const stacked = ringsOnTop(layout);
 
   if (kind === 'monthly') {
     const rows = weekCount(layout);

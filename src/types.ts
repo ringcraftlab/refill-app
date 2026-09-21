@@ -21,6 +21,11 @@ export interface SizeSpec {
   label: string;
   widthMm: number;
   heightMm: number;
+  // Which edge the rings run along when the refill is used upright. Nearly
+  // every refill binds on its long side; the small three-hole cards bind
+  // across the top, which changes where the holes go, which way a spread
+  // opens and which edge the content keeps clear.
+  bindEdge?: 'long' | 'short';
   // Strip along the binding edge that the rings occupy. Content never enters
   // it, so nothing can print on top of a punch hole.
   ringMarginMm: number;

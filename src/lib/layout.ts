@@ -2,7 +2,7 @@ import type { Layout, PageKey, PartKind, SizeSpec, Spanning, Surface } from '../
 import { MAX_PARTS, PART_FIT } from '../types';
 import type { SheetRotation } from './draw';
 import { monthGrid } from './dates';
-import { holeCentres } from './sizes';
+import { holeCentres, SIZES } from './sizes';
 
 // All geometry here is millimetres. Nothing knows about screens or CSS; the
 // editor scales it and the PDF exporter prints it, so what you drag is what
@@ -113,17 +113,26 @@ export function weekSplit(totalRows: number): [number, number] {
 // calendar grid — only the page shape and the ring edge change.
 export const isLandscape = (layout: Layout): boolean => layout.orientation === 'landscape';
 
-function ringEdgeFor(spread: boolean, landscape: boolean, key: PageKey, flip: boolean): RingEdge {
+// Whether the rings run along the top of the sheet rather than down its side.
+// A refill bound on its long edge has them on the side until it is turned a
+// quarter turn; one bound on its short edge starts the other way round. This
+// decides the ring edge, which way a spread opens, and how the calendar is
+// split across it -- everything that follows from where the binder holds the
+// paper, as opposed to how the paper is shaped.
+export const ringsOnTop = (layout: Layout): boolean =>
+  ((SIZES[layout.size].bindEdge ?? 'long') === 'long') === isLandscape(layout);
+
+function ringEdgeFor(spread: boolean, onTop: boolean, key: PageKey, flip: boolean): RingEdge {
   // A single sheet binds on its outer edge. In a spread the binding is always
   // the seam between the two pages, whichever way the pages sit.
   //
   // `flip` is for a single page printed on the back of a sheet: turning the
   // paper over puts the binding on the other side.
   if (!spread) {
-    if (landscape) return flip ? 'bottom' : 'top';
+    if (onTop) return flip ? 'bottom' : 'top';
     return flip ? 'right' : 'left';
   }
-  if (landscape) return key === 'left' ? 'bottom' : 'top';
+  if (onTop) return key === 'left' ? 'bottom' : 'top';
   return key === 'left' ? 'right' : 'left';
 }
 
@@ -179,8 +188,8 @@ interface PageBox {
   usableW: number; usableH: number;
 }
 
-function pageBox(spread: boolean, landscape: boolean, key: PageKey, W: number, H: number, ring: number, flip: boolean): PageBox {
-  const edge = ringEdgeFor(spread, landscape, key, flip);
+function pageBox(spread: boolean, onTop: boolean, key: PageKey, W: number, H: number, ring: number, flip: boolean): PageBox {
+  const edge = ringEdgeFor(spread, onTop, key, flip);
   const vertical = edge === 'left' || edge === 'right';
   const O = OUTER_MM;
   // The ring strip is the margin on the binding edge; the other three get the
@@ -217,6 +226,9 @@ function punchHoles(box: PageBox, size: SizeSpec) {
 // printed on the back of a sheet.
 export function buildGeometry(layout: Layout, size: SizeSpec, flipBinding = false): Geometry {
   const landscape = isLandscape(layout);
+  // Where the rings are is not the same question as which way the sheet is
+  // turned: a card bound across its top is upright with the rings on top.
+  const onTop = ringsOnTop(layout);
   const W = landscape ? size.heightMm : size.widthMm;
   const H = landscape ? size.widthMm : size.heightMm;
   const ring = size.ringMarginMm;
@@ -227,18 +239,19 @@ export function buildGeometry(layout: Layout, size: SizeSpec, flipBinding = fals
   };
 
   const keys: PageKey[] = layout.spread ? ['left', 'right'] : ['single'];
-  const boxes = keys.map(key => ({ key, box: pageBox(layout.spread, landscape, key, W, H, ring, flipBinding) }));
+  const boxes = keys.map(key => ({ key, box: pageBox(layout.spread, onTop, key, W, H, ring, flipBinding) }));
   const usableH = boxes[0].box.usableH;
   const usableW = boxes[0].box.usableW;
 
-  // Band heights. A landscape spread gives its pages different week counts, so
-  // the shorter page's band is shorter too and its rows stay the same height.
+  // Band heights. A spread whose pages stack gives them different week counts,
+  // so the shorter page's band is shorter too and its rows stay the same
+  // height.
   const span = layout.spanning;
   const totalRows = monthGrid(layout.year, layout.month, layout.weekStart).length;
   const bandOf = (key: PageKey): number => {
     if (!span) return 0;
     const top = usableH * span.ratio;
-    if (!landscape) return top;
+    if (!onTop) return top;
     const [topRows, bottomRows] = weekSplit(totalRows);
     const rowH = (top - MONTHLY_HEADER_MM) / topRows;
     return key === 'left' ? top : MONTHLY_HEADER_MM + rowH * bottomRows;
@@ -247,7 +260,7 @@ export function buildGeometry(layout: Layout, size: SizeSpec, flipBinding = fals
   const pages: PageGeometry[] = boxes.map(({ key, box }) => {
     const bandH = bandOf(key);
     // Dragging either page's band edge moves the same ratio; on the shorter
-    // page of a landscape spread a millimetre of drag is worth proportionally
+    // page of a stacked spread a millimetre of drag is worth proportionally
     // more ratio, so its extent shrinks to match.
     const extent = span && span.ratio > 0 ? bandH / span.ratio : usableH;
     return {
@@ -266,7 +279,7 @@ export function buildGeometry(layout: Layout, size: SizeSpec, flipBinding = fals
   });
 
   // Pages whose band leaves room contribute a slice of the surface. In a
-  // landscape spread the fuller page is filled by the calendar, so the surface
+  // stacked spread the fuller page is filled by the calendar, so the surface
   // is only the shorter page's leftover.
   const slices: SurfaceSlice[] = [];
   let cursor = 0;
@@ -287,8 +300,9 @@ export function buildGeometry(layout: Layout, size: SizeSpec, flipBinding = fals
   return {
     pages,
     landscape,
-    // A landscape spread is the booklet rotated, so its pages stack.
-    flow: layout.spread && landscape ? 'column' : 'row',
+    // Pages hanging from rings along their top stack; pages held at their
+    // side sit next to each other.
+    flow: layout.spread && onTop ? 'column' : 'row',
     surface: {
       widthMm: surfaceW,
       heightMm: surfaceH,

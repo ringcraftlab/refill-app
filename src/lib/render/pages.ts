@@ -92,29 +92,47 @@ export const DEFAULT_PRINT: PrintOptions = {
   punchGuides: true,
 };
 
-// Which edge of a face carries the rings. Turning a sheet over puts them on
-// the other side, which is why a left page's binding sits on its right.
-type Side = 'left' | 'right';
-const mirror = (s: Side): Side => (s === 'left' ? 'right' : 'left');
+// Which edge of a sheet carries the rings. Turning a sheet over puts them on
+// the opposite edge, which is why a left page's binding sits on its right.
+// Nearly every refill binds on its long side; a card bound across its top
+// uses the other pair.
+type Side = 'left' | 'right' | 'top' | 'bottom';
+const mirror = (s: Side): Side =>
+  s === 'left' ? 'right' : s === 'right' ? 'left' : s === 'top' ? 'bottom' : 'top';
+
+// The two edges a size can bind on. The paper never turns, whatever the
+// layout does with the content, so this follows the size alone.
+const bindingPair = (size: SizeSpec): [Side, Side] =>
+  size.bindEdge === 'short' ? ['top', 'bottom'] : ['left', 'right'];
 
 const PUNCH: Color = [0.78, 0.76, 0.72];
 
 function punchGuide(size: SizeSpec, side: Side): Primitive[] {
-  const cx = side === 'left' ? size.ringMarginMm / 2 : size.widthMm - size.ringMarginMm / 2;
-  return holeCentres(size.holes).map((cy): Primitive => ({
-    type: 'circle', cx, cy, r: size.holes.diameterMm / 2, stroke: PUNCH, strokeMm: 0.15,
+  const vertical = side === 'left' || side === 'right';
+  const r = size.ringMarginMm / 2;
+  const across = side === 'left' ? r
+    : side === 'right' ? size.widthMm - r
+    : side === 'top' ? r
+    : size.heightMm - r;
+  return holeCentres(size.holes).map((along): Primitive => ({
+    type: 'circle',
+    cx: vertical ? across : along,
+    cy: vertical ? along : across,
+    r: size.holes.diameterMm / 2,
+    stroke: PUNCH,
+    strokeMm: 0.15,
   }));
 }
 
 function fillerFace(size: SizeSpec, fill: BackFill, side: Side): Primitive[] {
   if (fill === 'blank') return [];
   const m = 4;
-  const area = {
-    x: side === 'left' ? size.ringMarginMm : m,
-    y: m,
-    w: size.widthMm - size.ringMarginMm - m,
-    h: size.heightMm - m * 2,
-  };
+  const ring = size.ringMarginMm;
+  const left = side === 'left' ? ring : m;
+  const top = side === 'top' ? ring : m;
+  const right = size.widthMm - (side === 'right' ? ring : m);
+  const bottom = size.heightMm - (side === 'bottom' ? ring : m);
+  const area = { x: left, y: top, w: right - left, h: bottom - top };
   if (fill === 'grid') return drawGrid(area);
   if (fill === 'lines') return drawLines(area);
   return drawMemo(area);
@@ -162,19 +180,20 @@ function sheetsOf(layout: Layout): Layout[] {
 function facesInOrder(layout: Layout, size: SizeSpec, duplex: boolean): Face[] {
   const faces: Face[] = [];
 
+  const [near, far] = bindingPair(size);
   for (const sheet of sheetsOf(layout)) {
     if (layout.spread) {
       // A spread is the back of one sheet facing the front of the next, so its
-      // left page always lands on a back and its right page on a front.
+      // first page always lands on a back and its second on a front.
       const pages = buildPages(sheet, size);
-      faces.push({ primitives: flattenToSheet(pages[0]), side: 'right' });
-      faces.push({ primitives: flattenToSheet(pages[1]), side: 'left' });
+      faces.push({ primitives: flattenToSheet(pages[0]), side: far });
+      faces.push({ primitives: flattenToSheet(pages[1]), side: near });
     } else {
       // Single pages run front, back, front, back down the stack, and a page
-      // on a back binds on the other side.
+      // on a back binds on the other edge.
       const onBack = duplex && faces.length % 2 === 1;
       const page = buildPages(sheet, size, onBack)[0];
-      faces.push({ primitives: flattenToSheet(page), side: onBack ? 'right' : 'left' });
+      faces.push({ primitives: flattenToSheet(page), side: onBack ? far : near });
     }
   }
   return faces;
@@ -194,13 +213,14 @@ export function buildPrintSheets(layout: Layout, size: SizeSpec, opts: PrintOpti
   const spare = (side: Side) => asSheet({ primitives: fillerFace(size, opts.backFill, side), side });
 
   const sheets: Duplexed[] = [];
+  const [near, far] = bindingPair(size);
   if (opts.duplex) {
     let i = 0;
     // A spread begins on a back, so only the very first front is spare.
-    if (layout.spread) sheets.push({ front: spare('left'), back: asSheet(faces[i++]) });
+    if (layout.spread) sheets.push({ front: spare(near), back: asSheet(faces[i++]) });
     while (i < faces.length) {
       const front = asSheet(faces[i++]);
-      sheets.push({ front, back: i < faces.length ? asSheet(faces[i++]) : spare('right') });
+      sheets.push({ front, back: i < faces.length ? asSheet(faces[i++]) : spare(far) });
     }
   } else {
     faces.forEach(f => sheets.push({ front: asSheet(f), back: spare(mirror(f.side)) }));

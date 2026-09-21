@@ -12,7 +12,7 @@ import type { HoleSpec, RefillSize, SizeSpec } from '../types';
 //   Mini 6  16.5×2 + 19×5 = 128        (one even run, no middle gap)
 //   Micro 5 14.5×2 + 19×4 = 105        (five holes, not six)
 //   M5 sq   14.5×2 + 19×4 = 105        (Micro 5's punch on a square sheet)
-//   Card    26.5×2 + 19×2 = 91         (three holes, centred)
+//   Card    8.5×2 + 19×2 = 55          (three holes across the top)
 //   Mini 3  11.5×2 + 28.5×2 = 80        (three holes at a wider pitch)
 //
 // Hole diameter is measured, not derived: the ring wire gets thinner as the
@@ -26,13 +26,14 @@ export const SIZES: Record<RefillSize, SizeSpec> = {
     id: 'MINI3', label: 'ミニ3穴（60×80）', widthMm: 60, heightMm: 80, ringMarginMm: 8,
     holes: { count: 3, diameterMm: 4, pitchMm: 28.5, marginMm: 11.5 },
   },
-  // A business card with three holes down its long edge. Centring three holes
-  // at the standard pitch puts them on the middle three rings of a Micro 5
-  // binder -- 26.5 from the card's edge is 33.5 from the sheet's once the card
-  // sits centred -- which is what makes it fit those binders at all.
+  // A business card hanging from three rings across its top. Three holes at
+  // the standard pitch span 38mm, which only fits the 55mm edge, so this one
+  // binds on its short side -- the paper stays upright and the rings run
+  // along the top of it.
   CARD3: {
-    id: 'CARD3', label: '名刺サイズ（3穴）', widthMm: 55, heightMm: 91, ringMarginMm: 8,
-    holes: { count: 3, diameterMm: 3.5, pitchMm: 19, marginMm: 26.5 },
+    id: 'CARD3', label: '名刺サイズ（3穴）', widthMm: 55, heightMm: 91,
+    ringMarginMm: 8, bindEdge: 'short',
+    holes: { count: 3, diameterMm: 3.5, pitchMm: 19, marginMm: 8.5 },
   },
   M5: {
     id: 'M5', label: 'マイクロ5', widthMm: 62, heightMm: 105, ringMarginMm: 8,
@@ -67,7 +68,8 @@ export const SIZES: Record<RefillSize, SizeSpec> = {
   },
 };
 
-// Hole centres measured from the top of the binding edge.
+// Hole centres along the binding edge, from its start: down the page for a
+// refill bound on its side, across it for one bound at the top.
 export function holeCentres(spec: HoleSpec): number[] {
   const { count, pitchMm, marginMm, centreGapMm } = spec;
   if (!centreGapMm) {
