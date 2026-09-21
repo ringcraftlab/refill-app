@@ -96,6 +96,15 @@ export function App() {
 // Smallest first, drawn to one scale so the list itself shows how the sizes
 // compare.
 const SIZE_ORDER: RefillSize[] = ['M5', 'M6', 'NARROW', 'BIBLE', 'A5'];
+// A colour per size, so a glance tells them apart even before the millimetres
+// are read. Muted enough to still look like paper on the warm background.
+const SIZE_TINT: Record<RefillSize, { fill: string; line: string }> = {
+  M5: { fill: '#F6DCD3', line: '#C39284' },
+  M6: { fill: '#F8E8CC', line: '#C6A26B' },
+  NARROW: { fill: '#DFE8D8', line: '#94AC86' },
+  BIBLE: { fill: '#D9E3EE', line: '#8699AF' },
+  A5: { fill: '#E6DDEE', line: '#9D8DB4' },
+};
 const SIZE_NOTE: Record<RefillSize, string> = {
   A5: '書き込み',
   BIBLE: '王道',
@@ -113,7 +122,7 @@ const SIZE_CODE: Record<RefillSize, string> = {
 // be drawn larger than it could beside the name.
 const PICKER_SCALE = 0.8;
 
-function SizeIcon({ size }: { size: SizeSpec }) {
+function SizeIcon({ size, tint }: { size: SizeSpec; tint: { fill: string; line: string } }) {
   return (
     <svg
       width={size.widthMm * PICKER_SCALE}
@@ -124,13 +133,13 @@ function SizeIcon({ size }: { size: SizeSpec }) {
     >
       <rect
         x={0.4} y={0.4} width={size.widthMm - 0.8} height={size.heightMm - 0.8}
-        rx={1.5} fill="#fff" stroke="#C9C2B2" strokeWidth={0.8}
+        rx={1.5} fill={tint.fill} stroke={tint.line} strokeWidth={0.8}
       />
       {holeCentres(size.holes).map((cy, i) => (
         <circle
           key={i}
           cx={size.ringMarginMm / 2} cy={cy} r={size.holes.diameterMm / 2}
-          fill="none" stroke="#A8A192" strokeWidth={0.7}
+          fill="#fff" stroke={tint.line} strokeWidth={0.7}
         />
       ))}
     </svg>
@@ -140,14 +149,14 @@ function SizeIcon({ size }: { size: SizeSpec }) {
 function SizeScreen({ selected, onPick }: { selected: RefillSize; onPick: (s: RefillSize) => void }) {
   const widest = Math.max(...SIZE_ORDER.map(id => SIZES[id].widthMm)) * PICKER_SCALE;
 
-  // The sheet on the desk colour, so it reads as paper. Bottom aligned and all
-  // to one scale, so a glance down the grid compares the sizes.
-  const paper = (s: SizeSpec, wide: boolean) => (
+  // Bottom aligned and all to one scale, so a glance down the grid compares
+  // the sizes. No panel behind it: the sheet is the thing being shown.
+  const paper = (id: RefillSize, s: SizeSpec, wide: boolean) => (
     <span
-      className={`flex shrink-0 items-end rounded-xl bg-bg p-1.5 ${wide ? 'justify-end' : 'w-full justify-center'}`}
-      style={wide ? { width: widest + 12 } : undefined}
+      className={`flex shrink-0 items-end ${wide ? 'justify-end' : 'w-full justify-center'}`}
+      style={wide ? { width: widest } : undefined}
     >
-      <SizeIcon size={s} />
+      <SizeIcon size={s} tint={SIZE_TINT[id]} />
     </span>
   );
 
@@ -185,7 +194,7 @@ function SizeScreen({ selected, onPick }: { selected: RefillSize; onPick: (s: Re
                   wide ? 'col-span-2 items-center justify-between' : 'flex-col'
                 } ${selected === id ? 'border-ink' : 'border-line'}`}
               >
-                {wide ? <>{info(id, s)}{paper(s, true)}</> : <>{paper(s, false)}{info(id, s)}</>}
+                {wide ? <>{info(id, s)}{paper(id, s, true)}</> : <>{paper(id, s, false)}{info(id, s)}</>}
               </button>
             );
           })}
