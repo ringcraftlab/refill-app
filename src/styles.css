@@ -138,7 +138,7 @@ h2 { font-size: 14px; margin: 0; }
 /* A bare rule reads as something printed, so nobody thinks to touch it. The
    grab handle is what tells a first-time user that this border is the control,
    and it is the one thing in the app that must not be missed. */
-.grip {
+.knob {
   position: absolute;
   display: flex; align-items: center; justify-content: center; gap: 2px;
   background: #fff;
@@ -146,23 +146,23 @@ h2 { font-size: 14px; margin: 0; }
   border-radius: 7px;
   box-shadow: 0 1px 3px rgba(58, 54, 46, 0.18);
 }
-.grip span { background: var(--faint); border-radius: 1px; display: block; }
-.divider.h .grip { width: 34px; height: 13px; flex-direction: column; }
-.divider.h .grip span { width: 14px; height: 1.5px; }
-.divider.v .grip { width: 13px; height: 34px; }
-.divider.v .grip span { width: 1.5px; height: 14px; }
-.divider:active .grip { border-color: var(--accent); }
-.divider:active .grip span { background: var(--accent); }
+.knob span { background: var(--faint); border-radius: 1px; display: block; }
+.divider.h .knob { width: 34px; height: 13px; flex-direction: column; }
+.divider.h .knob span { width: 14px; height: 1.5px; }
+.divider.v .knob { width: 13px; height: 34px; }
+.divider.v .knob span { width: 1.5px; height: 14px; }
+.divider:active .knob { border-color: var(--accent); }
+.divider:active .knob span { background: var(--accent); }
 
 /* Until someone has dragged a border once, the handle asks to be dragged. */
-.divider.teach .grip { border-color: var(--accent); animation: gripPulse 1.9s ease-in-out infinite; }
-.divider.teach .grip span { background: var(--accent); }
+.divider.teach .knob { border-color: var(--accent); animation: gripPulse 1.9s ease-in-out infinite; }
+.divider.teach .knob span { background: var(--accent); }
 @keyframes gripPulse {
   0%, 100% { box-shadow: 0 1px 3px rgba(58, 54, 46, 0.18), 0 0 0 0 rgba(193, 115, 74, 0.4); }
   60% { box-shadow: 0 1px 3px rgba(58, 54, 46, 0.18), 0 0 0 8px rgba(193, 115, 74, 0); }
 }
 @media (prefers-reduced-motion: reduce) {
-  .divider.teach .grip { animation: none; }
+  .divider.teach .knob { animation: none; }
 }
 
 /* Editor affordance only; it never prints. */
@@ -252,3 +252,16 @@ h2 { font-size: 14px; margin: 0; }
 .ghostbtn { padding: 11px 12px; border-radius: 9px; border: 1px solid var(--line-strong); background: var(--bg); font-size: 12px; color: var(--muted); }
 
 .danger { padding: 12px; border-radius: 10px; border: 1px solid var(--line-strong); background: #fff; color: #A8553B; font-size: 13px; font-weight: 600; }
+
+/* Removing a part reflows the whole sheet, so it asks first. */
+.confirm {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  z-index: 31; width: 264px;
+  background: #fff; border-radius: 16px; padding: 22px 18px 16px;
+  display: flex; flex-direction: column; gap: 18px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.2);
+}
+.confirm p { margin: 0; font-size: 14px; text-align: center; line-height: 1.5; }
+.confirm-row { display: flex; gap: 10px; }
+.confirm-row button { flex: 1; }
+.confirm-row .ghostbtn { padding: 12px; font-size: 13px; font-weight: 600; }

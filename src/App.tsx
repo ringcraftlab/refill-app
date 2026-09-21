@@ -187,6 +187,10 @@ function CanvasScreen({ layout, setLayout, onBack }: {
   const [sheet, setSheet] = useState<SheetTarget>(null);
   const [toast, setToast] = useState('');
   const [ghost, setGhost] = useState<{ x: number; y: number; kinds: PartKind[] } | null>(null);
+  // Taking a part out reflows every other part on the sheet, so nothing is
+  // removed without a plain question first.
+  const [confirm, setConfirm] = useState<{ what: string; run: () => void } | null>(null);
+  const askRemove = (what: string, run: () => void) => { setSheet(null); setConfirm({ what, run }); };
   // Dragging a border is the app's one irreplaceable gesture, so the handles
   // keep asking for it until it has been used once.
   const [taught, setTaught] = useState(() => {
@@ -260,7 +264,8 @@ function CanvasScreen({ layout, setLayout, onBack }: {
     setLayout(prev => {
       const planned = planPlacement(prev, size, kinds, at);
       if (!planned) {
-        say('空きが足りません。境界を動かしてください');
+        const what = kinds.length === 1 ? PART_LABEL[kinds[0]] : 'パーツ';
+        say(`${what}を置く広さがありません。つまみで空けてください`);
         return prev;
       }
       if (planned.overflow > 0) say(`一度に置けるのは${MAX_PARTS}つまでです`);
@@ -397,6 +402,12 @@ function CanvasScreen({ layout, setLayout, onBack }: {
   });
 
   const empty = layout.surface.placed.length === 0 && !layout.spanning;
+
+  // One button per part, not per page: a part straddling the gutter is still
+  // one part, and two X's over it would suggest otherwise.
+  const clearBoxes = partBoxes.filter(
+    (b, i) => partBoxes.findIndex(o => o.slot === b.slot) === i,
+  );
   const teachDivider = !taught && dividerBoxes.length > 0;
 
   // The next-month calendar is part of the monthly rather than a part of its
@@ -431,6 +442,17 @@ function CanvasScreen({ layout, setLayout, onBack }: {
                   aria-label="マンスリーの設定"
                 />
               )}
+              {pg.spanRect && i === 0 && (
+                <button
+                  className="clearmini"
+                  style={{
+                    left: (pg.spanRect.x + pg.spanRect.w) * scale - 22,
+                    top: pg.spanRect.y * scale + 4,
+                  }}
+                  onClick={() => askRemove('マンスリー', () => setLayout(l => ({ ...l, spanning: null })))}
+                  aria-label="マンスリーを外す"
+                >×</button>
+              )}
             </div>
           ))}
 
@@ -448,6 +470,19 @@ function CanvasScreen({ layout, setLayout, onBack }: {
             />
           ))}
 
+          {clearBoxes.map(b => {
+            const label = PART_LABEL[layout.surface.placed[b.slot]];
+            return (
+              <button
+                key={`clear-${b.slot}`}
+                className="clearmini"
+                style={{ left: b.left + b.width - 22, top: b.top + 4 }}
+                onClick={() => askRemove(label, () => removePart(b.slot))}
+                aria-label={`${label}を外す`}
+              >×</button>
+            );
+          })}
+
           {miniCell && (
             <button
               className="clearmini"
@@ -455,8 +490,8 @@ function CanvasScreen({ layout, setLayout, onBack }: {
                 left: pageOrigin(0).x + (miniCell.x + miniCell.w) * scale - 20,
                 top: pageOrigin(0).y + miniCell.y * scale + 2,
               }}
-              onClick={() => setLayout(l => ({ ...l, showNextMonth: false }))}
-              aria-label="翌月のカレンダーを消す"
+              onClick={() => askRemove('翌月のカレンダー', () => setLayout(l => ({ ...l, showNextMonth: false })))}
+              aria-label="翌月のカレンダーを外す"
             >×</button>
           )}
 
@@ -471,7 +506,7 @@ function CanvasScreen({ layout, setLayout, onBack }: {
               onPointerCancel={endDivider}
             >
               <i />
-              <b className="grip"><span /><span /></b>
+              <b className="knob"><span /><span /></b>
             </div>
           ))}
         </div>
@@ -518,13 +553,27 @@ function CanvasScreen({ layout, setLayout, onBack }: {
 
       {toast && <div className="toast">{toast}</div>}
 
+      {confirm && (
+        <>
+          <div className="scrim" onClick={() => setConfirm(null)} />
+          <div className="confirm">
+            <p>{confirm.what}を外していいですか？</p>
+            <div className="confirm-row">
+              <button className="ghostbtn" onClick={() => setConfirm(null)}>やめる</button>
+              <button className="danger" onClick={() => { confirm.run(); setConfirm(null); }}>外す</button>
+            </div>
+          </div>
+        </>
+      )}
+
       {sheet && (
         <PartSheet
           target={sheet}
           layout={layout}
           setLayout={setLayout}
           onClose={() => setSheet(null)}
-          onRemove={removePart}
+          onRemove={slot => askRemove(PART_LABEL[layout.surface.placed[slot]], () => removePart(slot))}
+          onRemoveSpanning={() => askRemove('マンスリー', () => setLayout(l => ({ ...l, spanning: null })))}
           onLoad={l => { setLayout(() => l); setSheet(null); say('読み込みました'); }}
           size={size}
           onExport={onExport}
@@ -534,12 +583,13 @@ function CanvasScreen({ layout, setLayout, onBack }: {
   );
 }
 
-function PartSheet({ target, layout, setLayout, onClose, onRemove, onLoad, size, onExport }: {
+function PartSheet({ target, layout, setLayout, onClose, onRemove, onRemoveSpanning, onLoad, size, onExport }: {
   target: Exclude<SheetTarget, null>;
   layout: Layout;
   setLayout: (fn: (l: Layout) => Layout) => void;
   onClose: () => void;
   onRemove: (slot: number) => void;
+  onRemoveSpanning: () => void;
   onLoad: (l: Layout) => void;
   size: SizeSpec;
   onExport: (opts: PrintOptions) => void;
@@ -736,9 +786,7 @@ function PartSheet({ target, layout, setLayout, onClose, onRemove, onLoad, size,
           <button className="danger" onClick={() => onRemove(target.slot)}>このパーツを外す</button>
         )}
         {target === 'spanning' && (
-          <button className="danger" onClick={() => { setLayout(l => ({ ...l, spanning: null })); onClose(); }}>
-            このパーツを外す
-          </button>
+          <button className="danger" onClick={onRemoveSpanning}>このパーツを外す</button>
         )}
       </div>
     </>

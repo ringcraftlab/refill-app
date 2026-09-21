@@ -144,16 +144,19 @@ export function drawMonthly(area: Rect, layout: Layout, slice: MonthlySlice): Pr
   return out;
 }
 
+// Below this the mini calendar has no room to say anything, so it is left out.
+const MINI_PAD = 1.4;
+const MINI_MIN = 11;
+
 // Next month tucked into a free index cell, the way printed refills do it.
 function drawMiniMonth(cell: Rect, layout: Layout): Primitive[] {
   const year = layout.month === 12 ? layout.year + 1 : layout.year;
   const month = layout.month === 12 ? 1 : layout.month + 1;
   const weeks = monthGrid(year, month, layout.weekStart);
 
-  const pad = 1.4;
-  const left = cell.x + pad, top = cell.y + pad;
-  const w = cell.w - pad * 2, h = cell.h - pad * 2;
-  if (w < 11 || h < 11) return [];
+  const left = cell.x + MINI_PAD, top = cell.y + MINI_PAD;
+  const w = cell.w - MINI_PAD * 2, h = cell.h - MINI_PAD * 2;
+  if (w < MINI_MIN || h < MINI_MIN) return [];
 
   const out: Primitive[] = [
     { type: 'text', x: left, y: top + 2.2, text: `${month}月`, sizePt: 4.5, color: INK_SOFT, align: 'left' },
@@ -183,7 +186,11 @@ export function nextMonthCell(area: Rect, layout: Layout): Rect | null {
   const { left, right, top, bottom } = inset(area);
   const bodyTop = top + DOW_HEADER_H;
   const rowH = (bottom - bodyTop) / weeks;
-  return { x: left, y: bodyTop + rowH, w: (right - left) / 4, h: rowH };
+  const cell = { x: left, y: bodyTop + rowH, w: (right - left) / 4, h: rowH };
+  // Squeeze the calendar out and its clear button has to go too; an X over
+  // nothing is the worst kind of control.
+  if (cell.w - MINI_PAD * 2 < MINI_MIN || cell.h - MINI_PAD * 2 < MINI_MIN) return null;
+  return cell;
 }
 
 export function drawSpanningMonthly(area: Rect, page: PageKey, layout: Layout): Primitive[] {

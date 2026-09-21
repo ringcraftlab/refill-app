@@ -121,6 +121,8 @@ await shot('11-横向きにメモとTODO');
 for (let i = 0; i < 2; i++) {
   await page.locator('.part').first().click();
   await page.getByRole('button', { name: 'このパーツを外す' }).click();
+  // Nothing is removed without answering the question first.
+  await page.getByRole('button', { name: '外す', exact: true }).click();
 }
 await shot('12-2つ外してマンスリーだけ');
 
