@@ -58,9 +58,11 @@ export const SIZES: Record<RefillSize, SizeSpec> = {
     id: 'BIBLE', label: 'バイブル', widthMm: 95, heightMm: 170, ringMarginMm: 10,
     holes: { count: 6, diameterMm: 5.5, pitchMm: 19, marginMm: 21.5, centreGapMm: 51 },
   },
-  // Same height and the same punch as A5, just narrower.
+  // Same height and the same punch as A5, just narrower. The 110mm width is
+  // the one the binder actually measures; 125 was a placeholder the spec
+  // flagged as unverified from the day it was written.
   A5SLIM: {
-    id: 'A5SLIM', label: 'A5スリム', widthMm: 125, heightMm: 210, ringMarginMm: 12,
+    id: 'A5SLIM', label: 'A5スリム', widthMm: 110, heightMm: 210, ringMarginMm: 12,
     holes: { count: 6, diameterMm: 5.5, pitchMm: 19, marginMm: 32, centreGapMm: 70 },
   },
   A5: {
