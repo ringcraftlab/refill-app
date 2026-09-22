@@ -75,6 +75,8 @@ function createLayout(): Layout {
     monthCount: 12,
     daysPerSheet: 7,
     weekStart: 1,
+    dayStartHour: 6,
+    dayEndHour: 24,
     orientation: 'portrait',
     showNextMonth: true,
     habitCount: 4,
@@ -1271,6 +1273,30 @@ function PartSheet({ target, layout, setLayout, onClose, onRemove, onRemoveSpann
             value={layout.surface.split}
             onPick={v => setLayout(l => ({ ...l, surface: { ...l.surface, split: v as 'h' | 'v' } }))}
           />
+        )}
+
+        {/* Only the vertical has hours on its other axis; the horizontal has
+            free lanes, so there is nothing to bound. */}
+        {kind === 'weekvert' && (
+          <>
+            <Field label="始まりの時刻">
+              <Stepper
+                value={`${layout.dayStartHour}:00`}
+                onStep={n => setLayout(l => ({
+                  // One hour has to be left to draw, whichever end is moved.
+                  ...l, dayStartHour: Math.min(l.dayEndHour - 1, Math.max(0, l.dayStartHour + n)),
+                }))}
+              />
+            </Field>
+            <Field label={`終わりの時刻（${layout.dayEndHour - layout.dayStartHour}時間）`}>
+              <Stepper
+                value={`${layout.dayEndHour}:00`}
+                onStep={n => setLayout(l => ({
+                  ...l, dayEndHour: Math.max(l.dayStartHour + 1, Math.min(24, l.dayEndHour + n)),
+                }))}
+              />
+            </Field>
+          </>
         )}
 
         {(kind === 'weekvert' || kind === 'weekhoriz') && (

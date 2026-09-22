@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 9;
+export const SCHEMA_VERSION = 10;
 
 export type RefillSize =
   | 'MINI3' | 'CARD3' | 'M5' | 'M5SQ' | 'M6' | 'BIBLE' | 'NARROW' | 'A5SLIM' | 'A5';
@@ -125,6 +125,12 @@ export interface Layout {
   // so it belongs to the refill rather than to the part.
   daysPerSheet: number;
   weekStart: WeekStart;
+  // The span of the day a vertical weekly draws, in whole hours. Printed
+  // refills differ on this more than on anything else about a vertical -- a
+  // work planner starts at 8, a diary at 0 -- and it decides the row count,
+  // so it belongs to the refill rather than to the part.
+  dayStartHour: number;
+  dayEndHour: number;
   orientation: Orientation;
   // Printed refills usually tuck next month's dates into the spread's index
   // column, so it is on unless the user clears it.

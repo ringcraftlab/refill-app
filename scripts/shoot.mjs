@@ -124,4 +124,35 @@ for (let i = 0; i < 2; i++) {
 }
 await shot('12-2つ外してマンスリーだけ');
 
+// The vertical weekly, which none of the scenes above reaches: it is the only
+// part with two axes of its own, it splits its days across the spread, and it
+// carries the hour scale. A change to it went through the twelve scenes above
+// without moving a pixel, which is how this one came to be here.
+await page.goto(BASE);
+await page.locator('.sizerow', { hasText: '95×170mm' }).click();
+await page.locator('.card', { hasText: '見開き' }).click();
+await page.getByRole('button', { name: 'この構成で作る' }).click();
+await page.locator('.page').first().waitFor();
+await drag(await centerOf(await stamp('バーチカル')), await centerOf(page.locator('.page').first()));
+await shot('13-バーチカル');
+
+// The hours are the refill's, not the part's, so moving them redraws every
+// column and the row count with it.
+//
+// baseline.sh replays this against an older build, which has no such setting
+// at all -- a control cannot be renamed into existence the way a card can --
+// so the scene shoots whatever it finds. The older build then comes out
+// showing the hours it was fixed to, and the comparison says this scene moved,
+// which is the truth.
+await page.locator('.range').click();
+const hourStep = (label, glyph) =>
+  page.locator('.field-label', { hasText: label }).locator('xpath=..').locator('button', { hasText: glyph });
+if (await page.locator('.field-label', { hasText: '始まりの時刻' }).count()) {
+  for (let i = 0; i < 2; i++) await hourStep('始まりの時刻', '＋').click();
+  for (let i = 0; i < 4; i++) await hourStep('終わりの時刻', '−').click();
+}
+await page.locator('.scrim').click({ position: { x: 10, y: 10 } });
+await page.locator('.scrim').waitFor({ state: 'detached' });
+await shot('14-バーチカルを8時から20時に');
+
 await browser.close();

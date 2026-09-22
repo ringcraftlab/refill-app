@@ -122,6 +122,10 @@ export function clipToBand(
 // Paper palette. Printed refills are warm, not black-on-white screen grey.
 export const INK: Color = [0.227, 0.212, 0.180];
 export const INK_SOFT: Color = [0.42, 0.40, 0.35];
+// Between the ink and the rules: for something printed over and over across a
+// sheet, like the hour repeated in every column of a vertical, which has to be
+// readable without competing with what gets written next to it.
+export const INK_FAINT: Color = [0.62, 0.60, 0.55];
 export const SUNDAY: Color = [0.788, 0.482, 0.576];
 export const SATURDAY: Color = [0.431, 0.561, 0.651];
 export const RULE: Color = [0.894, 0.874, 0.827];

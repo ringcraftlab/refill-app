@@ -1,6 +1,6 @@
 import type { Layout, PageKey, PartKind } from '../types';
 import type { Color, Primitive } from './draw';
-import { INK, INK_SOFT, RULE, RULE_LIGHT, SATURDAY, SUNDAY } from './draw';
+import { INK, INK_FAINT, INK_SOFT, RULE, RULE_LIGHT, SATURDAY, SUNDAY } from './draw';
 import {
   daysInMonth, holidayOf, monthGrid, orderedWeekdays, rokuyoLabel, sheetDays, weekdayLabel,
 } from './dates';
@@ -441,6 +441,9 @@ export interface DateGridSpec {
 
 const TITLE_H = 4.4;
 const AXIS_H = 3.2;
+// A column narrower than this has no room for the hour and the writing both,
+// so it keeps the writing and leans on the scale down the side.
+const HOUR_IN_COLUMN_MM = 8;
 
 export function drawDateGrid(area: Rect, layout: Layout, spec: DateGridSpec): Primitive[] {
   const { left, right, top, bottom } = inset(area);
@@ -546,6 +549,19 @@ export function drawDateGrid(area: Rect, layout: Layout, spec: DateGridSpec): Pr
           type: 'text', x: bodyL - 0.8, y: bodyT + rowH * i + rowH * 0.7,
           text: crossText(i), sizePt: size, color: INK_SOFT, align: 'right',
         });
+        // And again inside every day, not once down the far left. On a spread
+        // the far column is most of a hand's width from that scale, and
+        // counting rows back to it is exactly what a printed vertical spares
+        // you. Faint and hard against the rule, so the hour is there to be
+        // found rather than in the way of what gets written beside it.
+        if (colW >= HOUR_IN_COLUMN_MM) {
+          for (let d = 0; d < dateCount; d++) {
+            out.push({
+              type: 'text', x: bodyL + colW * d + 0.7, y: bodyT + rowH * i + rowH * 0.7,
+              text: crossText(i), sizePt: Math.min(size, 3), color: INK_FAINT, align: 'left',
+            });
+          }
+        }
       } else {
         out.push({
           type: 'text', x: bodyL + colW * (i + 0.5), y: bodyT - 0.9,
@@ -577,7 +593,7 @@ const DATE_GRIDS: Partial<Record<PartKind, (l: Layout) => DateGridSpec>> = {
   }),
   weekvert: l => ({
     title: runTitle(l), dates: 'columns', span: 'days',
-    cross: { kind: 'time', fromHour: 6, toHour: 24 },
+    cross: { kind: 'time', fromHour: l.dayStartHour, toHour: l.dayEndHour },
   }),
   weekhoriz: l => ({
     title: runTitle(l), dates: 'rows', span: 'days',
