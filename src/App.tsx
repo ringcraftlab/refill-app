@@ -87,8 +87,8 @@ export function App() {
         <h1>RingCraftLab</h1>
 
         <div className="tabs">
-          <button className={tab==='habit' ? 'active' : ''} onClick={() => setTab('habit')}>ハビット</button>
-          <button className={tab==='monthly' ? 'active' : ''} onClick={() => setTab('monthly')}>マンスリー</button>
+          <button className={tab==='habit' ? 'active' : ''} aria-pressed={tab==='habit'} onClick={() => setTab('habit')}>ハビット</button>
+          <button className={tab==='monthly' ? 'active' : ''} aria-pressed={tab==='monthly'} onClick={() => setTab('monthly')}>マンスリー</button>
         </div>
 
         <label>レイアウト名</label>
