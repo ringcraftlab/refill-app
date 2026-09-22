@@ -139,30 +139,32 @@ const SIZE_CODE: Record<RefillSize, string> = {
   MINI3: 'ミニ3穴', CARD3: '名刺3穴', M5: 'M5', M5SQ: 'M5スクエア', M6: 'M6',
   NARROW: 'ナロー', BIBLE: 'バイブル', A5SLIM: 'A5スリム', A5: 'A5',
 };
-// Millimetres to pixels for the picker. Every sheet is drawn to this one
-// scale, so a tile's height is the paper's height: the grid itself is the
-// size comparison. Two columns give the sheet the full tile width, so it can
-// be drawn larger than it could beside the name.
-const PICKER_SCALE = 0.8;
+// The sheet in a picker row, drawn to fit a box rather than to one shared
+// scale: a row is 40px tall and A5 is twice the height of Micro 5, so a shared
+// scale would leave the small sizes as specks. The shape still tells them
+// apart -- square, slim, wide -- and the name carries the rest.
+const ICON_BOX = 30;
 
 function SizeIcon({ size, tint }: { size: SizeSpec; tint: { fill: string; line: string } }) {
+  const k = ICON_BOX / Math.max(size.widthMm, size.heightMm);
+  const w = size.widthMm * k, h = size.heightMm * k;
+  // Holes run along the binding edge, which is the top on a card bound there.
+  const onTop = size.bindEdge === 'short';
+  const band = (size.ringMarginMm * k) / 2;
   return (
-    <svg
-      width={size.widthMm * PICKER_SCALE}
-      height={size.heightMm * PICKER_SCALE}
-      viewBox={`0 0 ${size.widthMm} ${size.heightMm}`}
-      className="block"
-      aria-hidden="true"
-    >
+    <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} className="block shrink-0" aria-hidden="true">
       <rect
-        x={0.4} y={0.4} width={size.widthMm - 0.8} height={size.heightMm - 0.8}
-        rx={1.5} fill={tint.fill} stroke={tint.line} strokeWidth={0.8}
+        x={0.3} y={0.3} width={w - 0.6} height={h - 0.6}
+        rx={1.2} fill={tint.fill} stroke={tint.line} strokeWidth={0.6}
       />
-      {holeCentres(size.holes).map((cy, i) => (
+      {holeCentres(size.holes).map((at, i) => (
         <circle
           key={i}
-          cx={size.ringMarginMm / 2} cy={cy} r={size.holes.diameterMm / 2}
-          fill="#fff" stroke={tint.line} strokeWidth={0.7}
+          cx={onTop ? at * k : band} cy={onTop ? band : at * k}
+          // In pixels, not millimetres: a 5.5mm punch on a sheet drawn at a
+          // seventh of size would be half a pixel across.
+          r={0.9}
+          fill="#fff" stroke={tint.line} strokeWidth={0.5}
         />
       ))}
     </svg>
@@ -174,31 +176,40 @@ function SizeScreen({ selected, onPick }: { selected: RefillSize; onPick: (s: Re
     <div className={SCREEN_PAD}>
       <div className="text-[13px] font-bold tracking-[0.04em] text-muted">RingCraftLab</div>
       <h1 className="text-[19px] font-bold">手帳のサイズを選ぶ</h1>
-      {/* `justify-center` on a scrolling column puts the first tile above the
-          scroll origin when it overflows, where nothing can reach it. Centring
-          with `m-auto` on the inner block falls back to the top instead. */}
+      {/* The list starts under the heading rather than floating in the middle
+          of the screen, and `mb-auto` keeps it there whether or not it
+          overflows -- `justify-center` on a scrolling column would push the
+          first row above the scroll origin, where nothing can reach it. */}
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
-        <div className="m-auto grid w-full grid-cols-2 gap-2 py-1">
+        <div className="mb-auto grid w-full grid-cols-2 gap-2 py-1">
           {SIZE_ORDER.map((id, i) => {
             const s = SIZES[id];
             // An odd count leaves the last one alone on its row. It keeps a
-            // column's width and sits in the middle, so the row of sheets
-            // still reads as one run of sizes.
+            // column's width and sits in the middle, so the list still reads
+            // as one run of sizes.
             const alone = i === SIZE_ORDER.length - 1 && SIZE_ORDER.length % 2 === 1;
             return (
               <button
                 key={id}
                 onClick={() => onPick(id)}
-                className={`sizerow flex flex-col items-center gap-3 rounded-[20px] border-2 bg-white p-3 ${
+                className={`sizerow flex items-center gap-1.5 rounded-2xl border bg-white py-2 pl-2 pr-2 text-left shadow-[0_1px_3px_rgba(58,54,46,0.07)] ${
                   alone ? 'col-span-2 w-[calc(50%-4px)] justify-self-center' : ''
                 } ${selected === id ? 'border-ink' : 'border-line'}`}
               >
-                {/* Bottom aligned and all to one scale, so a glance down the
-                    grid compares the sizes. */}
-                <span className="flex w-full flex-1 items-end justify-center">
-                  <SizeIcon size={s} tint={SIZE_TINT[id]} />
-                </span>
-                <strong className="text-[24px] font-light leading-none tracking-tight">{SIZE_CODE[id]}</strong>
+                {/* A colour a glance can learn the size by, before the name is
+                    read. */}
+                <span
+                  className="h-8 w-[5px] shrink-0 rounded-full"
+                  style={{ background: SIZE_TINT[id].line }}
+                />
+                <strong className="min-w-0 flex-1 truncate text-[13px] font-semibold leading-tight">
+                  {SIZE_CODE[id]}
+                </strong>
+                <SizeIcon size={s} tint={SIZE_TINT[id]} />
+                {/* Decoration: it says "this opens something", which the
+                    button already says, so it stays out of the name a screen
+                    reader reads. */}
+                <span aria-hidden="true" className="shrink-0 text-[13px] leading-none text-faint">›</span>
               </button>
             );
           })}
