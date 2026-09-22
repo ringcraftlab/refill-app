@@ -8,7 +8,7 @@ import {
 } from './lib/layout';
 import type { Divider, DropPoint, Geometry } from './lib/layout';
 import { nextMonthCell } from './lib/parts';
-import { addMonths, runDates } from './lib/dates';
+import { addDays, addMonths, isoDate, runDates } from './lib/dates';
 import {
   buildPages, buildPrintSheets, datedSlotOf, DEFAULT_PRINT, hasDatedPart, INK_INSET_MM, isDayPaced,
   MONTH_PACED, paperPlan, punchInset, runEnd, sheetCount,
@@ -174,6 +174,14 @@ const SIZE_NAME: Record<RefillSize, string> = {
 // drift from what gets punched.
 const sizeMm = (s: SizeSpec) => `${s.widthMm}×${s.heightMm}mm`;
 const ymd = (d: Date) => `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`;
+
+// Move a day-paced run to begin on a day. The months go with it: they still
+// name how long the run is and still feed everything paced by months, so a
+// start in August with the months left saying September would have the two
+// halves of the same setting disagreeing.
+const startOn = (l: Layout, d: Date): Layout => ({
+  ...l, runStart: isoDate(d), year: d.getFullYear(), month: d.getMonth() + 1,
+});
 const sizeHoles = (s: SizeSpec) => `${s.holes.count}穴`;
 
 // Truncating a Japanese name to 「縦長ミ…」 throws away the one word that
@@ -1332,7 +1340,13 @@ function PartSheet({ target, layout, setLayout, onClose, onRemove, onRemoveSpann
                 }))}
               />
             </Field>
-            {/* The period is the monthly's control too, but a weekly refill
+            {/* Paced by days, so the run begins on a day. A month was too
+                coarse to say it with: making a weekly on the 22nd and being
+                handed the sheets back to the 31st of the month before is
+                three weeks of paper nobody asked for. The step is one sheet,
+                because that is the only amount a run can actually move by.
+
+                The period is the monthly's control too, but a weekly refill
                 may be the only thing on the sheet, and it still has to say
                 which months it covers.
 
@@ -1343,12 +1357,19 @@ function PartSheet({ target, layout, setLayout, onClose, onRemove, onRemoveSpann
                 dates underneath are what actually gets printed, and one of
                 them contradicts the label above it -- which is exactly why
                 it has to be on screen. */}
-            <Field label="開始月">
+            <Field label={`開始日（${layout.daysPerSheet}日ずつ動きます）`}>
               <Stepper
-                value={`${layout.year}年${layout.month}月`}
-                onStep={n => setLayout(l => ({ ...l, ...addMonths(l.year, l.month, n) }))}
+                value={ymd(firstDay)}
+                onStep={n => setLayout(l => startOn(l, addDays(firstDay, n * Math.max(1, l.daysPerSheet))))}
               />
             </Field>
+            <Button
+              variant="quiet"
+              className="self-start"
+              onClick={() => setLayout(l => startOn(l, new Date()))}
+            >
+              今日から
+            </Button>
             <Field label={`終了月（${layout.monthCount}ヶ月分・${sheetCount(layout)}枚）`}>
               <Stepper
                 value={`${lastMonth.year}年${lastMonth.month}月`}

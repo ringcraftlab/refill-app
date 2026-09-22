@@ -205,4 +205,21 @@ await page.locator('.scrim').click({ position: { x: 10, y: 10 } });
 await page.locator('.scrim').waitFor({ state: 'detached' });
 await shot('17-左端に落として片ページ2段');
 
+// Started from today rather than from the top of a month. Every scene here
+// already moves with the calendar -- a new layout takes the current month --
+// and baseline shoots both builds in the same minute, so this is no less
+// comparable than the rest.
+await page.goto(BASE);
+await page.locator('.sizerow', { hasText: '95×170mm' }).click();
+await page.locator('.card', { hasText: '見開き' }).click();
+await page.getByRole('button', { name: 'この構成で作る' }).click();
+await page.locator('.page').first().waitFor();
+await drag(await centerOf(await stamp('バーチカル')), await centerOf(page.locator('.page').first()));
+await page.locator('.range').click();
+const fromToday = page.getByRole('button', { name: '今日から' });
+if (await fromToday.count()) await fromToday.click();
+await page.locator('.scrim').click({ position: { x: 10, y: 10 } });
+await page.locator('.scrim').waitFor({ state: 'detached' });
+await shot('18-バーチカルを今日から');
+
 await browser.close();

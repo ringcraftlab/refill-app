@@ -130,6 +130,12 @@ export interface Layout {
   // so it belongs to the refill rather than to the part.
   daysPerSheet: number;
   weekStart: WeekStart;
+  // Where a run paced by days begins, as a date. Months are too coarse for a
+  // weekly: asking for September and being handed the week of August 31st is
+  // three weeks of sheets nobody wanted, and making one on the 22nd wastes
+  // most of the month. Omitted -- which is what every layout saved before
+  // this said -- means the first of `month`.
+  runStart?: string;
   // The span of the day a vertical weekly draws, in whole hours. Printed
   // refills differ on this more than on anything else about a vertical -- a
   // work planner starts at 8, a diary at 0 -- and it decides the row count,

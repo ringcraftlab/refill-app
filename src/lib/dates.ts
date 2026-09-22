@@ -34,6 +34,11 @@ export function monthGrid(year: number, month: number, weekStart: WeekStart): (D
 export const addDays = (date: Date, n: number): Date =>
   new Date(date.getFullYear(), date.getMonth(), date.getDate() + n);
 
+export const parseDate = (iso: string): Date => {
+  const [y, m, d] = iso.split('-').map(Number);
+  return new Date(y, m - 1, d);
+};
+
 // Back to the day the week starts on, which is where a seven-day sheet has to
 // begin or the weeks come out split down the middle.
 export const startOfWeek = (date: Date, weekStart: WeekStart): Date =>
@@ -46,7 +51,10 @@ export function sheetStarts(layout: Layout): Date[] {
   const days = Math.max(1, layout.daysPerSheet);
   const last = addMonths(layout.year, layout.month, Math.max(1, layout.monthCount) - 1);
   const end = new Date(last.year, last.month, 0);
-  const from = new Date(layout.year, layout.month - 1, 1);
+  // A run can be told to begin on a day rather than at the top of a month.
+  // Whole weeks still start on a week boundary, so asking for today gives
+  // this week, not a sheet cut down the middle.
+  const from = layout.runStart ? parseDate(layout.runStart) : new Date(layout.year, layout.month - 1, 1);
   let cursor = days % 7 === 0 ? startOfWeek(from, layout.weekStart) : from;
   const out: Date[] = [];
   // A year of single days is 365 sheets, which is a lot but is what was
@@ -73,10 +81,7 @@ export function runDates(layout: Layout): [Date, Date] {
 // The day the sheet in hand starts on. Only a run being rendered says which
 // one; the editor shows the first.
 export function sheetStartOf(layout: Layout): Date {
-  if (layout.sheetStart) {
-    const [y, m, d] = layout.sheetStart.split('-').map(Number);
-    return new Date(y, m - 1, d);
-  }
+  if (layout.sheetStart) return parseDate(layout.sheetStart);
   return sheetStarts(layout)[0] ?? new Date(layout.year, layout.month - 1, 1);
 }
 
