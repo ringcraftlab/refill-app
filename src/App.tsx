@@ -8,7 +8,7 @@ import {
 } from './lib/layout';
 import type { Divider, DropPoint, Geometry } from './lib/layout';
 import { nextMonthCell } from './lib/parts';
-import { addMonths } from './lib/dates';
+import { addMonths, runDates } from './lib/dates';
 import {
   buildPages, buildPrintSheets, datedSlotOf, DEFAULT_PRINT, hasDatedPart, INK_INSET_MM, isDayPaced,
   MONTH_PACED, paperPlan, punchInset, runEnd, sheetCount,
@@ -173,6 +173,7 @@ const SIZE_NAME: Record<RefillSize, string> = {
 // go on each other's rings. Both are read off the size itself, so neither can
 // drift from what gets punched.
 const sizeMm = (s: SizeSpec) => `${s.widthMm}×${s.heightMm}mm`;
+const ymd = (d: Date) => `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`;
 const sizeHoles = (s: SizeSpec) => `${s.holes.count}穴`;
 
 // Truncating a Japanese name to 「縦長ミ…」 throws away the one word that
@@ -754,6 +755,11 @@ function CanvasScreen({ layout, setLayout, onBack }: {
 
   const dated = hasDatedPart(layout);
   const lastMonth = runEnd(layout);
+  // A refill paced by days is not described by months: the first sheet of a
+  // weekly starts on the week holding the first of the month, which is
+  // usually the month before the one that was set.
+  const byDay = isDayPaced(layout);
+  const [firstDay, lastDay] = runDates(layout);
   // The button that shows the date range opens whatever part owns the dates.
   // A weekly refill may have no calendar on it at all, and a refill of day
   // lists none either, and their range still has to be reachable.
@@ -840,12 +846,14 @@ function CanvasScreen({ layout, setLayout, onBack }: {
           className="range mb-0.5 ml-3.5 flex shrink-0 items-center gap-2 self-start rounded-full border border-line-strong bg-white px-3 py-1.5 text-[11px] text-ink"
           onClick={() => setSheet(monthlyTarget)}
         >
-          {layout.year}年{layout.month}月 → {lastMonth.year}年{lastMonth.month}月
+          {byDay
+            ? `${ymd(firstDay)} → ${ymd(lastDay)}`
+            : `${layout.year}年${layout.month}月 → ${lastMonth.year}年${lastMonth.month}月`}
           {/* Months and sheets stop being the same number as soon as a sheet
               carries two calendars, and which one matters depends on what is
               being decided, so both are said when they differ. */}
           <em className="not-italic text-faint">
-            {isDayPaced(layout) ? `${sheetCount(layout)}枚`
+            {byDay ? `${sheetCount(layout)}枚`
               : sheetCount(layout) === layout.monthCount ? `${layout.monthCount}ヶ月分`
               : `${layout.monthCount}ヶ月分・${sheetCount(layout)}枚`}
           </em>
@@ -1094,6 +1102,8 @@ function PartSheet({ target, layout, setLayout, onClose, onRemove, onRemoveSpann
   const lastMonth = addMonths(layout.year, layout.month, Math.max(1, layout.monthCount) - 1);
   const saved = useMemo(() => target === 'load' ? listLayouts() : [], [target]);
   const kind = typeof target === 'string' ? null : layout.surface.placed[target.slot];
+  // What the months actually come to, for the run this sheet is setting.
+  const [firstDay, lastDay] = runDates(layout);
   // Worked out up front rather than on the tap: a spread already carrying
   // other parts may have no room for two calendars, and a choice that does
   // nothing when picked is worse than one that is not offered.
@@ -1324,7 +1334,15 @@ function PartSheet({ target, layout, setLayout, onClose, onRemove, onRemoveSpann
             </Field>
             {/* The period is the monthly's control too, but a weekly refill
                 may be the only thing on the sheet, and it still has to say
-                which months it covers. */}
+                which months it covers.
+
+                The months are the control; they are not the answer. A sheet
+                of whole weeks starts on the week holding the first of the
+                month, so September's run begins in August, and it ends when
+                the last sheet runs out rather than at the month's end. The
+                dates underneath are what actually gets printed, and one of
+                them contradicts the label above it -- which is exactly why
+                it has to be on screen. */}
             <Field label="開始月">
               <Stepper
                 value={`${layout.year}年${layout.month}月`}
@@ -1337,6 +1355,9 @@ function PartSheet({ target, layout, setLayout, onClose, onRemove, onRemoveSpann
                 onStep={n => setLayout(l => ({ ...l, monthCount: Math.min(36, Math.max(1, l.monthCount + n)) }))}
               />
             </Field>
+            <p className="run-dates m-0 text-[11px] text-faint">
+              刷られるのは {ymd(firstDay)} 〜 {ymd(lastDay)}
+            </p>
             <Choice
               label="週の始まり"
               options={[{ v: 1, label: '月曜始まり' }, { v: 0, label: '日曜始まり' }]}

@@ -58,6 +58,18 @@ export function sheetStarts(layout: Layout): Date[] {
   return out;
 }
 
+// The first and last day a day-paced run actually covers. The months set the
+// period, but a weekly starts on the week holding the first of the month --
+// which is usually the month before -- and stops when its last sheet runs
+// out, days into the month after. Naming only the months names neither end,
+// and one of them contradicts the label.
+export function runDates(layout: Layout): [Date, Date] {
+  const starts = sheetStarts(layout);
+  const first = starts[0] ?? new Date(layout.year, layout.month - 1, 1);
+  const last = starts[starts.length - 1] ?? first;
+  return [first, addDays(last, Math.max(1, layout.daysPerSheet) - 1)];
+}
+
 // The day the sheet in hand starts on. Only a run being rendered says which
 // one; the editor shows the first.
 export function sheetStartOf(layout: Layout): Date {
