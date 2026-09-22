@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 10;
+export const SCHEMA_VERSION = 11;
 
 export type RefillSize =
   | 'MINI3' | 'CARD3' | 'M5' | 'M5SQ' | 'M6' | 'BIBLE' | 'NARROW' | 'A5SLIM' | 'A5';
@@ -131,6 +131,10 @@ export interface Layout {
   // so it belongs to the refill rather than to the part.
   dayStartHour: number;
   dayEndHour: number;
+  // How many bands the vertical folds its days into. One page of seven
+  // columns is too narrow to write in on most sizes; two bands of three or
+  // four is what printed one-page weeklies do.
+  weekTiers: number;
   orientation: Orientation;
   // Printed refills usually tuck next month's dates into the spread's index
   // column, so it is on unless the user clears it.

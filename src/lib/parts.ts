@@ -16,6 +16,28 @@ const PAD = 1.2;
 // what is left, so the label and header keep their height whatever the row
 // count is.
 const MONTH_LABEL_H = 5;
+
+// Rough advance width, in millimetres. A kana or a kanji takes an em, a digit
+// or a Latin letter a little over half. Only ever used to set one label
+// against another, where a fraction of a millimetre out cannot be seen.
+const PT_MM = 25.4 / 72;
+const textWidthMm = (text: string, sizePt: number): number =>
+  [...text].reduce((w, c) => w + (/[^\u0020-\u00ff]/.test(c) ? 1 : 0.56), 0) * sizePt * PT_MM;
+
+// The month, with the year small beside it. A refill outlives the year it was
+// printed for and ends up filed with three others that look exactly like it,
+// so the year has to be on the sheet -- but it is not what anyone reads when
+// they pick one up, so it sits at half the size on the same baseline.
+function monthLabel(x: number, y: number, layout: Layout, sizePt: number): Primitive[] {
+  const month = `${layout.month}月`;
+  return [
+    { type: 'text', x, y, text: month, sizePt, color: INK, align: 'left' },
+    {
+      type: 'text', x: x + textWidthMm(month, sizePt) + sizePt * PT_MM * 0.3, y,
+      text: String(layout.year), sizePt: sizePt * 0.55, color: INK_SOFT, align: 'left',
+    },
+  ];
+}
 // Shared with the spread geometry, which reserves the same header on both
 // pages so the week rows come out the same height.
 const DOW_HEADER_H = MONTHLY_HEADER_MM;
@@ -76,10 +98,7 @@ export function drawMonthly(area: Rect, layout: Layout, slice: MonthlySlice): Pr
   const out: Primitive[] = [];
 
   if (slice.monthLabel === 'show') {
-    out.push({
-      type: 'text', x: left, y: top + MONTH_LABEL_H - 1.3,
-      text: `${layout.month}月`, sizePt: 9, color: INK, align: 'left',
-    });
+    out.push(...monthLabel(left, top + MONTH_LABEL_H - 1.3, layout, 9));
   }
 
   // Printed refills leave the weekday row unshaded; the rule under it is
@@ -295,10 +314,7 @@ export function drawDayList(area: Rect, layout: Layout, range?: [number, number]
   const rowH = (bottom - gridTop) / rows;
   if (rowH <= 0 || colW <= 0) return [];
 
-  const out: Primitive[] = [{
-    type: 'text', x: left, y: top + MONTH_LABEL_H - 1.3,
-    text: `${layout.month}月`, sizePt: 7, color: INK, align: 'left',
-  }];
+  const out: Primitive[] = monthLabel(left, top + MONTH_LABEL_H - 1.3, layout, 7);
 
   out.push({ type: 'rect', x: left, y: gridTop, w: width, h: bottom - gridTop, stroke: RULE, strokeMm: 0.25 });
 
@@ -437,6 +453,11 @@ export interface DateGridSpec {
   // Which slice of the date axis this grid draws, when a spread gives each
   // page some of the days. Omitted means all of them.
   range?: [number, number];
+  // How many bands the days are folded into. Seven columns down one band is
+  // 10mm each on a Bible page, which is a week you can see but not write in;
+  // folded into two, the same page gives 18mm and two shorter days. Printed
+  // one-page weeklies are nearly all this shape.
+  tiers?: number;
 }
 
 const TITLE_H = 4.4;
@@ -446,13 +467,6 @@ const AXIS_H = 3.2;
 const HOUR_IN_COLUMN_MM = 8;
 
 export function drawDateGrid(area: Rect, layout: Layout, spec: DateGridSpec): Primitive[] {
-  const { left, right, top, bottom } = inset(area);
-  const width = right - left;
-  const out: Primitive[] = [];
-  if (spec.title) {
-    out.push({ type: 'text', x: left, y: top + 2.8, text: spec.title, sizePt: 5.5, color: INK_SOFT, align: 'left' });
-  }
-
   // The days on the date axis, as dates. A month grid runs the month; a
   // weekly runs whatever days this sheet covers.
   const axis = spec.span === 'month'
@@ -460,6 +474,37 @@ export function drawDateGrid(area: Rect, layout: Layout, spec: DateGridSpec): Pr
         (_, i) => new Date(layout.year, layout.month - 1, i + 1))
     : sheetDays(layout);
   const [from, to] = spec.range ?? [0, axis.length];
+
+  // Folded, each band is the same grid over fewer days, so it is this
+  // function again on a slice of the area rather than a second way of
+  // drawing one. Each band brings its own hour scale with it, which is the
+  // point: the days on the lower band are a page-width away from the upper
+  // band's, and a scale they cannot reach is not a scale.
+  const tiers = Math.max(1, Math.round(spec.tiers ?? 1));
+  if (tiers > 1 && spec.dates === 'columns' && to - from > 1) {
+    const per = Math.ceil((to - from) / tiers);
+    const bandH = area.h / tiers;
+    const out: Primitive[] = [];
+    for (let t = 0; t < tiers; t++) {
+      const a = from + per * t;
+      if (a >= to) break;
+      out.push(...drawDateGrid(
+        { ...area, y: area.y + bandH * t, h: bandH },
+        layout,
+        // The title belongs to the part, not to each band of it.
+        { ...spec, tiers: 1, range: [a, Math.min(to, a + per)], title: t === 0 ? spec.title : '' },
+      ));
+    }
+    return out;
+  }
+
+  const { left, right, top, bottom } = inset(area);
+  const width = right - left;
+  const out: Primitive[] = [];
+  if (spec.title) {
+    out.push({ type: 'text', x: left, y: top + 2.8, text: spec.title, sizePt: 5.5, color: INK_SOFT, align: 'left' });
+  }
+
   const dateCount = to - from;
   const dayAt = (i: number) => axis[from + i];
   // A month grid has a column per day and no room to say which weekday it is;
@@ -594,6 +639,7 @@ const DATE_GRIDS: Partial<Record<PartKind, (l: Layout) => DateGridSpec>> = {
   weekvert: l => ({
     title: runTitle(l), dates: 'columns', span: 'days',
     cross: { kind: 'time', fromHour: l.dayStartHour, toHour: l.dayEndHour },
+    tiers: l.weekTiers,
   }),
   weekhoriz: l => ({
     title: runTitle(l), dates: 'rows', span: 'days',

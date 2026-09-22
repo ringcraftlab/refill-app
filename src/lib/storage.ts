@@ -35,6 +35,10 @@ function migrate(raw: Record<string, unknown>): Layout | null {
     // 6:00 to 24:00 is what every vertical was drawing already.
     out = { ...out, version: 10, ...DEFAULT_DAY_HOURS };
   }
+  if (out.version === 10) {
+    // One band across is what every vertical was drawing already.
+    out = { ...out, version: 11, weekTiers: 1 };
+  }
   return out.version === SCHEMA_VERSION ? (out as unknown as Layout) : null;
 }
 

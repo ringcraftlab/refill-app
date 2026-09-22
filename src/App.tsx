@@ -77,6 +77,7 @@ function createLayout(): Layout {
     weekStart: 1,
     dayStartHour: 6,
     dayEndHour: 24,
+    weekTiers: 1,
     orientation: 'portrait',
     showNextMonth: true,
     habitCount: 4,
@@ -1279,6 +1280,12 @@ function PartSheet({ target, layout, setLayout, onClose, onRemove, onRemoveSpann
             free lanes, so there is nothing to bound. */}
         {kind === 'weekvert' && (
           <>
+            <Choice
+              label="日の並べ方"
+              options={[{ v: 1, label: '1段' }, { v: 2, label: '2段' }]}
+              value={layout.weekTiers >= 2 ? 2 : 1}
+              onPick={v => setLayout(l => ({ ...l, weekTiers: v }))}
+            />
             <Field label="始まりの時刻">
               <Stepper
                 value={`${layout.dayStartHour}:00`}

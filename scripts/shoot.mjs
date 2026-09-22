@@ -155,4 +155,34 @@ await page.locator('.scrim').click({ position: { x: 10, y: 10 } });
 await page.locator('.scrim').waitFor({ state: 'detached' });
 await shot('14-バーチカルを8時から20時に');
 
+// The month drawn as a part rather than as the spread's band, and the day
+// list, which no scene above reaches either -- they are a different function
+// from `drawSpanningMonthly`, and a change to the label they share went
+// through every scene above without moving a pixel.
+await page.goto(BASE);
+await page.locator('.sizerow', { hasText: '95×170mm' }).click();
+await page.locator('.card', { hasText: '片面' }).click();
+await page.getByRole('button', { name: 'この構成で作る' }).click();
+await page.locator('.page').first().waitFor();
+const only = page.locator('.page').first();
+await drag(await centerOf(await stamp('マンスリー')), await centerOf(only));
+const op = await only.boundingBox();
+await drag(await centerOf(await stamp('日付リスト')), { x: op.x + op.width * 0.5, y: op.y + op.height * 0.85 });
+await shot('15-片面にマンスリーと日付リスト');
+
+// The vertical folded into two bands, each carrying its own hour scale.
+await page.goto(BASE);
+await page.locator('.sizerow', { hasText: '95×170mm' }).click();
+await page.locator('.card', { hasText: '見開き' }).click();
+await page.getByRole('button', { name: 'この構成で作る' }).click();
+await page.locator('.page').first().waitFor();
+await drag(await centerOf(await stamp('バーチカル')), await centerOf(page.locator('.page').first()));
+await page.locator('.range').click();
+// Older builds have one band and no such choice; the scene shoots what it finds.
+const tier2 = page.getByRole('button', { name: '2段', exact: true });
+if (await tier2.count()) await tier2.click();
+await page.locator('.scrim').click({ position: { x: 10, y: 10 } });
+await page.locator('.scrim').waitFor({ state: 'detached' });
+await shot('16-バーチカルを2段に');
+
 await browser.close();
