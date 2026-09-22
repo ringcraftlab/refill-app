@@ -11,7 +11,7 @@ import { nextMonthCell } from './lib/parts';
 import { addDays, addMonths, isoDate, runDates } from './lib/dates';
 import {
   buildPages, buildPrintSheets, datedSlotOf, DEFAULT_PRINT, hasDatedPart, INK_INSET_MM, isDayPaced,
-  MONTH_PACED, paperPlan, punchInset, runEnd, sheetCount,
+  imposeCount, MONTH_PACED, paperPlan, punchInset, runEnd, sheetCount,
 } from './lib/render/pages';
 import type { BackFill, PrintOptions } from './lib/render/pages';
 import { PageSvg, SheetSvg } from './lib/render/svg';
@@ -522,8 +522,8 @@ function SidesScreen({ size, spread, onPick, onBack, onConfirm }: {
 // carries the punch guide, whose rim comes 2.0-3.3mm in, while every other
 // edge is clear for 4.2mm. So the note says the number the user has to
 // compare against their own printer rather than a verdict this cannot reach.
-function EdgeNote({ size }: { size: SizeSpec }) {
-  const plan = paperPlan(size);
+function EdgeNote({ size, count }: { size: SizeSpec; count: number }) {
+  const plan = paperPlan(size, count);
   const tight: string[] = [];
   if (plan.sideMm < 0.75) tight.push('左右');
   if (plan.endMm < 0.75) tight.push('上下');
@@ -1319,9 +1319,9 @@ function PartSheet({ target, layout, setLayout, onClose, onRemove, onRemoveSpann
             <p className="print-summary my-[13px] text-[13px] text-faint">
               {hasDatedPart(layout) && `${layout.year}年${layout.month}月から${layout.monthCount}ヶ月分・`}
               {isDayPaced(layout) && `${sheetCount(layout)}枚・`}
-              {print.impose && `A4 1枚に ${paperPlan(size).perPage} 面`}
+              {print.impose && `A4 1枚に ${paperPlan(size, imposeCount(layout, size, print)).perPage} 面`}
             </p>
-            {print.impose && <EdgeNote size={size} />}
+            {print.impose && <EdgeNote size={size} count={imposeCount(layout, size, print)} />}
 
             <Choice
               label="印刷"

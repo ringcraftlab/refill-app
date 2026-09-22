@@ -7,6 +7,7 @@ import { drawGrid, drawLines, drawMemo, drawPart, drawPartAcross, drawSpanningMo
 import { holeCentres } from '../sizes';
 import { addMonths, isoDate, sheetStarts } from '../dates';
 import { DEFAULT_IMPOSE, impose, planTiles } from './impose';
+import type { TilePlan } from './impose';
 import type { SheetContent } from './impose';
 
 // Turns the editor's layout into printable pages. The on-screen preview and
@@ -281,20 +282,36 @@ export function buildPrintSheets(layout: Layout, size: SizeSpec, opts: PrintOpti
     return opts.duplex ? all.flatMap(s => [s.front, s.back]) : all.map(s => s.front);
   }
 
-  const fronts = impose(all.map(s => s.front), spec);
+  // One plan for the whole job. Both runs place the same number of refills, so
+  // the count is the same either way -- but it has to be decided once, or the
+  // fronts and the backs could be arranged differently and nothing would line
+  // up through the paper.
+  const plan = planTiles({ widthMm: size.widthMm, heightMm: size.heightMm }, spec, all.length);
+  const fronts = impose(all.map(s => s.front), spec, false, plan);
   if (!opts.duplex) return fronts;
 
-  const backs = impose(all.map(s => s.back), spec, true);
+  const backs = impose(all.map(s => s.back), spec, true, plan);
   // Interleaved, so a duplex printer lands each back behind its own front.
   return fronts.flatMap((f, i) => (backs[i] ? [f, backs[i]] : [f]));
 }
 
 // How the refills will sit on the paper, for telling the user before they
 // print: how many to a sheet, and how close to the paper's edge they come.
-export const paperPlan = (size: SizeSpec) =>
-  planTiles({ widthMm: size.widthMm, heightMm: size.heightMm }, DEFAULT_IMPOSE);
+// The count matters -- it is what decides which way the paper is turned -- so
+// the screen passes what the run actually comes to.
+export const paperPlan = (size: SizeSpec, count?: number): TilePlan =>
+  planTiles({ widthMm: size.widthMm, heightMm: size.heightMm }, DEFAULT_IMPOSE, count);
 
-export const perPaperCount = (size: SizeSpec): number => paperPlan(size).perPage;
+export const perPaperCount = (size: SizeSpec, count?: number): number =>
+  paperPlan(size, count).perPage;
+
+// How many physical refill sheets a run comes to, which is what a single
+// imposition run has to place. A spread is two faces on one sheet's back and
+// the next one's front, so it is not simply the sheet count.
+export const imposeCount = (layout: Layout, size: SizeSpec, opts: PrintOptions): number => {
+  const faces = facesInOrder(layout, size, opts.duplex).length * Math.max(1, opts.copies);
+  return opts.duplex ? Math.ceil(faces / 2) + (layout.spread ? 1 : 0) : faces;
+};
 
 // The nearest ink gets to the edge of a refill, which is what decides whether
 // a printer's unprintable border eats any of it. Measured, not assumed: the

@@ -56,7 +56,15 @@ export interface TilePlan {
   endMm: number;
 }
 
-export function planTiles(sheet: { widthMm: number; heightMm: number }, spec: ImposeSpec): TilePlan {
+// `count` is how many refills the run actually has to place. Given it, the
+// plan is chosen by what it costs in paper rather than by how many fit: more
+// to a sheet is not better when the extra places stay empty. Micro5 is the
+// case that made this necessary -- eight to a turned A4, six to an upright
+// one, and a year is six either way, so the turned sheet only bought four
+// empty tiles and an edge with no clearance for the punch guide to survive.
+export function planTiles(
+  sheet: { widthMm: number; heightMm: number }, spec: ImposeSpec, count?: number,
+): TilePlan {
   const { widthMm: pw, heightMm: ph } = spec.paper;
   let best: TilePlan | null = null;
   for (const paper of [{ widthMm: pw, heightMm: ph }, { widthMm: ph, heightMm: pw }]) {
@@ -68,11 +76,18 @@ export function planTiles(sheet: { widthMm: number; heightMm: number }, spec: Im
       sideMm: (paper.widthMm - (cols * sheet.widthMm + (cols - 1) * spec.gapMm)) / 2,
       endMm: (paper.heightMm - (rows * sheet.heightMm + (rows - 1) * spec.gapMm)) / 2,
     };
-    // More refills to the sheet wins. Between two that carry the same number,
-    // the one that stays further from the paper's edge.
+    // Fewest sheets of paper, then fewest places left empty on them, then
+    // furthest from the paper's edge. Without a count to go on there is no
+    // paper to compare, so it falls back to the most to a sheet.
     const room = (t: TilePlan) => Math.min(t.sideMm, t.endMm);
-    if (!best || plan.perPage > best.perPage
-      || (plan.perPage === best.perPage && room(plan) > room(best))) best = plan;
+    const score = (t: TilePlan): [number, number, number] => {
+      if (!count) return [0, -t.perPage, -room(t)];
+      const pages = Math.ceil(count / t.perPage);
+      return [pages, pages * t.perPage - count, -room(t)];
+    };
+    if (!best) { best = plan; continue; }
+    const [a, b] = [score(plan), score(best)];
+    if (a[0] < b[0] || (a[0] === b[0] && (a[1] < b[1] || (a[1] === b[1] && a[2] < b[2])))) best = plan;
   }
   // A refill bigger than the paper still has to go somewhere. One to a page,
   // overhanging, is a truthful thing to show and a truthful thing to print.
@@ -138,9 +153,14 @@ function cutLines(rects: { x: number; y: number; w: number; h: number }[]): Prim
 // `mirrorColumns` is what makes duplex work: the back of a sheet meets the
 // front after the paper is turned over, so its tiles have to run the other way
 // across the page or nothing lines up.
-export function impose(sheets: SheetContent[], spec: ImposeSpec, mirrorColumns = false): SheetContent[] {
+// `plan` is passed in when the front and back of the same paper have to agree:
+// choosing it twice could land on two different arrangements and nothing would
+// line up through the sheet.
+export function impose(
+  sheets: SheetContent[], spec: ImposeSpec, mirrorColumns = false, plan?: TilePlan,
+): SheetContent[] {
   if (sheets.length === 0) return [];
-  const { paper, cols, rows, perPage } = planTiles(sheets[0], spec);
+  const { paper, cols, rows, perPage } = plan ?? planTiles(sheets[0], spec, sheets.length);
 
   const { widthMm: tw, heightMm: th } = sheets[0];
   const blockW = cols * tw + (cols - 1) * spec.gapMm;
