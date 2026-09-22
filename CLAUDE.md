@@ -24,7 +24,7 @@
 **コードを読んで「直った」と結論しない。実際に動かして見る。**
 
 ```bash
-npm run check                # ビルド→preview→5つの確認を並列。90秒くらい
+npm run check                # ビルド→preview→5つの確認を並列。17秒
 npm run check -- shoot pdf   # 一部だけ
 npm run check -- --keep      # 自分で見に行くので preview を残す
 npm run check -- --no-build  # 直前のビルドのまま
@@ -34,7 +34,6 @@ npm run rules                # 紙に出る数の不変条件。ブラウザ不�
 npm run koyomi               # 六曜と祝日を外部実装と照合（暦を触ったとき）
 ```
 
-`npm run check` は**バックグラウンドで走らせる**（120秒のコマンド制限に近い）。
 ブラウザの場所・preview の起動・出力先はスクリプト側が持っている。手で
 `CHROMIUM_PATH=...` を前置したり `vite preview` を建てたりしなくていい。
 
@@ -82,4 +81,4 @@ Tailwindに移したときは、これで4つのズレが見つかった。prefl
 | `src/lib/kyureki.ts` | 旧暦と六曜 |
 | `src/lib/holidays.ts` | 祝日（法律の条文どおりに計算する。表ではない） |
 | `src/lib/**` | **Reactを知らない。** 幾何・パーツ描画・面付け・PDF |
-| `scripts/*.mjs` | 検証用。アプリには含まれない |
+| `scripts/*.mjs` `*.mts` | 検証用。アプリには含まれない |
