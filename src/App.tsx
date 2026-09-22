@@ -107,8 +107,17 @@ export function App() {
 
 // Smallest first, drawn to one scale so the list itself shows how the sizes
 // compare.
-const SIZE_ORDER: RefillSize[] = [
-  'MINI3', 'CARD3', 'M5', 'M5SQ', 'M6', 'NARROW', 'BIBLE', 'A5SLIM', 'A5',
+// The picker's rows, smallest first. Sizes that take the same punch sit
+// together -- Narrow and Bible are the same six holes on a wider sheet, so are
+// A5 slim and A5, and Micro 5's punch is what the square one uses -- so a row
+// reads as "these go in the same binder". Mini 6 has no partner, and its row
+// is left half empty rather than filled with a stranger.
+const SIZE_ROWS: RefillSize[][] = [
+  ['MINI3', 'CARD3'],
+  ['M5', 'M5SQ'],
+  ['M6'],
+  ['NARROW', 'BIBLE'],
+  ['A5SLIM', 'A5'],
 ];
 // A colour per size, so a glance tells them apart even before the millimetres
 // are read. Muted enough to still look like paper on the warm background.
@@ -140,13 +149,17 @@ const SIZE_CODE: Record<RefillSize, string> = {
   NARROW: 'ナロー', BIBLE: 'バイブル', A5SLIM: 'A5スリム', A5: 'A5',
 };
 // The sheet in a picker row, drawn to fit a box rather than to one shared
-// scale: a row is 40px tall and A5 is twice the height of Micro 5, so a shared
-// scale would leave the small sizes as specks. The shape still tells them
-// apart -- square, slim, wide -- and the name carries the rest.
-const ICON_BOX = 30;
+// scale: A5 is twice the height of Micro 5, so a shared scale would leave the
+// small sizes as specks. The shape still tells them apart -- square, slim,
+// wide, holes along the top -- and the name carries the rest.
+// Two limits, not one: the height is what makes the sheet read as a sheet,
+// but a square one would then be as wide as it is tall and leave the name no
+// room, so the width is capped tighter.
+const ICON_H = 44;
+const ICON_W = 30;
 
 function SizeIcon({ size, tint }: { size: SizeSpec; tint: { fill: string; line: string } }) {
-  const k = ICON_BOX / Math.max(size.widthMm, size.heightMm);
+  const k = Math.min(ICON_H / size.heightMm, ICON_W / size.widthMm);
   const w = size.widthMm * k, h = size.heightMm * k;
   // Holes run along the binding edge, which is the top on a card bound there.
   const onTop = size.bindEdge === 'short';
@@ -154,8 +167,8 @@ function SizeIcon({ size, tint }: { size: SizeSpec; tint: { fill: string; line: 
   return (
     <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} className="block shrink-0" aria-hidden="true">
       <rect
-        x={0.3} y={0.3} width={w - 0.6} height={h - 0.6}
-        rx={1.2} fill={tint.fill} stroke={tint.line} strokeWidth={0.6}
+        x={0.6} y={0.6} width={w - 1.2} height={h - 1.2}
+        rx={2} fill={tint.fill} stroke={tint.line} strokeWidth={1.2}
       />
       {holeCentres(size.holes).map((at, i) => (
         <circle
@@ -163,8 +176,8 @@ function SizeIcon({ size, tint }: { size: SizeSpec; tint: { fill: string; line: 
           cx={onTop ? at * k : band} cy={onTop ? band : at * k}
           // In pixels, not millimetres: a 5.5mm punch on a sheet drawn at a
           // seventh of size would be half a pixel across.
-          r={0.9}
-          fill="#fff" stroke={tint.line} strokeWidth={0.5}
+          r={1.4}
+          fill="#fff" stroke={tint.line} strokeWidth={0.9}
         />
       ))}
     </svg>
@@ -181,38 +194,40 @@ function SizeScreen({ selected, onPick }: { selected: RefillSize; onPick: (s: Re
           overflows -- `justify-center` on a scrolling column would push the
           first row above the scroll origin, where nothing can reach it. */}
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+        {/* A grid, not nested flex rows: its columns are exactly half each,
+            where a flex item would refuse to shrink below its own name and
+            the longest one on a row would push the column edge over. */}
         <div className="mb-auto grid w-full grid-cols-2 gap-2 py-1">
-          {SIZE_ORDER.map((id, i) => {
-            const s = SIZES[id];
-            // An odd count leaves the last one alone on its row. It keeps a
-            // column's width and sits in the middle, so the list still reads
-            // as one run of sizes.
-            const alone = i === SIZE_ORDER.length - 1 && SIZE_ORDER.length % 2 === 1;
-            return (
-              <button
-                key={id}
-                onClick={() => onPick(id)}
-                className={`sizerow flex items-center gap-1.5 rounded-2xl border bg-white py-2 pl-2 pr-2 text-left shadow-[0_1px_3px_rgba(58,54,46,0.07)] ${
-                  alone ? 'col-span-2 w-[calc(50%-4px)] justify-self-center' : ''
-                } ${selected === id ? 'border-ink' : 'border-line'}`}
-              >
-                {/* A colour a glance can learn the size by, before the name is
-                    read. */}
-                <span
-                  className="h-8 w-[5px] shrink-0 rounded-full"
-                  style={{ background: SIZE_TINT[id].line }}
-                />
-                <strong className="min-w-0 flex-1 truncate text-[13px] font-semibold leading-tight">
-                  {SIZE_CODE[id]}
-                </strong>
-                <SizeIcon size={s} tint={SIZE_TINT[id]} />
-                {/* Decoration: it says "this opens something", which the
-                    button already says, so it stays out of the name a screen
-                    reader reads. */}
-                <span aria-hidden="true" className="shrink-0 text-[13px] leading-none text-faint">›</span>
-              </button>
-            );
-          })}
+          {SIZE_ROWS.flatMap(row => (row.length === 1 ? [...row, null] : row)).map((id, i) => (
+            id === null
+              // Mini 6 shares its punch with nothing, so the rest of its row
+              // stays empty and the pairs below stay paired.
+              ? <span key={`empty-${i}`} aria-hidden="true" />
+              : (
+                <button
+                  key={id}
+                  onClick={() => onPick(id)}
+                  className={`sizerow flex min-w-0 items-center gap-1.5 rounded-[18px] border bg-white py-2.5 pl-2 pr-1.5 text-left shadow-[0_1px_3px_rgba(58,54,46,0.07)] ${
+                    selected === id ? 'border-ink' : 'border-line'
+                  }`}
+                >
+                  {/* A colour a glance can learn the size by, before the name
+                      is read. */}
+                  <span
+                    className="h-11 w-[5px] shrink-0 rounded-full"
+                    style={{ background: SIZE_TINT[id].line }}
+                  />
+                  <strong className="min-w-0 flex-1 truncate text-[14px] font-semibold leading-tight">
+                    {SIZE_CODE[id]}
+                  </strong>
+                  <SizeIcon size={SIZES[id]} tint={SIZE_TINT[id]} />
+                  {/* Decoration: it says "this opens something", which the
+                      button already says, so it stays out of the name a screen
+                      reader reads. */}
+                  <span aria-hidden="true" className="shrink-0 text-[13px] leading-none text-faint">›</span>
+                </button>
+              )
+          ))}
         </div>
       </div>
     </div>
