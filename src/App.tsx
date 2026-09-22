@@ -33,19 +33,110 @@ const GAP = 6;
 const SCREEN = 'relative mx-auto flex h-full max-w-[430px] flex-col overflow-hidden bg-bg';
 const SCREEN_PAD = `${SCREEN} gap-[18px] px-[22px] py-7`;
 
-const TRAY: { kind: PartKind; label: string; glyph: string }[] = [
-  { kind: 'monthly', label: 'マンスリー', glyph: '31' },
-  { kind: 'daylist', label: '日付リスト', glyph: '日' },
-  { kind: 'weekvert', label: 'バーチカル', glyph: '時' },
-  { kind: 'weekhoriz', label: 'ウィークリー', glyph: '週' },
-  { kind: 'gantt', label: 'ガント', glyph: '▤' },
-  { kind: 'habit', label: 'ハビット', glyph: '✓' },
-  { kind: 'todo', label: 'TODO', glyph: '☐' },
-  { kind: 'goal', label: '目標', glyph: '◎' },
-  { kind: 'budget', label: '家計', glyph: '¥' },
-  { kind: 'grid', label: '方眼', glyph: '#' },
-  { kind: 'lines', label: '罫線', glyph: '≡' },
-  { kind: 'memo', label: 'メモ', glyph: '✎' },
+// What a stamp shows. A character said what the part was called -- 時 for the
+// vertical, 週 for the horizontal -- which is no help at all when the question
+// is what the two of them are. The real page shrunk to this size is no help
+// either: measured at the stamp's own height, a monthly, a gantt and a habit
+// tracker come out as the same smudge, and it takes about six times the room
+// before they separate. So the stamp draws the part's shape instead: columns,
+// bands, staggered bars, a tick grid. Nothing is to scale and nothing is
+// dated -- it is the arrangement, which is the one thing that tells these
+// apart at twenty-six pixels across.
+//
+// Drawn on a 26x18 grid, in the same stroke weight, so twelve of them read as
+// one set rather than twelve drawings.
+const ICON_W = 26;
+const ICON_H = 18;
+
+function StampIcon({ kind }: { kind: PartKind }) {
+  const line = (x1: number, y1: number, x2: number, y2: number, i: number) =>
+    <line key={`l${i}`} x1={x1} y1={y1} x2={x2} y2={y2} />;
+  const cells: React.ReactNode[] = [];
+
+  // A frame every one of them sits in, so the set has one silhouette.
+  const frame = <rect key="f" x={0.75} y={0.75} width={ICON_W - 1.5} height={ICON_H - 1.5} rx={1.5} />;
+  const cols = (n: number, from = 0) =>
+    Array.from({ length: n - 1 }, (_, i) =>
+      line(from + ((ICON_W - from) / n) * (i + 1), 0.75, from + ((ICON_W - from) / n) * (i + 1), ICON_H - 0.75, i));
+  const rows = (n: number, from = 0) =>
+    Array.from({ length: n - 1 }, (_, i) =>
+      line(0.75, from + ((ICON_H - from) / n) * (i + 1), ICON_W - 0.75, from + ((ICON_H - from) / n) * (i + 1), 100 + i));
+
+  if (kind === 'monthly') { cells.push(...cols(7), ...rows(4, 4), line(0.75, 4, ICON_W - 0.75, 4, 9)); }
+  // A date gutter down the side, and a line to write on for each day.
+  if (kind === 'daylist') { cells.push(line(6, 0.75, 6, ICON_H - 0.75, 0), ...rows(5)); }
+  // Hours down the left, a day to each column, a header band on top.
+  if (kind === 'weekvert') { cells.push(line(5, 0.75, 5, ICON_H - 0.75, 0), line(0.75, 4.5, ICON_W - 0.75, 4.5, 1), ...cols(5, 5)); }
+  // A band to a day, each with its date at the start.
+  if (kind === 'weekhoriz') { cells.push(...rows(4), line(5, 0.75, 5, ICON_H - 0.75, 0)); }
+  // Bars at different starts and lengths -- the one thing a gantt looks like.
+  if (kind === 'gantt') {
+    cells.push(line(0.75, 4.5, ICON_W - 0.75, 4.5, 0));
+    cells.push(<rect key="b1" x={4} y={6.5} width={9} height={2.4} rx={1.2} />);
+    cells.push(<rect key="b2" x={9} y={10.5} width={11} height={2.4} rx={1.2} />);
+    cells.push(<rect key="b3" x={6} y={14.5} width={7} height={2.4} rx={1.2} />);
+  }
+  // Named lanes on the left and marks across them. Drawn as marks rather than
+  // as an empty grid, or it is the calendar again: what a habit tracker looks
+  // like in use is the ticks, not the ruling.
+  if (kind === 'habit') {
+    cells.push(line(9, 0.75, 9, ICON_H - 0.75, 0), ...rows(4));
+    const at = [[0, 0], [2, 0], [3, 0], [1, 1], [2, 1], [0, 2], [3, 2]];
+    cells.push(<g key="ticks" strokeWidth={0}>
+      {at.map(([c, r], i) => (
+        <circle key={i} cx={11.8 + c * 3.6} cy={5.1 + r * 4.4} r={1.15} fill="currentColor" />
+      ))}
+    </g>);
+  }
+  if (kind === 'todo') {
+    cells.push(...[4.5, 9.5, 14.5].flatMap((y, i) => [
+      <rect key={`b${i}`} x={3.5} y={y - 1.6} width={3.2} height={3.2} rx={0.8} />,
+      line(9, y, ICON_W - 3.5, y, i),
+    ]));
+  }
+  // A heading, then the box you write the goal in. Short rule over a panel,
+  // so it does not read as another ruled sheet.
+  if (kind === 'goal') {
+    cells.push(line(3.5, 5, 11, 5, 0));
+    cells.push(<rect key="panel" x={3.5} y={8} width={ICON_W - 7} height={6.5} rx={1} />);
+  }
+  // What it was and what it cost: two columns, the money one narrow.
+  if (kind === 'budget') { cells.push(line(17, 0.75, 17, ICON_H - 0.75, 0), ...rows(4)); }
+  // Finer and lighter than the calendar's cells, or the two read as the same
+  // grid: this one is paper to draw on, not a month to fill in.
+  if (kind === 'grid') {
+    cells.push(<g key="fine" strokeWidth={0.45}>{[...cols(8), ...rows(6)]}</g>);
+  }
+  if (kind === 'lines') { cells.push(...rows(5)); }
+  // Fewer lines than the ruled sheet, and not to the edges: somewhere to put
+  // a few words rather than a page to fill.
+  if (kind === 'memo') { cells.push(line(3.5, 6.5, ICON_W - 3.5, 6.5, 0), line(3.5, 11.5, ICON_W - 3.5, 11.5, 1)); }
+
+  return (
+    <svg
+      width={ICON_W} height={ICON_H} viewBox={`0 0 ${ICON_W} ${ICON_H}`}
+      fill="none" stroke="currentColor" strokeWidth={0.9} strokeLinecap="round"
+      aria-hidden="true"
+    >
+      {frame}
+      <g strokeWidth={0.7}>{cells}</g>
+    </svg>
+  );
+}
+
+const TRAY: { kind: PartKind; label: string }[] = [
+  { kind: 'monthly', label: 'マンスリー' },
+  { kind: 'daylist', label: '日付リスト' },
+  { kind: 'weekvert', label: 'バーチカル' },
+  { kind: 'weekhoriz', label: 'ウィークリー' },
+  { kind: 'gantt', label: 'ガント' },
+  { kind: 'habit', label: 'ハビット' },
+  { kind: 'todo', label: 'TODO' },
+  { kind: 'goal', label: '目標' },
+  { kind: 'budget', label: '家計' },
+  { kind: 'grid', label: '方眼' },
+  { kind: 'lines', label: '罫線' },
+  { kind: 'memo', label: 'メモ' },
 ];
 
 const TAUGHT_KEY = 'ringcraft.dividerTaught';
@@ -978,7 +1069,7 @@ function CanvasScreen({ layout, setLayout, onBack }: {
           return (
             <button
               key={t.kind}
-              className={`stamp relative flex w-[60px] shrink-0 touch-none flex-col items-center gap-1 rounded-xl border-[1.5px] py-[9px] text-[9px] font-semibold ${
+              className={`stamp relative flex w-[60px] shrink-0 touch-none flex-col items-center gap-[3px] rounded-xl border-[1.5px] py-[8px] text-[9px] font-semibold ${
                 idx >= 0 ? 'border-accent bg-accent-soft' : 'border-line bg-white'
               }`}
               onPointerDown={e => startDrag(e, idx >= 0 && traySelected.length > 1 ? [...traySelected] : [t.kind], null)}
@@ -990,7 +1081,7 @@ function CanvasScreen({ layout, setLayout, onBack }: {
                   {idx + 1}
                 </i>
               )}
-              <span className="text-[15px] leading-none">{t.glyph}</span>
+              <StampIcon kind={t.kind} />
               <span>{t.label}</span>
             </button>
           );
