@@ -111,32 +111,27 @@ export function App() {
 // exist and have to be reachable, but putting them in the same run makes the
 // first choice harder than it is. Rows inside a group are pairs, and a size
 // with no partner leaves the rest of its row empty.
-// Pixels per millimetre, one number for a whole group, so A5 comes out twice
-// the height of M5 and the drawing finally answers the question the screen is
-// asking. Fitting each sheet to its own box -- which is what this did -- drew
-// all nine at the same size, and a picture that is the same for every size is
-// the one thing a picture here must not be.
-//
-// The group people actually use is drawn large and the rest are held back, so
-// the two scales differ. The price is that a sheet cannot be compared across
-// the heading: M5 and M5 square are both 105mm tall and are not drawn the
-// same height. Within a group -- which is where the eye compares, and where
-// both lists are sorted by size -- every sheet is to scale against every
-// other.
-const SIZE_GROUPS: { title: string; scale: number; rows: RefillSize[][] }[] = [
-  { title: 'よく使われるサイズ', scale: 0.36, rows: [['M5', 'M6'], ['BIBLE', 'A5']] },
-  { title: 'その他サイズ', scale: 0.28, rows: [['MINI3', 'CARD3'], ['M5SQ', 'NARROW'], ['A5SLIM']] },
+const SIZE_GROUPS: { title: string; rows: RefillSize[][] }[] = [
+  { title: 'よく使われるサイズ', rows: [['M5', 'M6'], ['BIBLE', 'A5']] },
+  { title: 'その他サイズ', rows: [['MINI3', 'CARD3'], ['M5SQ', 'NARROW'], ['A5SLIM']] },
 ];
 
-// The sheets sit in a column as wide and as tall as the group's largest, so
-// the names keep one edge and the chevrons keep another instead of stepping
-// in and out as the paper changes size.
-const slotOf = (group: { scale: number; rows: RefillSize[][] }) => {
-  const ids = group.rows.flat();
-  return {
-    width: Math.max(...ids.map(id => SIZES[id].widthMm)) * group.scale,
-    height: Math.max(...ids.map(id => SIZES[id].heightMm)) * group.scale,
-  };
+// Pixels per millimetre. One number for all nine, which is the whole trick:
+// what lets the eye compare is not the drawing on any one card but the fact
+// that every card is the same box and only the paper inside it changes. Two
+// numbers, one per group, was worse than the bug it replaced -- A5 slim is
+// 210mm and came out shorter than Bible's 170mm, and M5 and M5 square are
+// both 105mm tall and were drawn 8px apart. A drawing that contradicts the
+// millimetres printed under it is worth less than no drawing.
+const SHEET_SCALE = 0.34;
+
+// Every sheet sits in a box the size of the largest, on every card and on the
+// screen after it. That box is the ruler: a sheet filling it is A5, one
+// filling a third of it is a third of A5, and that reads without moving the
+// eye off the card.
+const SHEET_SLOT = {
+  width: Math.max(...Object.values(SIZES).map(s => s.widthMm)) * SHEET_SCALE,
+  height: Math.max(...Object.values(SIZES).map(s => s.heightMm)) * SHEET_SCALE,
 };
 
 // A colour per size, spread around the wheel rather than clustered: the four
@@ -170,10 +165,14 @@ const SIZE_NAME: Record<RefillSize, { code: string; read?: string }> = {
 };
 const sizeMm = (s: SizeSpec) => `${s.widthMm}×${s.heightMm}mm`;
 
-// Two columns on a 320px phone leave the name about 70px, and truncating a
-// Japanese name to 「縦長ミ…」 throws away the one word that tells the two
-// three-hole sizes apart. The long names shrink instead of being cut.
-const nameSize = (code: string) => (code.length > 4 ? 'text-[11px]' : 'text-[13px]');
+// Truncating a Japanese name to 「縦長ミ…」 throws away the one word that
+// tells the two three-hole sizes apart, so the long names shrink instead of
+// being cut -- and shrink once more on a 320px phone, where two columns and a
+// sheet drawn to scale leave them 60px and they want 62. One pixel off six
+// characters buys it; taking it out of the sheet instead would cost every
+// size on the screen 6% to fit two names.
+const nameSize = (code: string) =>
+  (code.length > 4 ? 'text-[10px] min-[360px]:text-[11px]' : 'text-[13px]');
 
 // Selection is the accent outline and a ring of it; the card itself stays
 // white. It used to be washed with the size's own colour, which took contrast
@@ -205,9 +204,10 @@ const HOLE_RING_PX = 0.9;
 // would break out through the edge of the paper it is punched in.
 const HOLE_MIN_PX = 1;
 
-function SizeIcon({ size, tint, scale: k, flip = false }: {
-  size: SizeSpec; tint: { fill: string; line: string }; scale: number; flip?: boolean;
+function SizeIcon({ size, tint, flip = false }: {
+  size: SizeSpec; tint: { fill: string; line: string }; flip?: boolean;
 }) {
+  const k = SHEET_SCALE;
   const pen = (onScreen: number) => onScreen / k;
   const onTop = size.ringsOn === 'top';
   // `flip` is the left page of a spread: the binding is the seam between the
@@ -257,9 +257,7 @@ function SizeScreen({ selected, onPick }: { selected: RefillSize; onPick: (s: Re
           first row above the scroll origin, where nothing can reach it. */}
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
         <div className="mb-auto flex w-full flex-col gap-3 py-0.5">
-          {SIZE_GROUPS.map(group => {
-            const slot = slotOf(group);
-            return (
+          {SIZE_GROUPS.map(group => (
             <section key={group.title} className="flex flex-col gap-1.5">
               <h2 className="m-0 text-[11px] font-bold tracking-[0.04em] text-muted">{group.title}</h2>
               {/* A grid, not nested flex rows: its columns are exactly half
@@ -301,8 +299,8 @@ function SizeScreen({ selected, onPick }: { selected: RefillSize; onPick: (s: Re
                             {sizeMm(SIZES[id])}
                           </span>
                         </span>
-                        <span className="flex shrink-0 items-center justify-center" style={slot}>
-                          <SizeIcon size={SIZES[id]} tint={SIZE_TINT[id]} scale={group.scale} />
+                        <span className="flex shrink-0 items-center justify-center" style={SHEET_SLOT}>
+                          <SizeIcon size={SIZES[id]} tint={SIZE_TINT[id]} />
                         </span>
                         {/* Decoration: it says "this opens something", which
                             the button already says, so it stays out of the
@@ -318,8 +316,7 @@ function SizeScreen({ selected, onPick }: { selected: RefillSize; onPick: (s: Re
                 ))}
               </div>
             </section>
-            );
-          })}
+          ))}
         </div>
       </div>
     </div>
@@ -330,18 +327,16 @@ function SizeScreen({ selected, onPick }: { selected: RefillSize; onPick: (s: Re
 // just chosen, its own sheet drawn to scale, and the accent outline for the
 // one that is selected. Two screens in a row that look unrelated read as two
 // unrelated decisions, and this is the second half of one decision -- so the
-// sheet is drawn at the picker's own scale, in a slot the picker's own
-// height, and the paper the finger just touched is the same paper, the same
-// size, on the screen that follows. Drawing it larger here because there was
-// room made the two screens look like two different apps.
+// sheet keeps the picker's scale and the picker's slot, and the paper the
+// finger just touched is the same paper, the same size, on the screen that
+// follows. Drawing it larger here because there was room made the two
+// screens look like two different apps.
 function SidesScreen({ size, spread, onPick, onBack, onConfirm }: {
   size: RefillSize; spread: boolean; onPick: (v: boolean) => void;
   onBack: () => void; onConfirm: () => void;
 }) {
   const spec = SIZES[size];
   const tint = SIZE_TINT[size];
-  const common = SIZE_GROUPS[0];
-  const slot = slotOf(common);
   const rows: { on: boolean; pick: boolean; title: string; note: string; sheets: boolean[] }[] = [
     {
       on: spread, pick: true, title: '見開き（2ページ）', note: '左右セットで1ヶ月分',
@@ -374,9 +369,9 @@ function SidesScreen({ size, spread, onPick, onBack, onConfirm }: {
               <strong className="text-[14px] font-semibold leading-tight">{row.title}</strong>
               <span className="text-[11px] leading-tight text-faint">{row.note}</span>
             </span>
-            <span className="flex shrink-0 items-center justify-center gap-[3px]" style={{ height: slot.height }}>
+            <span className="flex shrink-0 items-center justify-center gap-[3px]" style={{ height: SHEET_SLOT.height }}>
               {row.sheets.map((flip, i) => (
-                <SizeIcon key={i} size={spec} tint={tint} scale={common.scale} flip={flip} />
+                <SizeIcon key={i} size={spec} tint={tint} flip={flip} />
               ))}
             </span>
           </button>
