@@ -284,6 +284,9 @@ export function buildGeometry(layout: Layout, size: SizeSpec, flipBinding = fals
   const slices: SurfaceSlice[] = [];
   let cursor = 0;
   boxes.forEach(({ key, box }) => {
+    // A surface held to one page of a spread contributes only that page; the
+    // other stays blank, which is what was asked for by dropping on the edge.
+    if (layout.surface.page && key !== layout.surface.page) return;
     const leftover = box.usableH - bandOf(key);
     if (leftover <= 0.5) return;
     slices.push({ key, fromMm: cursor, toMm: cursor + box.usableW, ox: box.ox, oy: box.oy + bandOf(key) });
@@ -385,9 +388,37 @@ function remapDrop(
   return { sx: to.fromMm + share * (to.toMm - to.fromMm), sy };
 }
 
+// How far in from a spread's outer edge still counts as asking for that page
+// alone. A quarter of the page: far enough in to be deliberate, and it leaves
+// the middle half of the spread meaning what it always meant.
+const EDGE_SHARE = 0.25;
+
+// Which page a drop is asking for, or null for the spread as a whole. Only
+// the first thing on an empty spread can ask: once something is placed, the
+// surface has a shape and a drop against its edge means a region within it.
+function edgePage(layout: Layout, size: SizeSpec, at: DropPoint): PageKey | null {
+  if (!layout.spread || layout.surface.placed.length > 0 || layout.spanning) return null;
+  const { slices } = buildGeometry(layout, size).surface;
+  if (slices.length < 2) return null;
+  const first = slices[0];
+  const last = slices[slices.length - 1];
+  if (at.sx <= first.fromMm + (first.toMm - first.fromMm) * EDGE_SHARE) return first.key;
+  if (at.sx >= last.toMm - (last.toMm - last.fromMm) * EDGE_SHARE) return last.key;
+  return null;
+}
+
 export function placeParts(
   prev: Layout, size: SizeSpec, kinds: PartKind[], at: DropPoint | null,
 ): Placement | null {
+  // Dropped against the outer edge of a spread: that page, and the facing one
+  // left blank. A calendar arriving this way is a part on a page rather than
+  // the band across both, which is the whole point of aiming at the edge.
+  const page = at ? edgePage(prev, size, at) : null;
+  if (page) {
+    const onePage: Layout = { ...prev, surface: { ...prev.surface, page } };
+    const held = attempt(onePage, size, kinds, remapDrop(at!, prev, onePage, size), true);
+    if (held) return held;
+  }
   // Dropping onto the calendar, rather than under it, asks for a place beside
   // it. The band runs the full width of the spread, so there is no side of it
   // to be on: the only arrangement that answers the gesture is the calendar
@@ -484,7 +515,11 @@ function attempt(
       const first = at
         ? (split === 'v' ? at.sx < widthMm / 2 : at.sy < heightMm / 2)
         : false;
+      // Spread, not rebuilt: an arrangement is the surface with its parts
+      // rearranged, and anything else the surface carries -- the page it is
+      // held to -- belongs to the surface, not to the arrangement.
       candidates.push({
+        ...cur,
         placed: first ? [incoming, ...cur.placed] : [...cur.placed, incoming],
         ratios: {},
         split,
@@ -498,7 +533,7 @@ function attempt(
     const keep = cur.placed.length > 0 ? cur.split : splitFor(widthMm, heightMm);
     for (const split of [keep, keep === 'h' ? 'v' : 'h'] as const) {
       for (const order of orderings(toAdd)) {
-        candidates.push({ placed: [...cur.placed, ...order], ratios: {}, split });
+        candidates.push({ ...cur, placed: [...cur.placed, ...order], ratios: {}, split });
       }
     }
   }

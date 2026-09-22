@@ -600,7 +600,13 @@ function CanvasScreen({ layout, setLayout, onBack }: {
         spanning: prev.spanning && placed.length === 0
           ? { ...prev.spanning, ratio: 1 }
           : prev.spanning,
-        surface: { ...prev.surface, placed, ratios: {} },
+        // An empty spread is a whole spread again: the page a part was held
+        // to goes with the part, or the next thing dropped in the middle
+        // would still come out on one side.
+        surface: {
+          ...prev.surface, placed, ratios: {},
+          page: placed.length === 0 ? undefined : prev.surface.page,
+        },
       };
     });
     setSheet(null);

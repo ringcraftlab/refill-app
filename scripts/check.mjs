@@ -25,7 +25,7 @@ const only = args.filter(a => !a.startsWith('-'));
 // a PDF and waits on it.
 const CHECKS = [
   { id: 'pdf', script: 'pdfcheck.mjs', out: 'shots/pdf', what: '用紙サイズと面付け' },
-  { id: 'shoot', script: 'shoot.mjs', out: 'shots/shoot', what: '主要16場面' },
+  { id: 'shoot', script: 'shoot.mjs', out: 'shots/shoot', what: '主要17場面' },
   { id: 'ux', script: 'uxcheck.mjs', out: 'shots/ux', what: '×と確認ダイアログ' },
   { id: 'print', script: 'printpreview.mjs', out: 'shots/print', what: '刷り上がりプレビュー' },
   { id: 'multidrop', script: 'multidrop.mjs', out: null, what: 'まとめてドラッグ' },

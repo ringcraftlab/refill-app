@@ -185,4 +185,24 @@ await page.locator('.scrim').click({ position: { x: 10, y: 10 } });
 await page.locator('.scrim').waitFor({ state: 'detached' });
 await shot('16-バーチカルを2段に');
 
+// Dropped against the outer edge of a spread: that page alone, the facing one
+// blank. Folded into two bands as well, which is the shape the request came
+// in as -- a week on one page you can actually write in.
+await page.goto(BASE);
+await page.locator('.sizerow', { hasText: '95×170mm' }).click();
+await page.locator('.card', { hasText: '見開き' }).click();
+await page.getByRole('button', { name: 'この構成で作る' }).click();
+await page.locator('.page').first().waitFor();
+const edgeL = await page.locator('.page').first().boundingBox();
+await drag(
+  await centerOf(await stamp('バーチカル')),
+  { x: edgeL.x + edgeL.width * 0.08, y: edgeL.y + edgeL.height * 0.5 },
+);
+await page.locator('.range').click();
+const edgeTier = page.getByRole('button', { name: '2段', exact: true });
+if (await edgeTier.count()) await edgeTier.click();
+await page.locator('.scrim').click({ position: { x: 10, y: 10 } });
+await page.locator('.scrim').waitFor({ state: 'detached' });
+await shot('17-左端に落として片ページ2段');
+
 await browser.close();

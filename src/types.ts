@@ -98,6 +98,11 @@ export type PageKey = 'single' | 'left' | 'right';
 // the spread, one that fits in a half sits on that page alone.
 export interface Surface {
   placed: PartKind[];
+  // Which page of a spread the parts live on. Omitted -- which is what every
+  // layout saved before this said -- means both, the surface running across
+  // the gutter as one. Set by dropping against a spread's outer edge, which
+  // is the gesture for "this page only" and leaves the facing page blank.
+  page?: PageKey;
   // Where the shared borders sit. This is the whole point of the app: a
   // commercial refill's memo area is fixed, here you drag it wider.
   ratios: { a?: number; b?: number; c?: number };
