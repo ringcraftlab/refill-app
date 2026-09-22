@@ -152,15 +152,20 @@ const sizeMm = (s: SizeSpec) => `${s.widthMm}×${s.heightMm}mm`;
 // three-hole sizes apart. The long names shrink instead of being cut.
 const nameSize = (code: string) => (code.length > 4 ? 'text-[11px]' : 'text-[13px]');
 
-// The selected card is tinted with its own colour and outlined in the accent.
-// One constant, because the sheet drawn on the card shows the same wash back
-// through its punch: change it in one place and the holes stop matching the
-// card they are punched over.
-const WASH = '59';
-const cardSkin = (on: boolean, tint: string) =>
+// Selection is the accent outline and a ring of it; the card itself stays
+// white. It used to be washed with the size's own colour, which took contrast
+// off everything on the card at the one moment it mattered most -- the
+// reading and the millimetres fell from 3.76 and 2.11 to 3.2 and 1.8, the
+// colour bar from 3.5 to 2.4, and the sheet, being that same colour at full
+// strength, was left with nothing but its outline to be seen by. The colour
+// is already on the card twice, as the bar and as the sheet; a third coat of
+// it only took away.
+const CARD_SHADOW = '0 1px 3px rgba(58,54,46,0.07)';
+const cardSkin = (on: boolean) =>
   ({
     borderColor: on ? 'var(--color-accent)' : 'var(--color-line)',
-    background: on ? `${tint}${WASH}` : '#fff',
+    background: '#fff',
+    boxShadow: on ? `0 0 0 3px rgba(193,115,74,0.18), ${CARD_SHADOW}` : CARD_SHADOW,
   }) as const;
 
 // Two limits, not one: the height is what makes the sheet read as a sheet,
@@ -183,17 +188,10 @@ const HOLE_RING_PX = 0.9;
 // would break out through the edge of the paper it is punched in.
 const HOLE_MIN_PX = 1;
 
-// `on` is the card being selected, which washes it with this very colour. A
-// sheet is the lighter thing lying on the desk, so on a plain white card the
-// sheet is the one carrying the colour and on a washed one it goes white --
-// tinted paper on a tinted desk left nothing but the outline to see it by.
-// The punch shows the desk through the paper in both cases.
-function SizeIcon({ size, tint, on = false, flip = false, box = { h: ICON_H, w: ICON_W } }: {
-  size: SizeSpec; tint: { fill: string; line: string }; on?: boolean; flip?: boolean;
+function SizeIcon({ size, tint, flip = false, box = { h: ICON_H, w: ICON_W } }: {
+  size: SizeSpec; tint: { fill: string; line: string }; flip?: boolean;
   box?: { h: number; w: number };
 }) {
-  const paper = on ? '#fff' : tint.fill;
-  const through = on ? `${tint.fill}${WASH}` : '#fff';
   const k = Math.min(box.h / size.heightMm, box.w / size.widthMm);
   const pen = (onScreen: number) => onScreen / k;
   const onTop = size.ringsOn === 'top';
@@ -216,14 +214,14 @@ function SizeIcon({ size, tint, on = false, flip = false, box = { h: ICON_H, w: 
       <rect
         x={inset} y={inset}
         width={size.widthMm - inset * 2} height={size.heightMm - inset * 2}
-        rx={pen(2)} fill={paper} stroke={tint.line} strokeWidth={pen(OUTLINE_PX)}
+        rx={pen(2)} fill={tint.fill} stroke={tint.line} strokeWidth={pen(OUTLINE_PX)}
       />
       {holeCentres(size.holes).map((at, i) => (
         <circle
           key={i}
           cx={onTop ? at : band} cy={onTop ? band : at}
           r={hole}
-          fill={through} stroke={tint.line} strokeWidth={pen(HOLE_RING_PX)}
+          fill="#fff" stroke={tint.line} strokeWidth={pen(HOLE_RING_PX)}
         />
       ))}
     </svg>
@@ -261,8 +259,8 @@ function SizeScreen({ selected, onPick }: { selected: RefillSize; onPick: (s: Re
                       <button
                         key={id}
                         onClick={() => onPick(id)}
-                        className="sizerow flex min-w-0 items-center gap-1 rounded-[18px] border-[1.5px] py-2 pl-1.5 pr-1 text-left shadow-[0_1px_3px_rgba(58,54,46,0.07)]"
-                        style={cardSkin(selected === id, SIZE_TINT[id].fill)}
+                        className="sizerow flex min-w-0 items-center gap-1 rounded-[18px] border-[1.5px] py-2 pl-1.5 pr-1 text-left"
+                        style={cardSkin(selected === id)}
                         aria-pressed={selected === id}
                       >
                         {/* A colour a glance can learn the size by, before the
@@ -284,7 +282,7 @@ function SizeScreen({ selected, onPick }: { selected: RefillSize; onPick: (s: Re
                             {sizeMm(SIZES[id])}
                           </span>
                         </span>
-                        <SizeIcon size={SIZES[id]} tint={SIZE_TINT[id]} on={selected === id} />
+                        <SizeIcon size={SIZES[id]} tint={SIZE_TINT[id]} />
                         {/* Decoration: it says "this opens something", which
                             the button already says, so it stays out of the
                             name a screen reader reads. */}
@@ -333,8 +331,8 @@ function SidesScreen({ size, spread, onPick, onBack, onConfirm }: {
         {rows.map(row => (
           <button
             key={row.title}
-            className="card flex items-center gap-3 rounded-[18px] border-[1.5px] py-3 pl-2.5 pr-3 text-left shadow-[0_1px_3px_rgba(58,54,46,0.07)]"
-            style={cardSkin(row.on, tint.fill)}
+            className="card flex items-center gap-3 rounded-[18px] border-[1.5px] py-3 pl-2.5 pr-3 text-left"
+            style={cardSkin(row.on)}
             aria-pressed={row.on}
             onClick={() => onPick(row.pick)}
           >
@@ -347,7 +345,7 @@ function SidesScreen({ size, spread, onPick, onBack, onConfirm }: {
               {row.sheets.map((flip, i) => (
                 // This screen has one choice on it and the room to draw it
                 // properly, so the sheets come out larger than in the picker.
-                <SizeIcon key={i} size={spec} tint={tint} on={row.on} flip={flip} box={{ h: 84, w: 54 }} />
+                <SizeIcon key={i} size={spec} tint={tint} flip={flip} box={{ h: 84, w: 54 }} />
               ))}
             </span>
           </button>
