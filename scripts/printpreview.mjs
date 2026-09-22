@@ -3,14 +3,13 @@
 //
 //   npm run build && npx vite preview --port 4173 --strictPort &
 //   node scripts/printpreview.mjs [outDir]
-import { chromium } from 'playwright';
+import { BASE, launch } from './browser.mjs';
 import { mkdir } from 'node:fs/promises';
 
-const BASE = process.env.BASE_URL ?? 'http://localhost:4173';
 const OUT = process.argv[2] ?? 'shots';
 await mkdir(OUT, { recursive: true });
 
-const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH });
+const browser = await launch();
 const page = await browser.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2 });
 const centerOf = async (l) => { const b = await l.boundingBox(); return { x: b.x + b.width / 2, y: b.y + b.height / 2 }; };
 async function drag(from, to) {

@@ -4,13 +4,12 @@
 //
 //   npm run build && npx vite preview --port 4173 --strictPort &
 //   node scripts/uxcheck.mjs [outDir]
-import { chromium } from 'playwright';
+import { BASE, launch } from './browser.mjs';
 import { mkdir } from 'node:fs/promises';
 
-const BASE = 'http://localhost:4173';
 const OUT = process.argv[2] ?? 'shots';
 await mkdir(OUT, { recursive: true });
-const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH });
+const browser = await launch();
 const page = await browser.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2 });
 const shot = async (n) => { await page.screenshot({ path: `${OUT}/${n}.png` }); console.log('shot', n); };
 const centerOf = async (l) => { const b = await l.boundingBox(); return { x: b.x + b.width / 2, y: b.y + b.height / 2 }; };
@@ -49,10 +48,16 @@ await drag(d, { x: d.x, y: d.y - 120 });
 console.log('clear buttons after squeeze:', await page.locator('.clearmini').count());
 await shot('03-つぶすとミニカレンダーの×も消える');
 
-// A part that cannot fit says which part, and what to do about it.
+// A third part into a squeezed spread. This used to be the case that did not
+// fit, and the toast that says which part and what to do about it was what
+// this checked; placement got better and now it lands, so "(none)" here is
+// the pass. The refusal path needs a case that genuinely does not fit --
+// there isn't one in this walk any more.
 await drag(await centerOf(await stamp('TODO')), { x: lp.x + lp.width * 0.3, y: lp.y + lp.height * 0.6 });
-console.log('toast:', await page.locator('.toast').textContent().catch(() => '(none)'));
-await shot('04-入らないときの案内');
+// The toast hides itself after 1.8s, so it is looked for now and briefly --
+// the default 30s wait both stalled the check and guaranteed a miss.
+console.log('toast:', await page.locator('.toast').textContent({ timeout: 900 }).catch(() => '(none)'));
+await shot('04-3つめも入る');
 
 // The bottom sheet's own handle must not have caught the border handle's style.
 await page.locator('.hitbox.part').first().click();

@@ -24,23 +24,51 @@
 **コードを読んで「直った」と結論しない。実際に動かして見る。**
 
 ```bash
-npm run build
-npx vite preview --port 4173 --strictPort &
-CHROMIUM_PATH=/opt/pw-browsers/chromium-1194/chrome-linux/chrome \
-  node scripts/shoot.mjs out   # 主要12場面
+npm run check                # ビルド→preview→5つの確認を並列。90秒くらい
+npm run check -- shoot pdf   # 一部だけ
+npm run check -- --keep      # 自分で見に行くので preview を残す
+npm run check -- --no-build  # 直前のビルドのまま
+npm run baseline             # 「見た目は変わらないはず」を前のコミットと突き合わせる
+npm run baseline -- HEAD~3   # 相手を指定
+npm run rules                # 紙に出る数の不変条件。ブラウザ不要・1秒
+npm run koyomi               # 六曜と祝日を外部実装と照合（暦を触ったとき）
 ```
+
+`npm run check` は**バックグラウンドで走らせる**（120秒のコマンド制限に近い）。
+ブラウザの場所・preview の起動・出力先はスクリプト側が持っている。手で
+`CHROMIUM_PATH=...` を前置したり `vite preview` を建てたりしなくていい。
 
 | スクリプト | 何を見るか |
 |---|---|
+| `rules.mts` | 穴の合計＝綴じ辺、穴径＜リング幅、A4に入るか（全サイズ） |
 | `shoot.mjs` | 配置・境界ドラッグ・横向きなど主要12場面 |
 | `uxcheck.mjs` | ×の数、確認ダイアログ、潰したときに×が消えること |
 | `multidrop.mjs` | まとめてドラッグが拒否されないか |
 | `printpreview.mjs` | 刷り上がりプレビューと拡大 |
-| `pdfcheck.mjs` | PDFを書き出して用紙サイズと中身を見る |
+| `pdfcheck.mjs` | PDFを書き出して用紙サイズと中身を見る（`SIZE=横長ミニ3穴` で切替） |
 | `uidiff.mjs` | 2つのビルドで同じ要素の座標と大きさを比べる |
 | `pixdiff.py` | 2つのスクショ群を突き合わせて、どれがどれだけ動いたか |
-| `koyomicheck.mjs` | 六曜と祝日を外部の実装と突き合わせる（暦を触ったとき） |
+| `koyomicheck.mjs` | 六曜と祝日を外部の実装と突き合わせる |
 | `buildfont.mjs` | 印刷用フォントのサブセット再生成（文字を足したとき） |
+
+### ロジックだけ確かめたいとき
+
+`node scripts/*.mts` で **TypeScriptをそのまま動かせる**（Node 22）。src/ から
+importして数を確かめるのに、バンドル手順もテストランナーも要らない。
+`rules.mts` がその形。2つ条件があって、**importに拡張子を書く**こと
+（`'../src/lib/sizes.ts'`）と、拡張子なしの実行時importを持つモジュールは
+読めないこと（`render/pages.ts` は `../draw` を読むので不可。型だけの
+importは消えるので `render/impose.ts` は読める）。
+
+## 見た目を変えずに直すとき
+
+リファクタのように「見た目は変わらないはず」の変更は、そう思っただけで
+済ませない。`npm run baseline` が前のコミットを別ポートに建てて、12場面の
+絵（どれが動いたか）と要素の座標（何がどれだけ動いたか）の両方を出す。
+
+Tailwindに移したときは、これで4つのズレが見つかった。preflight の
+`line-height: 1.5`、`text-xs`/`text-sm` が持つ行間、`p` の既定マージン、
+そして `.note` の衝突。目視では気づけない1〜2pxだった。
 
 ## 構成
 
@@ -55,20 +83,3 @@ CHROMIUM_PATH=/opt/pw-browsers/chromium-1194/chrome-linux/chrome \
 | `src/lib/holidays.ts` | 祝日（法律の条文どおりに計算する。表ではない） |
 | `src/lib/**` | **Reactを知らない。** 幾何・パーツ描画・面付け・PDF |
 | `scripts/*.mjs` | 検証用。アプリには含まれない |
-
-## 見た目を変えずに直すとき
-
-リファクタのように「見た目は変わらないはず」の変更は、そう思っただけで
-済ませない。前後でスクショを撮って突き合わせる。
-
-```bash
-# 変更前のコミットを別ポートで建てて、要素の座標を直接比べる
-git worktree add /tmp/old <変更前のコミット>
-ln -s $PWD/node_modules /tmp/old/node_modules
-(cd /tmp/old && npx vite build && npx vite preview --port 4174 &)
-node scripts/uidiff.mjs http://localhost:4174 http://localhost:4173
-```
-
-Tailwindに移したときは、これで4つのズレが見つかった。preflight の
-`line-height: 1.5`、`text-xs`/`text-sm` が持つ行間、`p` の既定マージン、
-そして `.note` の衝突。目視では気づけない1〜2pxだった。

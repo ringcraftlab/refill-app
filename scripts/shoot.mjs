@@ -5,16 +5,13 @@
 //   node scripts/shoot.mjs [outDir]
 //
 // CHROMIUM_PATH overrides the browser binary when the bundled one is missing.
-import { chromium } from 'playwright';
+import { BASE, launch } from './browser.mjs';
 import { mkdir } from 'node:fs/promises';
 
-const BASE = process.env.BASE_URL ?? 'http://localhost:4173';
 const OUT = process.argv[2] ?? 'shots';
 await mkdir(OUT, { recursive: true });
 
-const browser = await chromium.launch(
-  process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {},
-);
+const browser = await launch();
 const page = await browser.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2 });
 const shot = async (name) => {
   await page.screenshot({ path: `${OUT}/${name}.png` });

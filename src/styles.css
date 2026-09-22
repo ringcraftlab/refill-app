@@ -1,4 +1,8 @@
-@import "tailwindcss";
+/* `source("./")` limits class detection to src/. Tailwind otherwise scans the
+   whole repo, and the verification scripts' words that happen to be utility names
+   (border, table, grid, …) end up as real CSS -- 300 bytes of rules no screen
+   uses, and a stylesheet that changes when only a script changed. */
+@import "tailwindcss" source("./");
 
 /* The palette is the app's whole visual identity: warm paper, soft rules, one
    accent. Declared here so utilities like `bg-paper` and `text-faint` exist

@@ -5,7 +5,7 @@
 // A change meant to be invisible -- a refactor, a move to a different styling
 // approach -- is checked here, where the answer is a number rather than an
 // impression of two screenshots.
-import { chromium } from 'playwright';
+import { launch } from './browser.mjs';
 
 const [OLD, NEW] = process.argv.slice(2);
 const SELECTORS = [
@@ -14,7 +14,7 @@ const SELECTORS = [
   '.preview figure', '.preview figcaption',
 ];
 
-const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH });
+const browser = await launch();
 
 async function measure(base) {
   const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
