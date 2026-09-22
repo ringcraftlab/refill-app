@@ -1085,6 +1085,12 @@ function PartSheet({ target, layout, setLayout, onClose, onRemove, onRemoveSpann
   const lastMonth = addMonths(layout.year, layout.month, Math.max(1, layout.monthCount) - 1);
   const saved = useMemo(() => target === 'load' ? listLayouts() : [], [target]);
   const kind = typeof target === 'string' ? null : layout.surface.placed[target.slot];
+  // Worked out up front rather than on the tap: a spread already carrying
+  // other parts may have no room for two calendars, and a choice that does
+  // nothing when picked is worse than one that is not offered.
+  const split = layout.spread && layout.spanning
+    ? planPlacement(layout, size, ['monthly'], { sx: 0, sy: 0, band: 0 })
+    : null;
 
   const title = target === 'load' ? '保存済みレイアウト'
     : target === 'print' ? 'PDF出力プレビュー'
@@ -1184,6 +1190,39 @@ function PartSheet({ target, layout, setLayout, onClose, onRemove, onRemoveSpann
 
             <Button variant="cta" onClick={() => onExport(print)}>書き出す</Button>
           </>
+        )}
+
+        {/* A spread can carry the month two ways, and until now only one of
+            them could be asked for: the first calendar dropped always became
+            the band, and the two-months-facing form could be reached only by
+            dropping a second calendar on top of the first. It is a property
+            of the refill, so it is said here, where the calendar's other
+            properties are. */}
+        {layout.spread && (target === 'spanning' || kind === 'monthly')
+          && (!layout.spanning || split) && (
+          <Choice
+            label="マンスリーの持たせ方"
+            options={[
+              { v: 'span', label: '見開きで1ヶ月' },
+              { v: 'page', label: '1ページに1ヶ月' },
+            ]}
+            value={layout.spanning ? 'span' : 'page'}
+            onPick={v => {
+              if ((v === 'span') === !!layout.spanning) return;
+              if (v === 'page') { if (split) setLayout(() => split.layout); return; }
+              setLayout(l => {
+                const rest = l.surface.placed.filter(k => k !== 'monthly');
+                return {
+                  ...l,
+                  // The band takes the whole spread when nothing else is on
+                  // it, and the share a part would have left it otherwise --
+                  // the same two numbers turning the refill uses.
+                  spanning: { ratio: rest.length === 0 ? 1 : (isLandscape(l) ? 0.48 : 0.72) },
+                  surface: { ...l.surface, placed: rest, ratios: {} },
+                };
+              });
+            }}
+          />
         )}
 
         {(target === 'spanning' || kind === 'monthly') && (
