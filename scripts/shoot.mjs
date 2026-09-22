@@ -222,4 +222,39 @@ await page.locator('.scrim').click({ position: { x: 10, y: 10 } });
 await page.locator('.scrim').waitFor({ state: 'detached' });
 await shot('18-バーチカルを今日から');
 
+// The fold. Panels are not pages: only the first is punched, the rest are
+// narrower by what the rings take up, and a part cannot cross a crease. The
+// card is looked for rather than assumed, so baseline can still replay this
+// script against a build from before folding existed.
+await page.goto(BASE);
+await page.locator('.sizerow', { hasText: '62×105mm' }).click();
+const foldCard = page.locator('.card', { hasText: '蛇腹' });
+if (await foldCard.count()) {
+  await foldCard.click();
+  await page.getByRole('button', { name: '3面', exact: true }).click();
+  await shot('19-蛇腹を選ぶ');
+  await page.getByRole('button', { name: 'この構成で作る' }).click();
+  await page.locator('.page').first().waitFor();
+  const panels = page.locator('.page');
+  for (let i = 0; i < 3; i++) {
+    await drag(await centerOf(await stamp('マンスリー')), await centerOf(panels.nth(i)));
+  }
+  await shot('20-蛇腹3面に3ヶ月');
+
+  // Two panels instead of three: the inner one gets wider, and the strip is
+  // short enough that the paper turns and the duplex setting changes with it.
+  await page.goto(BASE);
+  await page.locator('.sizerow', { hasText: '62×105mm' }).click();
+  await page.locator('.card', { hasText: '蛇腹' }).click();
+  await page.getByRole('button', { name: '2面', exact: true }).click();
+  await page.getByRole('button', { name: 'この構成で作る' }).click();
+  await page.locator('.page').first().waitFor();
+  await drag(await centerOf(await stamp('マンスリー')), await centerOf(page.locator('.page').first()));
+  await drag(await centerOf(await stamp('メモ')), await centerOf(page.locator('.page').last()));
+  await page.getByRole('button', { name: 'PDF出力プレビュー' }).click();
+  await page.locator('.duplex-note').waitFor();
+  console.log('duplex says:', await page.locator('.duplex-note').textContent());
+  await shot('21-蛇腹2面の書き出し');
+}
+
 await browser.close();

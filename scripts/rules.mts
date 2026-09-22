@@ -12,7 +12,8 @@ import { holeCentres, SIZES } from '../src/lib/sizes.ts';
 // Measured off the rendered page, not derived here: OUTER_MM plus each part's
 // own PAD came to 4.20mm on every size that was looked at.
 const INK_INSET_MM = 4.2;
-import { DEFAULT_IMPOSE, planTiles } from '../src/lib/render/impose.ts';
+import { DEFAULT_IMPOSE, duplexFlip, planTiles } from '../src/lib/render/impose.ts';
+import { FOLD_PANELS, foldPlan, innerCapMm, ringReachMm } from '../src/lib/fold.ts';
 
 let bad = 0;
 const check = (ok: boolean, line: string) => {
@@ -60,6 +61,43 @@ for (const s of Object.values(SIZES)) {
     punch > 0 && punch <= INK_INSET_MM,
     `${name} 端に最も近いインクは穴ガイドの${punch.toFixed(2)}mm（中身は${INK_INSET_MM}mm）`,
   );
+}
+
+// The fold. Three things make a 蛇腹 work, and none of them can be seen on
+// screen: the inner panels have to clear the rings when the strip is folded,
+// the strip has to fit the paper, and the duplex setting the sheet asks for
+// has to be the one the imposition actually assumes.
+console.log('');
+for (const s of Object.values(SIZES)) {
+  const name = s.label.padEnd(10);
+  for (const panels of FOLD_PANELS) {
+    const plan = foldPlan(s, panels);
+    if (!plan) { check(true, `${name} ${panels}面 蛇腹にしない`); continue; }
+
+    // Folded, the inner panels lie behind the punched one. Wider than this and
+    // they run into the ring wire.
+    check(
+      plan.innerMm <= innerCapMm(s) + 1e-9,
+      `${name} ${panels}面 内側${plan.innerMm}mm ≤ リング逃げ${innerCapMm(s).toFixed(2)}mm`
+      + `（逃げ${ringReachMm(s)}mm）`,
+    );
+
+    const tile = planTiles({ widthMm: plan.alongMm, heightMm: plan.acrossMm }, DEFAULT_IMPOSE);
+    const turned = tile.paper.widthMm > tile.paper.heightMm ? 'A4横' : 'A4縦';
+    check(
+      tile.sideMm >= 0 && tile.endMm >= 0 && tile.perPage >= 1,
+      `${name} ${panels}面 帯${plan.alongMm}×${plan.acrossMm} が${turned}に`
+      + `${tile.cols}列×${tile.rows}段 = ${tile.perPage}本`
+      + `・両面は${duplexFlip(tile)}`,
+    );
+
+    // The panels have to add up to the strip, or the creases land somewhere
+    // other than where the paper is cut.
+    check(
+      plan.headMm + plan.innerMm * (panels - 1) === plan.alongMm,
+      `${name} ${panels}面 ${plan.headMm} + ${plan.innerMm}×${panels - 1} = ${plan.alongMm}`,
+    );
+  }
 }
 
 if (bad) {

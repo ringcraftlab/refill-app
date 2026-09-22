@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 11;
+export const SCHEMA_VERSION = 12;
 
 export type RefillSize =
   | 'MINI3' | 'CARD3' | 'M5' | 'M5SQ' | 'M6' | 'BIBLE' | 'NARROW' | 'A5SLIM' | 'A5';
@@ -91,7 +91,13 @@ export interface Spanning {
   ratio: number;
 }
 
-export type PageKey = 'single' | 'left' | 'right';
+// A page of the design. A single sheet has one; a spread has two; a
+// 蛇腹 has one per fold panel, counted from the punched one.
+export type PageKey = 'single' | 'left' | 'right' | 'f1' | 'f2' | 'f3';
+
+// How many panels the sheet folds into. One means it does not fold. Four is
+// deliberately absent: see lib/fold.ts.
+export type FoldCount = 1 | 2 | 3;
 
 // The area left over once the calendar has taken its band. In a spread this is
 // ONE surface across both pages: a part whose region crosses the gutter spans
@@ -117,6 +123,12 @@ export interface Layout {
   name: string;
   size: RefillSize;
   spread: boolean;
+  // How many panels the sheet folds into, counting the punched one. One is a
+  // plain refill. Anything more is a 蛇腹, which is a different shape of
+  // refill rather than a print option: the panels are narrower than the page,
+  // only the first is punched, and the paper it prints on decides how wide
+  // they can be. A fold and a spread are alternatives, never both.
+  fold: FoldCount;
   spanning: Spanning | null;
   surface: Surface;
   // The first month generated. Dated parts repeat for `monthCount` months, so

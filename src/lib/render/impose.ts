@@ -99,7 +99,16 @@ export function planTiles(
 
 const CUT_LINE: Color = [0.72, 0.70, 0.66];
 
-function translate(items: Primitive[], dx: number, dy: number): Primitive[] {
+// Which way the paper has to be turned over so a back lands behind its front.
+// The back run mirrors across the page's width, so the turn is about the
+// page's vertical edge: the long one on an upright sheet, the short one on a
+// turned one. Nobody can see this is wrong until the paper is out of the
+// printer, so it is worked out here and printed on the sheet.
+export type DuplexFlip = '長辺とじ' | '短辺とじ';
+export const duplexFlip = (plan: TilePlan): DuplexFlip =>
+  plan.paper.widthMm > plan.paper.heightMm ? '短辺とじ' : '長辺とじ';
+
+export function translate(items: Primitive[], dx: number, dy: number): Primitive[] {
   return items.map((p): Primitive => {
     if (p.type === 'line') return { ...p, x1: p.x1 + dx, y1: p.y1 + dy, x2: p.x2 + dx, y2: p.y2 + dy };
     if (p.type === 'circle') return { ...p, cx: p.cx + dx, cy: p.cy + dy };

@@ -1,17 +1,20 @@
 import { Fragment, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import type { Layout, PartKind, RefillSize, SizeSpec } from './types';
+import type { FoldCount, Layout, PartKind, RefillSize, SizeSpec } from './types';
 import { MAX_PARTS, SCHEMA_VERSION } from './types';
 import { holeCentres, SIZES } from './lib/sizes';
 import {
-  buildGeometry, isLandscape, MAX_RATIO, MIN_RATIO, placeParts as planPlacement, regionAt, ringsOnTop,
+  buildGeometry, canTurn, isLandscape, MAX_RATIO, MIN_RATIO, placeParts as planPlacement, regionAt,
+  ringsOnTop,
 } from './lib/layout';
-import type { Divider, DropPoint, Geometry } from './lib/layout';
+import type { Divider, DropPoint, Geometry, PageGeometry } from './lib/layout';
+import { FOLD_PANELS, foldPanels, foldPlan } from './lib/fold';
+import type { FoldPanels, FoldPlan } from './lib/fold';
 import { nextMonthCell } from './lib/parts';
 import { addDays, addMonths, isoDate, runDates } from './lib/dates';
 import {
   buildPages, buildPrintSheets, datedSlotOf, DEFAULT_PRINT, hasDatedPart, INK_INSET_MM, isDayPaced,
-  imposeCount, MONTH_PACED, paperPlan, punchInset, runEnd, sheetCount,
+  duplexFlipOf, imposeCount, MONTH_PACED, paperPlan, punchInset, runEnd, sheetCount, sheetSizeOf,
 } from './lib/render/pages';
 import type { BackFill, PrintOptions } from './lib/render/pages';
 import { PageSvg, SheetSvg } from './lib/render/svg';
@@ -144,6 +147,11 @@ const TAUGHT_KEY = 'ringcraft.dividerTaught';
 // overlap a little to read as attached, without sitting on top of a date.
 const CLEAR_INSET = 17;
 
+// What the design is, in the header. A fold says how many panels because that
+// is the thing you chose, and the thing the paper has to carry.
+const formLabel = (l: Layout): string =>
+  l.fold > 1 ? `蛇腹${l.fold}面` : l.spread ? '見開き' : '片面';
+
 const PART_LABEL: Record<PartKind, string> = {
   monthly: 'マンスリー', daylist: '日付リスト',
   weekvert: '週間バーチカル', weekhoriz: '週間ホリゾンタル', gantt: 'ガントチャート',
@@ -159,6 +167,7 @@ function createLayout(): Layout {
     name: '新しいリフィル',
     size: 'M6',
     spread: true,
+    fold: 1,
     spanning: null,
     surface: { placed: [], ratios: {}, split: 'h' },
     year: now.getFullYear(),
@@ -193,7 +202,18 @@ export function App() {
       <SidesScreen
         size={layout.size}
         spread={layout.spread}
-        onPick={(spread) => setLayout(l => ({ ...l, spread }))}
+        fold={layout.fold}
+        onPick={(v) => setLayout(l => ({
+          ...l,
+          ...v,
+          // A fold holds one part per panel and has no band, so anything the
+          // previous shape carried beyond that goes rather than staying in the
+          // layout as a part with nowhere to be drawn.
+          spanning: v.fold > 1 ? null : l.spanning,
+          surface: v.fold > 1
+            ? { ...l.surface, placed: l.surface.placed.slice(0, v.fold), page: undefined, ratios: {} }
+            : l.surface,
+        }))}
         onBack={() => setStage('size')}
         onConfirm={() => setStage('canvas')}
       />
@@ -457,21 +477,37 @@ function SizeScreen({ selected, onPick }: { selected: RefillSize; onPick: (s: Re
 // finger just touched is the same paper, the same size, on the screen that
 // follows. Drawing it larger here because there was room made the two
 // screens look like two different apps.
-function SidesScreen({ size, spread, onPick, onBack, onConfirm }: {
-  size: RefillSize; spread: boolean; onPick: (v: boolean) => void;
+function SidesScreen({ size, spread, fold, onPick, onBack, onConfirm }: {
+  size: RefillSize;
+  spread: boolean;
+  fold: FoldCount;
+  onPick: (v: { spread: boolean; fold: FoldCount }) => void;
   onBack: () => void; onConfirm: () => void;
 }) {
   const spec = SIZES[size];
   const tint = SIZE_TINT[size];
-  const choices: { on: boolean; pick: boolean; title: string; note: string; sheets: boolean[] }[] = [
+  const flat = fold <= 1;
+  const choices: { on: boolean; pick: { spread: boolean; fold: FoldCount }; title: string; note: string; sheets: boolean[] }[] = [
     {
-      on: spread, pick: true, title: '見開き（2ページ）', note: '左右セットで1ヶ月分',
+      on: flat && spread, pick: { spread: true, fold: 1 },
+      title: '見開き（2ページ）', note: '左右セットで1ヶ月分',
       // The left page's rings are drawn on its right: in a spread the binding
       // is the seam, which is the one thing a picture of it has to get right.
       sheets: [true, false],
     },
-    { on: !spread, pick: false, title: '片面（1ページ）', note: '1ページで完結', sheets: [false] },
+    {
+      on: flat && !spread, pick: { spread: false, fold: 1 },
+      title: '片面（1ページ）', note: '1ページで完結', sheets: [false],
+    },
   ];
+  // A size whose inner panels would come out unusably narrow simply does not
+  // fold, and the card says so rather than offering a shape that cannot be
+  // made.
+  const plans = FOLD_PANELS.map(n => foldPlan(spec, n));
+  const foldable = plans.some(Boolean);
+  const shown = fold > 1 ? fold : 3;
+  const plan = plans[FOLD_PANELS.indexOf(shown as FoldPanels)] ?? plans.find(Boolean) ?? null;
+
   return (
     <div className={SCREEN_PAD}>
       <button className="self-start p-0 text-xs text-muted" onClick={onBack}>← サイズを選び直す</button>
@@ -510,8 +546,92 @@ function SidesScreen({ size, spread, onPick, onBack, onConfirm }: {
           </button>
         ))}
       </div>
+      {/* The fold goes full width and underneath, because it is not a third
+          option of the same kind: it is one sheet that unfolds, so the picture
+          of it is a strip rather than a page, and a strip beside two pages in
+          the same row would be drawn at a different scale to fit. Below them
+          it keeps the scale the picker set, which is the whole point of that
+          scale. */}
+      {foldable && plan && (
+        <div
+          className="card flex flex-col gap-2 rounded-[18px] border-[1.5px] px-3 py-3"
+          style={cardSkin(!flat, tint.line)}
+        >
+          <button
+            className="flex flex-col items-center gap-2 p-0 text-center"
+            aria-pressed={!flat}
+            onClick={() => onPick({ spread: false, fold: shown })}
+          >
+            <span className="flex items-center justify-center" style={{ height: SHEET_SLOT.height }}>
+              <FoldIcon size={spec} tint={tint} plan={plan} />
+            </span>
+            <span className="flex flex-col gap-0.5">
+              <strong className="text-[13px] font-semibold leading-tight">蛇腹（折りたたみ）</strong>
+              <span className="text-[10px] leading-tight text-faint">
+                1枚を折って{plan.panels}面。穴は先頭の面だけ
+              </span>
+            </span>
+          </button>
+          <Segmented
+            value={String(shown)}
+            options={FOLD_PANELS.filter((_, i) => plans[i]).map(n => ({ v: String(n), label: `${n}面` }))}
+            onPick={v => onPick({ spread: false, fold: Number(v) as FoldCount })}
+          />
+          <p className="m-0 text-[10px] leading-snug text-faint">
+            広げると {plan.alongMm}×{plan.acrossMm}mm。
+            {plan.paperCapped
+              ? `内側の面は紙に合わせて${plan.innerMm}mm（リングの逃げなら${plan.innerCapMm.toFixed(1)}mmまで可）`
+              : `内側の面は${plan.innerMm}mm。畳むと先頭の面に隠れます`}
+          </p>
+        </div>
+      )}
       <Button variant="cta" className="mt-auto" onClick={onConfirm}>この構成で作る</Button>
     </div>
+  );
+}
+
+// The strip a fold unfolds into, drawn at the picker's scale so it can be
+// compared with the pages above it. Only the first panel is punched, and the
+// creases are where the paper actually bends.
+function FoldIcon({ size, tint, plan }: {
+  size: SizeSpec; tint: { fill: string; line: string }; plan: FoldPlan;
+}) {
+  const k = SHEET_SCALE;
+  const pen = (onScreen: number) => onScreen / k;
+  const margin = size.ringMarginMm / 2;
+  const hole = Math.min(
+    Math.max(size.holes.diameterMm / 2, pen(HOLE_MIN_PX)),
+    margin * 0.75,
+  );
+  const inset = pen(OUTLINE_PX) / 2;
+  const panels = foldPanels(plan);
+  return (
+    <svg
+      width={plan.alongMm * k} height={plan.acrossMm * k}
+      viewBox={`0 0 ${plan.alongMm} ${plan.acrossMm}`}
+      className="block shrink-0"
+      aria-hidden="true"
+    >
+      <rect
+        x={inset} y={inset}
+        width={plan.alongMm - inset * 2} height={plan.acrossMm - inset * 2}
+        rx={pen(2)} fill={tint.fill} stroke={tint.line} strokeWidth={pen(OUTLINE_PX)}
+      />
+      {panels.slice(1).map(p => (
+        <line
+          key={p.atMm}
+          x1={p.atMm} y1={0} x2={p.atMm} y2={plan.acrossMm}
+          stroke={tint.line} strokeWidth={pen(OUTLINE_PX * 0.8)} strokeDasharray={`${pen(3)} ${pen(2.4)}`}
+        />
+      ))}
+      {holeCentres(size.holes).map((at, i) => (
+        <circle
+          key={i}
+          cx={margin} cy={at} r={hole}
+          fill="#fff" stroke={tint.line} strokeWidth={pen(HOLE_RING_PX)}
+        />
+      ))}
+    </svg>
   );
 }
 
@@ -522,8 +642,10 @@ function SidesScreen({ size, spread, onPick, onBack, onConfirm }: {
 // carries the punch guide, whose rim comes 2.0-3.3mm in, while every other
 // edge is clear for 4.2mm. So the note says the number the user has to
 // compare against their own printer rather than a verdict this cannot reach.
-function EdgeNote({ size, count }: { size: SizeSpec; count: number }) {
-  const plan = paperPlan(size, count);
+function EdgeNote({ size, count, sheet }: {
+  size: SizeSpec; count: number; sheet?: { widthMm: number; heightMm: number };
+}) {
+  const plan = paperPlan(size, count, sheet);
   const tight: string[] = [];
   if (plan.sideMm < 0.75) tight.push('左右');
   if (plan.endMm < 0.75) tight.push('上下');
@@ -627,15 +749,23 @@ function CanvasScreen({ layout, setLayout, onBack }: {
   const first = geo.pages[0];
   const n = geo.pages.length;
   const gapPx = (n - 1) * GAP;
+  // A fold's panels are not all the same width -- only the punched one is a
+  // whole page -- so the row is measured by what the pages actually add up to
+  // rather than by one of them times the count.
+  const along = (mm: (p: PageGeometry) => number) => geo.pages.reduce((t, p) => t + mm(p), 0);
+  const acrossMm = geo.flow === 'row' ? along(p => p.widthMm) : first.widthMm;
+  const downMm = geo.flow === 'column' ? along(p => p.heightMm) : first.heightMm;
   const scale = Math.max(0.1, Math.min(
-    (box.w - (geo.flow === 'row' ? gapPx : 0)) / (geo.flow === 'row' ? first.widthMm * n : first.widthMm),
-    (box.h - (geo.flow === 'column' ? gapPx : 0)) / (geo.flow === 'row' ? first.heightMm : first.heightMm * n),
+    (box.w - (geo.flow === 'row' ? gapPx : 0)) / acrossMm,
+    (box.h - (geo.flow === 'column' ? gapPx : 0)) / downMm,
   ));
-  const pw = first.widthMm * scale;
-  const ph = first.heightMm * scale;
-  const pageOrigin = (i: number) => geo.flow === 'row'
-    ? { x: i * (pw + GAP), y: 0 }
-    : { x: 0, y: i * (ph + GAP) };
+  const pageW = (i: number) => geo.pages[i].widthMm * scale;
+  const pageH = (i: number) => geo.pages[i].heightMm * scale;
+  const pageOrigin = (i: number) => {
+    let at = 0;
+    for (let j = 0; j < i; j++) at += (geo.flow === 'row' ? pageW(j) : pageH(j)) + GAP;
+    return geo.flow === 'row' ? { x: at, y: 0 } : { x: 0, y: at };
+  };
 
   const say = (text: string) => {
     setToast(text);
@@ -652,7 +782,7 @@ function CanvasScreen({ layout, setLayout, onBack }: {
     const lx = cx - r.left, ly = cy - r.top;
     for (let i = 0; i < geo.pages.length; i++) {
       const o = pageOrigin(i);
-      if (lx < o.x || lx > o.x + pw || ly < o.y || ly > o.y + ph) continue;
+      if (lx < o.x || lx > o.x + pageW(i) || ly < o.y || ly > o.y + pageH(i)) continue;
       const span = geo.pages[i].spanRect;
       // How far down the calendar the pointer landed, when it landed on it at
       // all. Dropping on the calendar is how you ask for a place beside it,
@@ -690,7 +820,11 @@ function CanvasScreen({ layout, setLayout, onBack }: {
       const planned = planPlacement(prev, size, kinds, at);
       if (!planned) {
         const what = kinds.length === 1 ? PART_LABEL[kinds[0]] : 'パーツ';
-        say(`${what}を置く広さがありません。つまみで空けてください`);
+        // A fold has no draggable borders to make room with: the creases are
+        // where the paper bends. Either a panel is free or it is not.
+        say(prev.fold > 1 && prev.surface.placed.length >= prev.fold
+          ? `${prev.fold}面すべて埋まっています。外してから置いてください`
+          : `${what}を置く広さがありません。つまみで空けてください`);
         return prev;
       }
       if (planned.overflow > 0) say(`一度に置けるのは${MAX_PARTS}つまでです`);
@@ -917,6 +1051,8 @@ function CanvasScreen({ layout, setLayout, onBack }: {
   // only moves its rings.
   const onScreenW = isLandscape(layout) ? size.heightMm : size.widthMm;
   const onScreenH = isLandscape(layout) ? size.widthMm : size.heightMm;
+  // A 蛇腹 is upright only; see canTurn().
+  const turnable = canTurn(layout, size);
   const turnLabel = onScreenW === onScreenH
     ? (ringsOnTop(layout) ? 'リングを左にする' : 'リングを上にする')
     : onScreenW > onScreenH ? '縦にする' : '横にする';
@@ -971,7 +1107,7 @@ function CanvasScreen({ layout, setLayout, onBack }: {
     <div className={SCREEN}>
       <header className="flex shrink-0 items-center gap-2 px-4 pb-2 pt-3 text-xs font-semibold text-label">
         <Button variant="icon" onClick={onBack} aria-label="戻る">←</Button>
-        <span>{size.label} {size.widthMm}×{size.heightMm}mm ・ {layout.spread ? '見開き' : '片面'}</span>
+        <span>{size.label} {size.widthMm}×{size.heightMm}mm ・ {formLabel(layout)}</span>
       </header>
 
       {dated && (
@@ -996,14 +1132,16 @@ function CanvasScreen({ layout, setLayout, onBack }: {
       )}
 
       <div className="relative flex min-h-0 grow items-center justify-center px-3 py-2" ref={boxRef}>
-        <button
-          className="rotate absolute right-3 top-1 z-10 flex items-center gap-1 rounded-full border border-line-strong bg-white px-2.5 py-1 text-[11px] text-label"
-          onClick={turn}
-          aria-label="リフィルを回転"
-        >
-          <span className="text-[13px] leading-none">↻</span>
-          {turnLabel}
-        </button>
+        {turnable && (
+          <button
+            className="rotate absolute right-3 top-1 z-10 flex items-center gap-1 rounded-full border border-line-strong bg-white px-2.5 py-1 text-[11px] text-label"
+            onClick={turn}
+            aria-label="リフィルを回転"
+          >
+            <span className="text-[13px] leading-none">↻</span>
+            {turnLabel}
+          </button>
+        )}
         <div
           className="flex items-center justify-center"
           ref={setRef}
@@ -1013,7 +1151,7 @@ function CanvasScreen({ layout, setLayout, onBack }: {
             <div
               key={pg.key}
               className="page relative shrink-0 touch-none overflow-hidden rounded-sm bg-white shadow-[0_10px_30px_rgba(58,54,46,0.16)]"
-              style={{ width: pw, height: ph }}
+              style={{ width: pageW(i), height: pageH(i) }}
             >
               <PageSvg page={pages[i]} scale={scale} showGuides />
               {pg.spanRect && (
@@ -1319,9 +1457,15 @@ function PartSheet({ target, layout, setLayout, onClose, onRemove, onRemoveSpann
             <p className="print-summary my-[13px] text-[13px] text-faint">
               {hasDatedPart(layout) && `${layout.year}年${layout.month}月から${layout.monthCount}ヶ月分・`}
               {isDayPaced(layout) && `${sheetCount(layout)}枚・`}
-              {print.impose && `A4 1枚に ${paperPlan(size, imposeCount(layout, size, print)).perPage} 面`}
+              {print.impose && `A4 1枚に ${paperPlan(size, imposeCount(layout, size, print), sheetSizeOf(layout, size)).perPage} ${layout.fold > 1 ? '本' : '面'}`}
             </p>
-            {print.impose && <EdgeNote size={size} count={imposeCount(layout, size, print)} />}
+            {print.impose && (
+              <EdgeNote
+                size={size}
+                count={imposeCount(layout, size, print)}
+                sheet={sheetSizeOf(layout, size)}
+              />
+            )}
 
             <Choice
               label="印刷"
@@ -1329,6 +1473,20 @@ function PartSheet({ target, layout, setLayout, onClose, onRemove, onRemoveSpann
               value={print.duplex ? 'both' : 'one'}
               onPick={v => setPrint(p => ({ ...p, duplex: v === 'both' }))}
             />
+            {/* Which way to turn the paper over is not a preference: get it
+                wrong and every back lands on the wrong refill, or upside down,
+                and there is no way to tell until the paper is out. It depends
+                on how the refills ended up on the sheet, so it is worked out
+                here and printed in the corner of the sheet as well. */}
+            {print.duplex && print.impose && (
+              <p className="duplex-note m-0 mb-[13px] text-[12px] text-faint">
+                プリンタの両面設定は
+                <strong className="font-semibold text-label">
+                  {duplexFlipOf(layout, size, imposeCount(layout, size, print))}
+                </strong>
+                。紙の隅にも刷ってあります
+              </p>
+            )}
             {print.duplex && (
               <Choice
                 label="裏面（使わない面）"

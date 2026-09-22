@@ -4,8 +4,9 @@ import { SCHEMA_VERSION } from '../types';
 // Version 7 kept the orientation inside the calendar: a spread said it through
 // its span pattern, a single page through a field of its own. Version 8 puts it
 // on the refill, where it belongs. Version 9 adds how many days a sheet covers,
-// and version 10 the hours a vertical spans -- both things a saved layout
-// simply did not have a say in. Converting is cheap, and throwing away
+// version 10 the hours a vertical spans, version 11 how many bands it folds
+// into, and version 12 whether the sheet itself folds -- all things a saved
+// layout simply did not have a say in. Converting is cheap, and throwing away
 // someone's saved layouts over a field we can work out is not acceptable.
 const DEFAULT_DAYS_PER_SHEET = 7;
 // The hours a vertical used to be fixed to.
@@ -38,6 +39,10 @@ function migrate(raw: Record<string, unknown>): Layout | null {
   if (out.version === 10) {
     // One band across is what every vertical was drawing already.
     out = { ...out, version: 11, weekTiers: 1 };
+  }
+  if (out.version === 11) {
+    // Nothing saved before this folded.
+    out = { ...out, version: 12, fold: 1 };
   }
   return out.version === SCHEMA_VERSION ? (out as unknown as Layout) : null;
 }

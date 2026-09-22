@@ -1,13 +1,15 @@
 import type { Layout, PartKind, SizeSpec } from '../../types';
 import type { Color, Page, Primitive } from '../draw';
 import { clipToBand, flattenToSheet, RING_BAND, RING_HOLE } from '../draw';
-import { buildGeometry } from '../layout';
+import { buildGeometry, foldOf } from '../layout';
 import type { Rect, SurfaceSlice } from '../layout';
+import { foldPanels } from '../fold';
+import type { FoldPlan } from '../fold';
 import { drawGrid, drawLines, drawMemo, drawPart, drawPartAcross, drawSpanningMonthly } from '../parts';
 import { holeCentres } from '../sizes';
 import { addMonths, isoDate, sheetStarts } from '../dates';
-import { DEFAULT_IMPOSE, impose, planTiles } from './impose';
-import type { TilePlan } from './impose';
+import { DEFAULT_IMPOSE, duplexFlip, impose, planTiles, translate } from './impose';
+import type { DuplexFlip, TilePlan } from './impose';
 import type { SheetContent } from './impose';
 
 // Turns the editor's layout into printable pages. The on-screen preview and
@@ -125,6 +127,85 @@ const bindingPair = (size: SizeSpec): [Side, Side] =>
   size.ringsOn === 'top' ? ['top', 'bottom'] : ['left', 'right'];
 
 const PUNCH: Color = [0.78, 0.76, 0.72];
+// The creases. Darker than a cut line on purpose: on a folded refill the two
+// mean opposite things, and the one you fold along is the one you have to see
+// without looking for it.
+const CREASE: Color = [0.58, 0.62, 0.68];
+// The line that says which way to turn the paper over. Faint, small, and out
+// of the way -- it is an instruction to the printer, not part of the refill.
+const NOTE: Color = [0.62, 0.60, 0.55];
+const NOTE_PT = 5;
+
+// What one refill occupies on paper. A fold prints as a single strip of
+// panels, so the thing being tiled is the strip, not the page size the binder
+// holds.
+export const sheetSizeOf = (layout: Layout, size: SizeSpec): { widthMm: number; heightMm: number } => {
+  const fold = foldOf(layout, size);
+  return fold
+    ? { widthMm: fold.alongMm, heightMm: fold.acrossMm }
+    : { widthMm: size.widthMm, heightMm: size.heightMm };
+};
+
+// The punch on a folded strip: one panel carries it, and turning the strip
+// over puts that panel at the other end.
+function foldPunchGuide(size: SizeSpec, plan: FoldPlan, flip: boolean): Primitive[] {
+  const r = size.ringMarginMm / 2;
+  const across = flip ? plan.alongMm - r : r;
+  return holeCentres(size.holes).map((along): Primitive => ({
+    type: 'circle', cx: across, cy: along, r: size.holes.diameterMm / 2,
+    stroke: PUNCH, strokeMm: 0.15,
+  }));
+}
+
+// One side of a folded strip. The panels are the same pages the editor draws,
+// laid end to end on the paper they are folded out of, with a crease between
+// each pair.
+function foldFace(layout: Layout, size: SizeSpec, plan: FoldPlan, flip: boolean): Primitive[] {
+  const out: Primitive[] = [];
+  const creases: Primitive[] = [];
+  let x = 0;
+  for (const page of buildPages(layout, size, flip)) {
+    out.push(...translate(flattenToSheet(page), x, 0));
+    x += page.widthMm;
+    if (x < plan.alongMm - 0.01) creases.push({
+      type: 'line', x1: x, y1: 1, x2: x, y2: plan.acrossMm - 1,
+      stroke: CREASE, strokeMm: 0.2, dashMm: [4, 2.2],
+    });
+  }
+  return [...creases, ...out];
+}
+
+// The spare side of a folded strip, panel by panel: only the punched one keeps
+// a ring strip clear.
+function foldFiller(size: SizeSpec, plan: FoldPlan, fill: BackFill, flip: boolean): Primitive[] {
+  if (fill === 'blank') return [];
+  const m = 4;
+  const widths = foldPanels(plan).map(p => p.widthMm);
+  const order = flip ? [...widths].reverse() : widths;
+  const headAt = flip ? order.length - 1 : 0;
+  const out: Primitive[] = [];
+  let x = 0;
+  order.forEach((w, i) => {
+    const left = x + (i === headAt && !flip ? size.ringMarginMm : m);
+    const right = x + w - (i === headAt && flip ? size.ringMarginMm : m);
+    const area = { x: left, y: m, w: right - left, h: plan.acrossMm - m * 2 };
+    out.push(...(fill === 'grid' ? drawGrid(area) : fill === 'lines' ? drawLines(area) : drawMemo(area)));
+    x += w;
+  });
+  return out;
+}
+
+// Prints which way to turn the paper over. It goes in the clearance the tiling
+// leaves, and when the refills reach the paper's edge there is none -- then it
+// sits in the top corner, inside the trim margin every part already keeps
+// clear, because a duplex setting nobody can see is a sheet printed twice.
+function duplexNote(plan: TilePlan, flip: DuplexFlip): Primitive[] {
+  // Sitting the baseline just above the block keeps it on bare paper whenever
+  // the tiling leaves any; below 5mm there is nothing to sit in and it falls
+  // back to the corner.
+  const y = plan.endMm >= 5 ? plan.endMm - 1.4 : 3.6;
+  return [{ type: 'text', x: 2.5, y, text: `両面は${flip}`, sizePt: NOTE_PT, color: NOTE }];
+}
 
 function punchGuide(size: SizeSpec, side: Side): Primitive[] {
   const vertical = side === 'left' || side === 'right';
@@ -231,8 +312,14 @@ function facesInOrder(layout: Layout, size: SizeSpec, duplex: boolean): Face[] {
   const faces: Face[] = [];
 
   const [near, far] = bindingPair(size);
+  const fold = foldOf(layout, size);
   for (const sheet of sheetsOf(layout)) {
-    if (layout.spread) {
+    if (fold) {
+      // A strip is one face however many panels it carries, so a fold runs
+      // front, back, front, back exactly as a single page does.
+      const onBack = duplex && faces.length % 2 === 1;
+      faces.push({ primitives: foldFace(sheet, size, fold, onBack), side: onBack ? far : near });
+    } else if (layout.spread) {
       // A spread is the back of one sheet facing the front of the next, so its
       // first page always lands on a back and its second on a front.
       const pages = buildPages(sheet, size);
@@ -254,13 +341,27 @@ function facesInOrder(layout: Layout, size: SizeSpec, duplex: boolean): Face[] {
 export function buildPrintSheets(layout: Layout, size: SizeSpec, opts: PrintOptions): SheetContent[] {
   const faces = facesInOrder(layout, size, opts.duplex);
   const spec = { ...DEFAULT_IMPOSE, cutLines: opts.cutLines, scalePercent: opts.scalePercent };
+  const fold = foldOf(layout, size);
+  const sheetSize = sheetSizeOf(layout, size);
+  // On a fold the far edge is the turned-over strip, which is what decides
+  // which end of it the punch goes.
+  const flipped = (side: Side) => side === (bindingPair(size)[1] as Side);
 
   const asSheet = (f: Face): SheetContent => ({
-    widthMm: size.widthMm,
-    heightMm: size.heightMm,
-    primitives: opts.punchGuides ? [...punchGuide(size, f.side), ...f.primitives] : f.primitives,
+    ...sheetSize,
+    primitives: opts.punchGuides
+      ? [
+          ...(fold ? foldPunchGuide(size, fold, flipped(f.side)) : punchGuide(size, f.side)),
+          ...f.primitives,
+        ]
+      : f.primitives,
   });
-  const spare = (side: Side) => asSheet({ primitives: fillerFace(size, opts.backFill, side), side });
+  const spare = (side: Side) => asSheet({
+    primitives: fold
+      ? foldFiller(size, fold, opts.backFill, flipped(side))
+      : fillerFace(size, opts.backFill, side),
+    side,
+  });
 
   const sheets: Duplexed[] = [];
   const [near, far] = bindingPair(size);
@@ -286,24 +387,35 @@ export function buildPrintSheets(layout: Layout, size: SizeSpec, opts: PrintOpti
   // the count is the same either way -- but it has to be decided once, or the
   // fronts and the backs could be arranged differently and nothing would line
   // up through the paper.
-  const plan = planTiles({ widthMm: size.widthMm, heightMm: size.heightMm }, spec, all.length);
+  const plan = planTiles(sheetSize, spec, all.length);
+  const note = duplexNote(plan, duplexFlip(plan));
+  const withNote = (page: SheetContent): SheetContent =>
+    ({ ...page, primitives: [...page.primitives, ...note] });
+
   const fronts = impose(all.map(s => s.front), spec, false, plan);
   if (!opts.duplex) return fronts;
 
   const backs = impose(all.map(s => s.back), spec, true, plan);
   // Interleaved, so a duplex printer lands each back behind its own front.
-  return fronts.flatMap((f, i) => (backs[i] ? [f, backs[i]] : [f]));
+  return fronts.flatMap((f, i) => (backs[i] ? [withNote(f), withNote(backs[i])] : [withNote(f)]));
 }
 
 // How the refills will sit on the paper, for telling the user before they
 // print: how many to a sheet, and how close to the paper's edge they come.
 // The count matters -- it is what decides which way the paper is turned -- so
 // the screen passes what the run actually comes to.
-export const paperPlan = (size: SizeSpec, count?: number): TilePlan =>
-  planTiles({ widthMm: size.widthMm, heightMm: size.heightMm }, DEFAULT_IMPOSE, count);
+export const paperPlan = (
+  size: SizeSpec, count?: number, sheet?: { widthMm: number; heightMm: number },
+): TilePlan => planTiles(sheet ?? { widthMm: size.widthMm, heightMm: size.heightMm }, DEFAULT_IMPOSE, count);
 
-export const perPaperCount = (size: SizeSpec, count?: number): number =>
-  paperPlan(size, count).perPage;
+export const perPaperCount = (
+  size: SizeSpec, count?: number, sheet?: { widthMm: number; heightMm: number },
+): number => paperPlan(size, count, sheet).perPage;
+
+// What the export screen has to say before anything is printed: a duplex job
+// only lands right if the paper is turned the way the tiling assumes.
+export const duplexFlipOf = (layout: Layout, size: SizeSpec, count?: number): DuplexFlip =>
+  duplexFlip(paperPlan(size, count, sheetSizeOf(layout, size)));
 
 // How many physical refill sheets a run comes to, which is what a single
 // imposition run has to place. A spread is two faces on one sheet's back and

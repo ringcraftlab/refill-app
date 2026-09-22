@@ -1,5 +1,7 @@
-import type { Layout, PageKey, PartKind, SizeSpec, Spanning, Surface } from '../types';
+import type { FoldCount, Layout, PageKey, PartKind, SizeSpec, Spanning, Surface } from '../types';
 import { MAX_PARTS, PART_FIT } from '../types';
+import type { FoldPanels, FoldPlan } from './fold';
+import { foldPanels, foldPlan } from './fold';
 import type { SheetRotation } from './draw';
 import { monthGrid } from './dates';
 import { holeCentres, SIZES } from './sizes';
@@ -109,9 +111,30 @@ export function weekSplit(totalRows: number): [number, number] {
   return [top, totalRows - top];
 }
 
+// The fold this layout asks for, or null when it is a plain refill. A size
+// whose panels would come out unusably narrow simply does not fold, and the
+// layout falls back to one page rather than drawing something that cannot be
+// folded.
+export const foldOf = (layout: Layout, size: SizeSpec): FoldPlan | null =>
+  foldCountOf(layout) > 1 ? foldPlan(size, foldCountOf(layout) as FoldPanels) : null;
+
+// Defaulted rather than read straight off the layout: a layout that reached
+// here without going through the migration has no say in whether it folds,
+// and `undefined > 1` quietly answering "no" to one question and "not
+// portrait" to the next is the kind of thing that shows up as a turned page.
+export const foldCountOf = (layout: Layout): FoldCount => layout.fold ?? 1;
+
+// A 蛇腹 is upright only. Turning it a quarter turn would put the rings along
+// the top, and a page turned about its top edge shows its back upside down --
+// so the back of every panel would have to print inverted, and the duplex
+// setting would stop matching the one the sheet asks for. Not worth it for a
+// shape the binder holds sideways anyway.
+export const canTurn = (layout: Layout, size: SizeSpec): boolean => !foldOf(layout, size);
+
 // Landscape is the planner turned a quarter turn. It never transposes a
 // calendar grid — only the page shape and the ring edge change.
-export const isLandscape = (layout: Layout): boolean => layout.orientation === 'landscape';
+export const isLandscape = (layout: Layout): boolean =>
+  layout.orientation === 'landscape' && foldCountOf(layout) <= 1;
 
 // Whether the rings run along the top of the sheet rather than down its side.
 // A refill bound on its long edge has them on the side until it is turned a
@@ -121,6 +144,12 @@ export const isLandscape = (layout: Layout): boolean => layout.orientation === '
 // paper, as opposed to how the paper is shaped.
 export const ringsOnTop = (layout: Layout): boolean =>
   ((SIZES[layout.size].ringsOn ?? 'side') === 'side') === isLandscape(layout);
+
+// The panel keys a fold uses, in the order they sit on the strip. Counted from
+// the punched panel, so f1 is always the one in the rings however the strip is
+// turned over.
+export const foldKeys = (count: FoldCount): PageKey[] =>
+  (['f1', 'f2', 'f3'] as PageKey[]).slice(0, count);
 
 function ringEdgeFor(spread: boolean, onTop: boolean, key: PageKey, flip: boolean): RingEdge {
   // A single sheet binds on its outer edge. In a spread the binding is always
@@ -222,9 +251,50 @@ function punchHoles(box: PageBox, size: SizeSpec) {
   }));
 }
 
+// A fold's panels sit in a row starting from the punched one. Turning the
+// strip over puts that one at the other end with its rings on the other edge,
+// which is the same thing `flipBinding` does to a single page. Only the
+// punched panel reserves a ring strip; the rest are plain paper on all four
+// sides, which is most of what makes an inner panel worth having.
+interface Pane { key: PageKey; W: number; H: number; box: PageBox }
+
+function foldPaneBoxes(
+  plan: FoldPlan, count: FoldCount, H: number, ring: number, flip: boolean,
+): Pane[] {
+  const order = flip ? [...foldKeys(count)].reverse() : foldKeys(count);
+  const widths = foldPanels(plan).map(p => p.widthMm);
+  const edge: RingEdge = flip ? 'right' : 'left';
+  const O = OUTER_MM;
+  return order.map((key, i) => {
+    const W = (flip ? [...widths].reverse() : widths)[i];
+    if (key !== 'f1') {
+      return {
+        key, W, H,
+        box: {
+          edge,
+          ringBand: { x: 0, y: 0, w: 0, h: 0 },
+          ox: O, oy: O, usableW: W - O * 2, usableH: H - O * 2,
+        },
+      };
+    }
+    return {
+      key, W, H,
+      box: {
+        edge,
+        ringBand: { x: edge === 'left' ? 0 : W - ring, y: 0, w: ring, h: H },
+        ox: edge === 'left' ? ring : O,
+        oy: O,
+        usableW: W - ring - O,
+        usableH: H - O * 2,
+      },
+    };
+  });
+}
+
 // `flipBinding` mirrors a single page's binding edge, for when that page is
 // printed on the back of a sheet.
 export function buildGeometry(layout: Layout, size: SizeSpec, flipBinding = false): Geometry {
+  const fold = foldOf(layout, size);
   const landscape = isLandscape(layout);
   // Where the rings are is not the same question as which way the sheet is
   // turned: a card bound across its top is upright with the rings on top.
@@ -232,16 +302,21 @@ export function buildGeometry(layout: Layout, size: SizeSpec, flipBinding = fals
   const W = landscape ? size.heightMm : size.widthMm;
   const H = landscape ? size.widthMm : size.heightMm;
   const ring = size.ringMarginMm;
-  const sheet = {
-    widthMm: size.widthMm,
-    heightMm: size.heightMm,
-    rotation: (landscape ? 90 : 0) as SheetRotation,
-  };
+  // A fold prints as one strip, not as separate sheets: the panels are cut
+  // apart by nobody, they are folded.
+  const sheet = fold
+    ? { widthMm: fold.alongMm, heightMm: fold.acrossMm, rotation: 0 as SheetRotation }
+    : {
+        widthMm: size.widthMm,
+        heightMm: size.heightMm,
+        rotation: (landscape ? 90 : 0) as SheetRotation,
+      };
 
-  const keys: PageKey[] = layout.spread ? ['left', 'right'] : ['single'];
-  const boxes = keys.map(key => ({ key, box: pageBox(layout.spread, onTop, key, W, H, ring, flipBinding) }));
+  const boxes: Pane[] = fold
+    ? foldPaneBoxes(fold, foldCountOf(layout), H, ring, flipBinding)
+    : (layout.spread ? (['left', 'right'] as PageKey[]) : (['single'] as PageKey[]))
+        .map(key => ({ key, W, H, box: pageBox(layout.spread, onTop, key, W, H, ring, flipBinding) }));
   const usableH = boxes[0].box.usableH;
-  const usableW = boxes[0].box.usableW;
 
   // Band heights. A spread whose pages stack gives them different week counts,
   // so the shorter page's band is shorter too and its rows stay the same
@@ -257,7 +332,7 @@ export function buildGeometry(layout: Layout, size: SizeSpec, flipBinding = fals
     return key === 'left' ? top : MONTHLY_HEADER_MM + rowH * bottomRows;
   };
 
-  const pages: PageGeometry[] = boxes.map(({ key, box }) => {
+  const pages: PageGeometry[] = boxes.map(({ key, W: paneW, box }) => {
     const bandH = bandOf(key);
     // Dragging either page's band edge moves the same ratio; on the shorter
     // page of a stacked spread a millimetre of drag is worth proportionally
@@ -265,12 +340,13 @@ export function buildGeometry(layout: Layout, size: SizeSpec, flipBinding = fals
     const extent = span && span.ratio > 0 ? bandH / span.ratio : usableH;
     return {
       key,
-      widthMm: W,
+      widthMm: paneW,
       heightMm: H,
       sheet,
       ringEdge: box.edge,
       ringBand: box.ringBand,
-      holes: punchHoles(box, size),
+      // Only the panel in the rings is punched. The rest fold in behind it.
+      holes: fold && key !== 'f1' ? [] : punchHoles(box, size),
       spanRect: span ? { x: box.ox, y: box.oy, w: box.usableW, h: bandH } : null,
       spanDivider: span && layout.surface.placed.length > 0
         ? { id: `${key}-span`, key: 'span', axis: 'h', x: box.ox, y: box.oy + bandH, length: box.usableW, ratio: span.ratio, extentMm: extent }
@@ -300,18 +376,26 @@ export function buildGeometry(layout: Layout, size: SizeSpec, flipBinding = fals
   })) : 0;
 
   const count = layout.surface.placed.length;
+  // A crease is not a divider. The paper bends there, so a part cannot be
+  // dragged across one and the panels are the surface's divisions -- fixed by
+  // the fold, not by a ratio. One part to a panel, which is also what a folded
+  // refill is for: a month you turn to rather than a page you share.
+  const foldRegions = (): Rect[] =>
+    slices.slice(0, count).map(s => ({ x: s.fromMm, y: 0, w: s.toMm - s.fromMm, h: surfaceH }));
+
   return {
     pages,
     landscape,
     // Pages hanging from rings along their top stack; pages held at their
-    // side sit next to each other.
-    flow: layout.spread && onTop ? 'column' : 'row',
+    // side sit next to each other. A fold is upright and side-bound, so its
+    // panels always run across.
+    flow: !fold && layout.spread && onTop ? 'column' : 'row',
     surface: {
       widthMm: surfaceW,
       heightMm: surfaceH,
       slices,
-      regions: splitRegions(count, layout.surface, surfaceW, surfaceH),
-      dividers: surfaceDividers(count, layout.surface, surfaceW, surfaceH),
+      regions: fold ? foldRegions() : splitRegions(count, layout.surface, surfaceW, surfaceH),
+      dividers: fold ? [] : surfaceDividers(count, layout.surface, surfaceW, surfaceH),
     },
   };
 }
@@ -407,9 +491,45 @@ function edgePage(layout: Layout, size: SizeSpec, at: DropPoint): PageKey | null
   return null;
 }
 
+// Which panel a drop landed on, or the next free one when it landed nowhere.
+function foldSlotAt(layout: Layout, size: SizeSpec, at: DropPoint | null): number {
+  const placed = layout.surface.placed.length;
+  if (!at) return placed;
+  const { slices } = buildGeometry(layout, size).surface;
+  const i = slices.findIndex(s => at.sx >= s.fromMm && at.sx <= s.toMm);
+  return i < 0 ? placed : Math.min(i, placed);
+}
+
+// A fold fills panels, so placing is a question of which panel rather than of
+// how to divide a shared area. Nothing to search: the panel widths are the
+// paper's, and a part either fits one or does not.
+function placeOnFold(
+  prev: Layout, size: SizeSpec, fold: FoldPlan, kinds: PartKind[], at: DropPoint | null,
+): Placement | null {
+  const room = fold.panels - prev.surface.placed.length;
+  const toAdd = kinds.slice(0, Math.max(0, room));
+  if (!toAdd.length) return null;
+
+  const slot = foldSlotAt(prev, size, at);
+  const placed = [...prev.surface.placed];
+  placed.splice(slot, 0, ...toAdd);
+  const layout: Layout = {
+    ...prev,
+    // The band is a spread's way of holding one calendar across two pages.
+    // A fold has no seam to cross, so the calendar is an ordinary part.
+    spanning: null,
+    surface: { ...prev.surface, placed, ratios: {}, page: undefined },
+  };
+  if (!everyPartFits(layout, size)) return null;
+  return { layout, overflow: kinds.length - toAdd.length, landed: slot };
+}
+
 export function placeParts(
   prev: Layout, size: SizeSpec, kinds: PartKind[], at: DropPoint | null,
 ): Placement | null {
+  const fold = foldOf(prev, size);
+  if (fold) return placeOnFold(prev, size, fold, kinds, at);
+
   // Dropped against the outer edge of a spread: that page, and the facing one
   // left blank. A calendar arriving this way is a part on a page rather than
   // the band across both, which is the whole point of aiming at the edge.
