@@ -148,31 +148,43 @@ const SIZE_TINT: Record<RefillSize, { fill: string; line: string }> = {
   NARROW: { fill: '#F0D4E2', line: '#AD6A8F' },
   A5SLIM: { fill: '#E3DBDB', line: '#8E7B7B' },
 };
-// The name on the card, and under it the reading for the four sizes that are
-// spoken as letters. The millimetres come last and are on every card: they
-// are what settles it when the names are unfamiliar, and they are read off
-// the size itself so they can never drift from what gets printed.
-const SIZE_NAME: Record<RefillSize, { code: string; read?: string }> = {
-  M5: { code: 'M5', read: 'マイクロ5' },
-  M6: { code: 'M6', read: 'ミニ6' },
-  BIBLE: { code: 'Bible', read: 'バイブル' },
-  A5: { code: 'A5' },
-  MINI3: { code: '縦長ミニ3穴' },
-  CARD3: { code: '横長ミニ3穴' },
-  M5SQ: { code: 'M5スクエア' },
-  NARROW: { code: 'ナロー' },
-  A5SLIM: { code: 'A5スリム' },
+// One name per size: the one people say. Three of these used to be a code
+// with its reading underneath -- M5 over マイクロ5 -- which spent a line of
+// the card saying the same size twice and left the reader to work out that
+// they were one thing, not two.
+const SIZE_NAME: Record<RefillSize, string> = {
+  M5: 'Micro5',
+  M6: 'Mini6',
+  BIBLE: 'バイブル',
+  A5: 'A5',
+  MINI3: '縦長ミニ3穴',
+  CARD3: '横長ミニ3穴',
+  M5SQ: 'M5スクエア',
+  NARROW: 'ナロー',
+  A5SLIM: 'A5スリム',
 };
+// Under the name, and on every card. Between them they settle it when the
+// name is unfamiliar -- and which binder a sheet fits is the hole count, not
+// the millimetres: 縦長ミニ3穴 and Micro5 are both small sheets and will not
+// go on each other's rings. Both are read off the size itself, so neither can
+// drift from what gets punched.
 const sizeMm = (s: SizeSpec) => `${s.widthMm}×${s.heightMm}mm`;
+const sizeHoles = (s: SizeSpec) => `${s.holes.count}穴`;
 
 // Truncating a Japanese name to 「縦長ミ…」 throws away the one word that
-// tells the two three-hole sizes apart, so the long names shrink instead of
+// tells the two three-hole sizes apart, so the wide names shrink instead of
 // being cut -- and shrink once more on a 320px phone, where two columns and a
 // sheet drawn to scale leave them 60px and they want 62. One pixel off six
 // characters buys it; taking it out of the sheet instead would cost every
 // size on the screen 6% to fit two names.
-const nameSize = (code: string) =>
-  (code.length > 4 ? 'text-[10px] min-[360px]:text-[11px]' : 'text-[13px]');
+//
+// Wide, not long: a kana or a kanji is a full em and a Latin letter about
+// half, so counting characters says little. 「縦長ミニ3穴」 and 'Micro5' are
+// both six characters and one is two thirds wider on screen.
+const emWidth = (name: string) =>
+  [...name].reduce((w, c) => w + (/[^\u0020-\u00ff]/.test(c) ? 1 : 0.55), 0);
+const nameSize = (name: string) =>
+  (emWidth(name) > 4.5 ? 'text-[10px] min-[360px]:text-[11px]' : 'text-[13px]');
 
 // Selection is the accent outline and a ring of it; the card itself stays
 // white. It used to be washed with the size's own colour, which took contrast
@@ -287,16 +299,21 @@ function SizeScreen({ selected, onPick }: { selected: RefillSize; onPick: (s: Re
                           style={{ background: SIZE_TINT[id].line }}
                         />
                         <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-                          <strong className={`truncate font-semibold leading-tight ${nameSize(SIZE_NAME[id].code)}`}>
-                            {SIZE_NAME[id].code}
+                          <strong className={`truncate font-semibold leading-tight ${nameSize(SIZE_NAME[id])}`}>
+                            {SIZE_NAME[id]}
                           </strong>
-                          {SIZE_NAME[id].read && (
-                            <span className="truncate text-[10px] leading-tight text-muted">
-                              {SIZE_NAME[id].read}
-                            </span>
-                          )}
                           <span className="truncate text-[10px] leading-tight text-faint">
                             {sizeMm(SIZES[id])}
+                          </span>
+                          {/* In the size's own colour, which is the one place
+                              that colour carries a fact rather than a label:
+                              the sizes sharing a hole count are the sizes
+                              whose sheets swap between binders. */}
+                          <span
+                            className="truncate text-[10px] font-semibold leading-tight"
+                            style={{ color: SIZE_TINT[id].line }}
+                          >
+                            {sizeHoles(SIZES[id])}
                           </span>
                         </span>
                         <span className="flex shrink-0 items-center justify-center" style={SHEET_SLOT}>
@@ -352,7 +369,7 @@ function SidesScreen({ size, spread, onPick, onBack, onConfirm }: {
       <div>
         <h1 className="text-[19px] font-bold">ページ構成を選ぶ</h1>
         <p className="m-0 mt-1 text-[12px] text-muted">
-          {SIZE_NAME[size].code}（{sizeMm(spec)}）のリフィルを作ります
+          {SIZE_NAME[size]}（{sizeMm(spec)}・{sizeHoles(spec)}）のリフィルを作ります
         </p>
       </div>
       <div className="flex flex-col gap-2.5">

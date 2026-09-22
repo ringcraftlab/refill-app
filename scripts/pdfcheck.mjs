@@ -9,7 +9,7 @@ import { resolve } from 'node:path';
 import { PDFDocument } from 'pdf-lib';
 
 const OUT = process.argv[2] ?? 'shots';
-const SIZE = process.env.SIZE ?? 'M6';
+const SIZE = process.env.SIZE ?? 'Mini6';
 const MM = 25.4 / 72;
 await mkdir(OUT, { recursive: true });
 

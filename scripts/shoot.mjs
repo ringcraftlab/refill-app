@@ -43,7 +43,10 @@ const stamp = async (label) => {
 await page.goto(BASE);
 await shot('01-サイズ選択');
 
-await page.locator('.sizerow', { hasText: 'M6' }).click();
+// baseline.sh runs this against an older build as well as the current one,
+// so a card is picked by its millimetres, not by its name: renaming a size
+// would otherwise make every comparison with a past commit fail to start.
+await page.locator('.sizerow', { hasText: '80×128mm' }).click();
 await shot('02-ページ構成');
 
 await page.locator('.card', { hasText: '見開き' }).click();
@@ -77,7 +80,7 @@ await shot('07-右に方眼を落とす');
 // A fresh spread: the habit tracker needs width for its 31 day columns, so it
 // should take a band across the whole spread rather than half a page.
 await page.goto(BASE);
-await page.locator('.sizerow', { hasText: 'M6' }).click();
+await page.locator('.sizerow', { hasText: '80×128mm' }).click();
 await page.locator('.card', { hasText: '見開き' }).click();
 await page.getByRole('button', { name: 'この構成で作る' }).click();
 await page.locator('.page').first().waitFor();
@@ -95,7 +98,7 @@ await shot('09-TODOを足す');
 // Splitting the spread by week turns both pages landscape and stacks them,
 // with the fuller page first and the shorter page's leftover free to write in.
 await page.goto(BASE);
-await page.locator('.sizerow', { hasText: 'M6' }).click();
+await page.locator('.sizerow', { hasText: '80×128mm' }).click();
 await page.locator('.card', { hasText: '見開き' }).click();
 await page.getByRole('button', { name: 'この構成で作る' }).click();
 await page.locator('.page').first().waitFor();
