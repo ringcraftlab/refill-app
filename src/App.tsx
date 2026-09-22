@@ -11,7 +11,7 @@ import { nextMonthCell } from './lib/parts';
 import { addMonths } from './lib/dates';
 import {
   buildPages, buildPrintSheets, datedSlotOf, DEFAULT_PRINT, hasDatedPart, INK_INSET_MM, isDayPaced,
-  MONTH_PACED, paperPlan, punchInset, sheetCount,
+  MONTH_PACED, paperPlan, punchInset, runEnd, sheetCount,
 } from './lib/render/pages';
 import type { BackFill, PrintOptions } from './lib/render/pages';
 import { PageSvg, SheetSvg } from './lib/render/svg';
@@ -744,7 +744,7 @@ function CanvasScreen({ layout, setLayout, onBack }: {
   const empty = layout.surface.placed.length === 0 && !layout.spanning;
 
   const dated = hasDatedPart(layout);
-  const lastMonth = addMonths(layout.year, layout.month, Math.max(1, layout.monthCount) - 1);
+  const lastMonth = runEnd(layout);
   // The button that shows the date range opens whatever part owns the dates.
   // A weekly refill may have no calendar on it at all, and a refill of day
   // lists none either, and their range still has to be reachable.
@@ -832,8 +832,13 @@ function CanvasScreen({ layout, setLayout, onBack }: {
           onClick={() => setSheet(monthlyTarget)}
         >
           {layout.year}年{layout.month}月 → {lastMonth.year}年{lastMonth.month}月
+          {/* Months and sheets stop being the same number as soon as a sheet
+              carries two calendars, and which one matters depends on what is
+              being decided, so both are said when they differ. */}
           <em className="not-italic text-faint">
-            {isDayPaced(layout) ? `${sheetCount(layout)}枚` : `${layout.monthCount}ヶ月分`}
+            {isDayPaced(layout) ? `${sheetCount(layout)}枚`
+              : sheetCount(layout) === layout.monthCount ? `${layout.monthCount}ヶ月分`
+              : `${layout.monthCount}ヶ月分・${sheetCount(layout)}枚`}
           </em>
         </button>
       )}

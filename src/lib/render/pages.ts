@@ -25,7 +25,7 @@ export function buildPages(layout: Layout, size: SizeSpec, flipBinding = false):
         if (!region) return;
         // Draw across the part's whole region, then keep this page's piece.
         primitives.push(...clipToBand(
-          drawnPart(kind, region, layout, geo.surface.slices),
+          drawnPart(kind, region, monthFor(layout, i), geo.surface.slices),
           slice.fromMm, slice.toMm,
           slice.ox - slice.fromMm, slice.oy,
         ));
@@ -44,6 +44,24 @@ export function buildPages(layout: Layout, size: SizeSpec, flipBinding = false):
     };
   });
 }
+
+// Two calendars on one sheet are two months, not the same month twice. The
+// count is taken within the kind, which is the whole rule: a calendar facing a
+// day list is the standard printed spread and both show September, while a
+// calendar facing a calendar is September and October.
+const monthOrdinal = (placed: PartKind[], i: number): number =>
+  placed.slice(0, i).filter(k => k === placed[i]).length;
+
+const monthFor = (layout: Layout, i: number): Layout => {
+  const n = monthOrdinal(layout.surface.placed, i);
+  return n === 0 ? layout : { ...layout, ...addMonths(layout.year, layout.month, n) };
+};
+
+// How many months one sheet gets through, so the run can step by that much:
+// a spread carrying two calendars covers two, and a year of it is six sheets
+// rather than twelve of September.
+export const monthsPerSheet = (layout: Layout): number =>
+  Math.max(1, ...MONTH_PACED.map(k => layout.surface.placed.filter(p => p === k).length));
 
 // A region that crosses the gutter covers two sheets. The part gets a say in
 // how it breaks there, because trimming a calendar at the page edge would
@@ -171,7 +189,8 @@ export const datedSlotOf = (layout: Layout): number =>
 // about: a year of weeks is 52, a year of single days is 365.
 export const sheetCount = (layout: Layout): number => {
   if (!hasDatedPart(layout)) return 1;
-  return isDayPaced(layout) ? sheetStarts(layout).length : Math.max(1, layout.monthCount);
+  if (isDayPaced(layout)) return sheetStarts(layout).length;
+  return Math.ceil(Math.max(1, layout.monthCount) / monthsPerSheet(layout));
 };
 
 // Every sheet's dates, in order. A weekly paces the refill by days; everything
@@ -188,8 +207,22 @@ function sheetsOf(layout: Layout): Layout[] {
       sheetStart: isoDate(start),
     }));
   }
-  return Array.from({ length: Math.max(1, layout.monthCount) },
-    (_, i) => ({ ...layout, ...addMonths(layout.year, layout.month, i) }));
+  const per = monthsPerSheet(layout);
+  return Array.from({ length: Math.ceil(Math.max(1, layout.monthCount) / per) },
+    (_, i) => ({ ...layout, ...addMonths(layout.year, layout.month, i * per) }));
+}
+
+// The last month the run actually prints. With two calendars to a sheet an odd
+// number of months still fills its final spread, so what comes out is a month
+// further on than the range was set to -- and the range has to say so rather
+// than the sheet quietly carrying a month nobody asked for.
+export function runEnd(layout: Layout): { year: number; month: number } {
+  const months = Math.max(1, layout.monthCount);
+  if (!hasDatedPart(layout) || isDayPaced(layout)) {
+    return addMonths(layout.year, layout.month, months - 1);
+  }
+  const per = monthsPerSheet(layout);
+  return addMonths(layout.year, layout.month, Math.ceil(months / per) * per - 1);
 }
 
 // Every printable face in binder order, sheet after sheet.
