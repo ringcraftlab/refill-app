@@ -10,8 +10,8 @@ import type { Divider, DropPoint, Geometry } from './lib/layout';
 import { nextMonthCell } from './lib/parts';
 import { addMonths } from './lib/dates';
 import {
-  buildPages, buildPrintSheets, DEFAULT_PRINT, hasDatedPart, INK_INSET_MM, isDayPaced, paperPlan,
-  punchInset, sheetCount,
+  buildPages, buildPrintSheets, datedSlotOf, DEFAULT_PRINT, hasDatedPart, INK_INSET_MM, isDayPaced,
+  MONTH_PACED, paperPlan, punchInset, sheetCount,
 } from './lib/render/pages';
 import type { BackFill, PrintOptions } from './lib/render/pages';
 import { PageSvg, SheetSvg } from './lib/render/svg';
@@ -746,11 +746,9 @@ function CanvasScreen({ layout, setLayout, onBack }: {
   const dated = hasDatedPart(layout);
   const lastMonth = addMonths(layout.year, layout.month, Math.max(1, layout.monthCount) - 1);
   // The button that shows the date range opens whatever part owns the dates.
-  // A weekly refill may have no calendar on it at all, and its range still has
-  // to be reachable.
-  const datedSlot = ['monthly', 'weekvert', 'weekhoriz']
-    .map(k => layout.surface.placed.indexOf(k as PartKind))
-    .find(i => i >= 0) ?? -1;
+  // A weekly refill may have no calendar on it at all, and a refill of day
+  // lists none either, and their range still has to be reachable.
+  const datedSlot = datedSlotOf(layout);
   const monthlyTarget: SheetTarget = layout.spanning ? 'spanning' : { slot: datedSlot };
 
   // One button per removable thing, at the outer top corner of the whole
@@ -1192,7 +1190,11 @@ function PartSheet({ target, layout, setLayout, onClose, onRemove, onRemoveSpann
           />
         )}
 
-        {(target === 'spanning' || kind === 'monthly') && (
+        {/* The period belongs to every part the month decides the shape of,
+            not to the calendar alone: a refill of day lists has a start month
+            and a length just as much, and without these it printed one sheet
+            with no way to say otherwise. */}
+        {(target === 'spanning' || (kind && MONTH_PACED.includes(kind))) && (
           <>
             <Field label="開始月">
               <Stepper

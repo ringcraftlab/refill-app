@@ -145,11 +145,27 @@ interface Face { primitives: Primitive[]; side: Side }
 // its month. One of these on the sheet makes the whole refill repeat by days.
 const DAY_PACED: PartKind[] = ['weekvert', 'weekhoriz'];
 
+// Parts the month itself decides the shape of: they draw a row, a column or a
+// cell per day, so February and March are not the same sheet. The spec calls
+// these the parts with a date on an axis; only the calendar was listed here,
+// which meant a refill of day lists, or of a habit tracker, printed one sheet
+// for a whole year -- the start month's thirty rows, whatever the range said,
+// and no range shown to say otherwise.
+export const MONTH_PACED: PartKind[] = ['monthly', 'daylist', 'gantt', 'habit'];
+
 export const isDayPaced = (layout: Layout): boolean =>
   layout.surface.placed.some(k => DAY_PACED.includes(k));
 
 export const hasDatedPart = (layout: Layout): boolean =>
-  !!layout.spanning || layout.surface.placed.includes('monthly') || isDayPaced(layout);
+  !!layout.spanning || layout.surface.placed.some(k => MONTH_PACED.includes(k)) || isDayPaced(layout);
+
+// Which placed part owns the date range, for the button that opens it. The
+// day-paced ones come first: on a sheet carrying both, the run is paced by
+// days and that is the setting the range button has to reach.
+export const datedSlotOf = (layout: Layout): number =>
+  [...DAY_PACED, ...MONTH_PACED]
+    .map(k => layout.surface.placed.indexOf(k))
+    .find(i => i >= 0) ?? -1;
 
 // How many sheets the run comes to, which is what the export has to warn
 // about: a year of weeks is 52, a year of single days is 365.
