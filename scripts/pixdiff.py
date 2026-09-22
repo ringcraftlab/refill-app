@@ -25,10 +25,16 @@ for a in sorted(a_root.rglob('*.png')):
     # on the same glyph does not read as a change.
     moved = sum(1 for px in diff.getdata() if max(px) > 12)
     pct = moved / (ia.width * ia.height) * 100
-    worst.append((pct, a.relative_to(a_root)))
+    worst.append((moved, pct, a.relative_to(a_root)))
 
 worst.sort(reverse=True)
-for pct, name in worst:
-    mark = 'same ' if pct < 0.1 else 'DIFF ' if pct > 1 else 'minor'
-    print(f'{mark} {pct:6.2f}%  {name}')
-print(f'\n{sum(1 for p, _ in worst if p < 0.1)}/{len(worst)} 枚が同一')
+for moved, pct, name in worst:
+    # Same means not one pixel moved, which two builds of the same source do
+    # reach -- the renders are deterministic. A floor of a tenth of a percent
+    # was hiding real changes instead: a date on a button and a week of column
+    # headings came to 950 pixels of 1.3 million, which read as "same" while
+    # plainly not being it. The count is printed because the percentage of a
+    # phone screenshot makes anything short of a layout change look like zero.
+    mark = 'same ' if moved == 0 else 'DIFF ' if pct > 1 else 'minor'
+    print(f'{mark} {pct:6.2f}%  {moved:7d}px  {name}')
+print(f'\n{sum(1 for m, _, _ in worst if m == 0)}/{len(worst)} 枚が同一')
