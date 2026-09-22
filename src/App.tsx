@@ -153,12 +153,14 @@ const sizeMm = (s: SizeSpec) => `${s.widthMm}×${s.heightMm}mm`;
 const nameSize = (code: string) => (code.length > 4 ? 'text-[11px]' : 'text-[13px]');
 
 // The selected card is tinted with its own colour and outlined in the accent.
-// The tint is thinned so the icon, which is the same colour at full strength,
-// still reads as a sheet lying on it.
+// One constant, because the sheet drawn on the card shows the same wash back
+// through its punch: change it in one place and the holes stop matching the
+// card they are punched over.
+const WASH = '59';
 const cardSkin = (on: boolean, tint: string) =>
   ({
     borderColor: on ? 'var(--color-accent)' : 'var(--color-line)',
-    background: on ? `${tint}59` : '#fff',
+    background: on ? `${tint}${WASH}` : '#fff',
   }) as const;
 
 // Two limits, not one: the height is what makes the sheet read as a sheet,
@@ -167,22 +169,43 @@ const cardSkin = (on: boolean, tint: string) =>
 const ICON_H = 60;
 const ICON_W = 38;
 
-// Everything here is in millimetres, scaled as a whole to fit the box -- the
-// border, the corner radius and the punch stay in proportion to the paper,
-// which is what made the first version of this read as a sheet rather than as
-// a box with dots on it. Sixty pixels is where the holes of the largest size
-// are still visible; below that they thin out to nothing.
-function SizeIcon({ size, tint, flip = false, box = { h: ICON_H, w: ICON_W } }: {
-  size: SizeSpec; tint: { fill: string; line: string }; flip?: boolean;
+// The paper is in millimetres and scaled as a whole to fit the box -- that is
+// what makes this read as a sheet rather than as a box with dots on it -- but
+// the pen that draws it is not. A 0.8mm line is 0.46px wide on M5 and 0.21px
+// on A5, so the bigger the sheet the fainter its own outline, and A5 came out
+// as a wash with no edge and no visible punch at all. `pen` turns a thickness
+// on screen back into millimetres, which gives all nine sheets one line.
+const OUTLINE_PX = 1.2;
+const HOLE_RING_PX = 0.9;
+// The punch shrinks the same way: 5.5mm on A5 is a 0.7px dot. A hole keeps
+// its true size wherever that still reads, and stops shrinking below a dot
+// that does -- never past three quarters of the margin it sits in, or it
+// would break out through the edge of the paper it is punched in.
+const HOLE_MIN_PX = 1;
+
+// `on` is the card being selected, which washes it with this very colour. A
+// sheet is the lighter thing lying on the desk, so on a plain white card the
+// sheet is the one carrying the colour and on a washed one it goes white --
+// tinted paper on a tinted desk left nothing but the outline to see it by.
+// The punch shows the desk through the paper in both cases.
+function SizeIcon({ size, tint, on = false, flip = false, box = { h: ICON_H, w: ICON_W } }: {
+  size: SizeSpec; tint: { fill: string; line: string }; on?: boolean; flip?: boolean;
   box?: { h: number; w: number };
 }) {
+  const paper = on ? '#fff' : tint.fill;
+  const through = on ? `${tint.fill}${WASH}` : '#fff';
   const k = Math.min(box.h / size.heightMm, box.w / size.widthMm);
+  const pen = (onScreen: number) => onScreen / k;
   const onTop = size.ringsOn === 'top';
   // `flip` is the left page of a spread: the binding is the seam between the
   // pages, so that one's holes sit on its far edge.
-  const band = flip
-    ? (onTop ? size.heightMm : size.widthMm) - size.ringMarginMm / 2
-    : size.ringMarginMm / 2;
+  const margin = size.ringMarginMm / 2;
+  const band = flip ? (onTop ? size.heightMm : size.widthMm) - margin : margin;
+  const hole = Math.min(
+    Math.max(size.holes.diameterMm / 2, pen(HOLE_MIN_PX)),
+    margin * 0.75,
+  );
+  const inset = pen(OUTLINE_PX) / 2;
   return (
     <svg
       width={size.widthMm * k} height={size.heightMm * k}
@@ -191,15 +214,16 @@ function SizeIcon({ size, tint, flip = false, box = { h: ICON_H, w: ICON_W } }: 
       aria-hidden="true"
     >
       <rect
-        x={0.4} y={0.4} width={size.widthMm - 0.8} height={size.heightMm - 0.8}
-        rx={1.5} fill={tint.fill} stroke={tint.line} strokeWidth={0.8}
+        x={inset} y={inset}
+        width={size.widthMm - inset * 2} height={size.heightMm - inset * 2}
+        rx={pen(2)} fill={paper} stroke={tint.line} strokeWidth={pen(OUTLINE_PX)}
       />
       {holeCentres(size.holes).map((at, i) => (
         <circle
           key={i}
           cx={onTop ? at : band} cy={onTop ? band : at}
-          r={size.holes.diameterMm / 2}
-          fill="#fff" stroke={tint.line} strokeWidth={0.7}
+          r={hole}
+          fill={through} stroke={tint.line} strokeWidth={pen(HOLE_RING_PX)}
         />
       ))}
     </svg>
@@ -260,7 +284,7 @@ function SizeScreen({ selected, onPick }: { selected: RefillSize; onPick: (s: Re
                             {sizeMm(SIZES[id])}
                           </span>
                         </span>
-                        <SizeIcon size={SIZES[id]} tint={SIZE_TINT[id]} />
+                        <SizeIcon size={SIZES[id]} tint={SIZE_TINT[id]} on={selected === id} />
                         {/* Decoration: it says "this opens something", which
                             the button already says, so it stays out of the
                             name a screen reader reads. */}
@@ -323,7 +347,7 @@ function SidesScreen({ size, spread, onPick, onBack, onConfirm }: {
               {row.sheets.map((flip, i) => (
                 // This screen has one choice on it and the room to draw it
                 // properly, so the sheets come out larger than in the picker.
-                <SizeIcon key={i} size={spec} tint={tint} flip={flip} box={{ h: 84, w: 54 }} />
+                <SizeIcon key={i} size={spec} tint={tint} on={row.on} flip={flip} box={{ h: 84, w: 54 }} />
               ))}
             </span>
           </button>
