@@ -6,7 +6,7 @@ import type { Rect, SurfaceSlice } from '../layout';
 import { drawGrid, drawLines, drawMemo, drawPart, drawPartAcross, drawSpanningMonthly } from '../parts';
 import { holeCentres } from '../sizes';
 import { addMonths, isoDate, sheetStarts } from '../dates';
-import { DEFAULT_IMPOSE, impose, tilesPerPage } from './impose';
+import { DEFAULT_IMPOSE, impose, planTiles } from './impose';
 import type { SheetContent } from './impose';
 
 // Turns the editor's layout into printable pages. The on-screen preview and
@@ -240,13 +240,19 @@ export function buildPrintSheets(layout: Layout, size: SizeSpec, opts: PrintOpti
   return fronts.flatMap((f, i) => (backs[i] ? [f, backs[i]] : [f]));
 }
 
-// How many refills fit on one sheet of paper, for telling the user before they
-// print.
-export function perPaperCount(size: SizeSpec): number {
-  const { cols, rows } = tilesPerPage(
-    { widthMm: size.widthMm, heightMm: size.heightMm, primitives: [] },
-    DEFAULT_IMPOSE,
-  );
-  return cols * rows;
-}
+// How the refills will sit on the paper, for telling the user before they
+// print: how many to a sheet, and how close to the paper's edge they come.
+export const paperPlan = (size: SizeSpec) =>
+  planTiles({ widthMm: size.widthMm, heightMm: size.heightMm }, DEFAULT_IMPOSE);
+
+export const perPaperCount = (size: SizeSpec): number => paperPlan(size).perPage;
+
+// The nearest ink gets to the edge of a refill, which is what decides whether
+// a printer's unprintable border eats any of it. Measured, not assumed: the
+// content sits OUTER_MM in with each part's own PAD on top of that, and the
+// punch guide is a circle whose outer rim comes nearer still. Only the edges
+// with no clearance are at risk, so the caller pairs this with the plan.
+export const INK_INSET_MM = 4.2;
+export const punchInset = (size: SizeSpec): number =>
+  size.ringMarginMm / 2 - size.holes.diameterMm / 2;
 

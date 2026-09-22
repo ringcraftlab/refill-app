@@ -10,7 +10,8 @@ import type { Divider, DropPoint, Geometry } from './lib/layout';
 import { nextMonthCell } from './lib/parts';
 import { addMonths } from './lib/dates';
 import {
-  buildPages, buildPrintSheets, DEFAULT_PRINT, hasDatedPart, isDayPaced, perPaperCount, sheetCount,
+  buildPages, buildPrintSheets, DEFAULT_PRINT, hasDatedPart, INK_INSET_MM, isDayPaced, paperPlan,
+  punchInset, sheetCount,
 } from './lib/render/pages';
 import type { BackFill, PrintOptions } from './lib/render/pages';
 import { PageSvg, SheetSvg } from './lib/render/svg';
@@ -408,6 +409,38 @@ function SidesScreen({ size, spread, onPick, onBack, onConfirm }: {
       </div>
       <Button variant="cta" className="mt-auto" onClick={onConfirm}>この構成で作る</Button>
     </div>
+  );
+}
+
+// Whether the refills reach the paper's edge, and what that costs. Packing
+// them edge to edge is what buys A5 its second refill and Micro5 its seventh
+// and eighth, and the price is that a printer's unprintable border eats into
+// whichever side has no clearance. Which side matters: the binding edge
+// carries the punch guide, whose rim comes 2.0-3.3mm in, while every other
+// edge is clear for 4.2mm. So the note says the number the user has to
+// compare against their own printer rather than a verdict this cannot reach.
+function EdgeNote({ size }: { size: SizeSpec }) {
+  const plan = paperPlan(size);
+  const tight: string[] = [];
+  if (plan.sideMm < 0.75) tight.push('左右');
+  if (plan.endMm < 0.75) tight.push('上下');
+  if (!tight.length) {
+    return (
+      <p className="edge-note m-0 mb-[13px] text-[12px] text-faint">
+        外周に{Math.floor(Math.min(plan.sideMm, plan.endMm))}mm余ります。端まで刷る必要はありません
+      </p>
+    );
+  }
+  // The binding edge runs down the side of every size the app carries, so a
+  // size whose left and right reach the paper is the only one whose punch
+  // guide is in the firing line.
+  const onEdge = tight.includes('左右') ? punchInset(size) : INK_INSET_MM;
+  return (
+    <p className="edge-note m-0 mb-[13px] text-[12px] text-faint">
+      <span className="font-semibold text-label">{tight.join('と')}は紙の端まで使います。</span>
+      お使いのプリンタの余白が{onEdge.toFixed(onEdge < 4 ? 2 : 1)}mmより広いと、
+      {tight.includes('左右') ? '穴ガイドの外側' : '中身の外周'}がそのぶん欠けます
+    </p>
   );
 }
 
@@ -1088,8 +1121,9 @@ function PartSheet({ target, layout, setLayout, onClose, onRemove, onRemoveSpann
             <p className="print-summary my-[13px] text-[13px] text-faint">
               {hasDatedPart(layout) && `${layout.year}年${layout.month}月から${layout.monthCount}ヶ月分・`}
               {isDayPaced(layout) && `${sheetCount(layout)}枚・`}
-              {print.impose && `A4 1枚に ${perPaperCount(size)} 面`}
+              {print.impose && `A4 1枚に ${paperPlan(size).perPage} 面`}
             </p>
+            {print.impose && <EdgeNote size={size} />}
 
             <Choice
               label="印刷"
