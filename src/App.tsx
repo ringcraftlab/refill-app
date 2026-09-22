@@ -186,20 +186,25 @@ const emWidth = (name: string) =>
 const nameSize = (name: string) =>
   (emWidth(name) > 4.5 ? 'text-[10px] min-[360px]:text-[11px]' : 'text-[13px]');
 
-// Selection is the accent outline and a ring of it; the card itself stays
-// white. It used to be washed with the size's own colour, which took contrast
-// off everything on the card at the one moment it mattered most -- the
-// reading and the millimetres fell from 3.76 and 2.11 to 3.2 and 1.8, the
-// colour bar from 3.5 to 2.4, and the sheet, being that same colour at full
-// strength, was left with nothing but its outline to be seen by. The colour
-// is already on the card twice, as the bar and as the sheet; a third coat of
-// it only took away.
+// Selection is the size's own colour, drawn as an outline and a glow around
+// the card, and nothing at all inside it. The card was once washed with that
+// colour, which took contrast off everything standing on it at the one moment
+// it mattered most -- the millimetres fell from 2.11 to 1.8, the colour bar
+// from 3.5 to 2.4, and the sheet, being that same colour at full strength,
+// was left with nothing but its outline to be seen by. Outside the border the
+// colour can be as strong as it likes, because nothing has to be read
+// through it.
+//
+// The border is the only hard edge; everything outside it is blur. A second
+// crisp ring around the first read as a stroke rather than as light, so there
+// is one wide soft shadow in the colour and then the card's own, which stays
+// so a selected card still sits on the page rather than floating off it.
 const CARD_SHADOW = '0 1px 3px rgba(58,54,46,0.07)';
-const cardSkin = (on: boolean) =>
+const cardSkin = (on: boolean, line: string) =>
   ({
-    borderColor: on ? 'var(--color-accent)' : 'var(--color-line)',
+    borderColor: on ? line : 'var(--color-line)',
     background: '#fff',
-    boxShadow: on ? `0 0 0 3px rgba(193,115,74,0.18), ${CARD_SHADOW}` : CARD_SHADOW,
+    boxShadow: on ? `0 0 22px 6px ${line}5C, ${CARD_SHADOW}` : CARD_SHADOW,
   }) as const;
 
 // The paper is in millimetres and scaled as a whole to fit the box -- that is
@@ -287,7 +292,7 @@ function SizeScreen({ selected, onPick }: { selected: RefillSize; onPick: (s: Re
                         key={id}
                         onClick={() => onPick(id)}
                         className="sizerow flex min-w-0 items-center gap-1 rounded-[18px] border-[1.5px] py-2 pl-1.5 pr-1 text-left"
-                        style={cardSkin(selected === id)}
+                        style={cardSkin(selected === id, SIZE_TINT[id].line)}
                         aria-pressed={selected === id}
                       >
                         {/* A colour a glance can learn the size by, before
@@ -354,7 +359,7 @@ function SidesScreen({ size, spread, onPick, onBack, onConfirm }: {
 }) {
   const spec = SIZES[size];
   const tint = SIZE_TINT[size];
-  const rows: { on: boolean; pick: boolean; title: string; note: string; sheets: boolean[] }[] = [
+  const choices: { on: boolean; pick: boolean; title: string; note: string; sheets: boolean[] }[] = [
     {
       on: spread, pick: true, title: '見開き（2ページ）', note: '左右セットで1ヶ月分',
       // The left page's rings are drawn on its right: in a spread the binding
@@ -372,24 +377,31 @@ function SidesScreen({ size, spread, onPick, onBack, onConfirm }: {
           {SIZE_NAME[size]}（{sizeMm(spec)}・{sizeHoles(spec)}）のリフィルを作ります
         </p>
       </div>
-      <div className="flex flex-col gap-2.5">
-        {rows.map(row => (
+      {/* Side by side, on the same two-column grid as the picker. Two choices
+          are one comparison, and a comparison reads across, not down: stacked,
+          the spread and the single page were the same drawing seen twice in a
+          row instead of one beside the other. Which also settles the shape of
+          the card -- half the screen is too narrow to set a title beside the
+          paper, so the paper goes on top and the words underneath, and the
+          colour bar goes away: on a screen where both cards are the same size
+          it was the same stripe twice, saying nothing either time. */}
+      <div className="grid grid-cols-2 gap-1.5">
+        {choices.map(choice => (
           <button
-            key={row.title}
-            className="card flex items-center gap-3 rounded-[18px] border-[1.5px] py-2 pl-2.5 pr-3 text-left"
-            style={cardSkin(row.on)}
-            aria-pressed={row.on}
-            onClick={() => onPick(row.pick)}
+            key={choice.title}
+            className="card flex flex-col items-center gap-2 rounded-[18px] border-[1.5px] px-2 py-3 text-center"
+            style={cardSkin(choice.on, tint.line)}
+            aria-pressed={choice.on}
+            onClick={() => onPick(choice.pick)}
           >
-            <span className="w-[5px] shrink-0 self-stretch rounded-full" style={{ background: tint.line }} />
-            <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-              <strong className="text-[14px] font-semibold leading-tight">{row.title}</strong>
-              <span className="text-[11px] leading-tight text-faint">{row.note}</span>
-            </span>
-            <span className="flex shrink-0 items-center justify-center gap-[3px]" style={{ height: SHEET_SLOT.height }}>
-              {row.sheets.map((flip, i) => (
+            <span className="flex items-center justify-center gap-[3px]" style={{ height: SHEET_SLOT.height }}>
+              {choice.sheets.map((flip, i) => (
                 <SizeIcon key={i} size={spec} tint={tint} flip={flip} />
               ))}
+            </span>
+            <span className="flex flex-col gap-0.5">
+              <strong className="text-[13px] font-semibold leading-tight">{choice.title}</strong>
+              <span className="text-[10px] leading-tight text-faint">{choice.note}</span>
             </span>
           </button>
         ))}
