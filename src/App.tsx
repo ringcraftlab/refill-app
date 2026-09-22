@@ -111,10 +111,33 @@ export function App() {
 // exist and have to be reachable, but putting them in the same run makes the
 // first choice harder than it is. Rows inside a group are pairs, and a size
 // with no partner leaves the rest of its row empty.
-const SIZE_GROUPS: { title: string; rows: RefillSize[][] }[] = [
-  { title: 'よく使われるサイズ', rows: [['M5', 'M6'], ['BIBLE', 'A5']] },
-  { title: 'その他サイズ', rows: [['MINI3', 'CARD3'], ['M5SQ', 'NARROW'], ['A5SLIM']] },
+// Pixels per millimetre, one number for a whole group, so A5 comes out twice
+// the height of M5 and the drawing finally answers the question the screen is
+// asking. Fitting each sheet to its own box -- which is what this did -- drew
+// all nine at the same size, and a picture that is the same for every size is
+// the one thing a picture here must not be.
+//
+// The group people actually use is drawn large and the rest are held back, so
+// the two scales differ. The price is that a sheet cannot be compared across
+// the heading: M5 and M5 square are both 105mm tall and are not drawn the
+// same height. Within a group -- which is where the eye compares, and where
+// both lists are sorted by size -- every sheet is to scale against every
+// other.
+const SIZE_GROUPS: { title: string; scale: number; rows: RefillSize[][] }[] = [
+  { title: 'よく使われるサイズ', scale: 0.36, rows: [['M5', 'M6'], ['BIBLE', 'A5']] },
+  { title: 'その他サイズ', scale: 0.28, rows: [['MINI3', 'CARD3'], ['M5SQ', 'NARROW'], ['A5SLIM']] },
 ];
+
+// The sheets sit in a column as wide and as tall as the group's largest, so
+// the names keep one edge and the chevrons keep another instead of stepping
+// in and out as the paper changes size.
+const slotOf = (group: { scale: number; rows: RefillSize[][] }) => {
+  const ids = group.rows.flat();
+  return {
+    width: Math.max(...ids.map(id => SIZES[id].widthMm)) * group.scale,
+    height: Math.max(...ids.map(id => SIZES[id].heightMm)) * group.scale,
+  };
+};
 
 // A colour per size, spread around the wheel rather than clustered: the four
 // common sizes take four plain hues, and the rest fill the gaps. Muted enough
@@ -168,12 +191,6 @@ const cardSkin = (on: boolean) =>
     boxShadow: on ? `0 0 0 3px rgba(193,115,74,0.18), ${CARD_SHADOW}` : CARD_SHADOW,
   }) as const;
 
-// Two limits, not one: the height is what makes the sheet read as a sheet,
-// but a square one would then be as wide as it is tall and leave the name no
-// room, so the width is capped tighter.
-const ICON_H = 60;
-const ICON_W = 38;
-
 // The paper is in millimetres and scaled as a whole to fit the box -- that is
 // what makes this read as a sheet rather than as a box with dots on it -- but
 // the pen that draws it is not. A 0.8mm line is 0.46px wide on M5 and 0.21px
@@ -188,11 +205,9 @@ const HOLE_RING_PX = 0.9;
 // would break out through the edge of the paper it is punched in.
 const HOLE_MIN_PX = 1;
 
-function SizeIcon({ size, tint, flip = false, box = { h: ICON_H, w: ICON_W } }: {
-  size: SizeSpec; tint: { fill: string; line: string }; flip?: boolean;
-  box?: { h: number; w: number };
+function SizeIcon({ size, tint, scale: k, flip = false }: {
+  size: SizeSpec; tint: { fill: string; line: string }; scale: number; flip?: boolean;
 }) {
-  const k = Math.min(box.h / size.heightMm, box.w / size.widthMm);
   const pen = (onScreen: number) => onScreen / k;
   const onTop = size.ringsOn === 'top';
   // `flip` is the left page of a spread: the binding is the seam between the
@@ -242,7 +257,9 @@ function SizeScreen({ selected, onPick }: { selected: RefillSize; onPick: (s: Re
           first row above the scroll origin, where nothing can reach it. */}
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
         <div className="mb-auto flex w-full flex-col gap-3 py-0.5">
-          {SIZE_GROUPS.map(group => (
+          {SIZE_GROUPS.map(group => {
+            const slot = slotOf(group);
+            return (
             <section key={group.title} className="flex flex-col gap-1.5">
               <h2 className="m-0 text-[11px] font-bold tracking-[0.04em] text-muted">{group.title}</h2>
               {/* A grid, not nested flex rows: its columns are exactly half
@@ -263,10 +280,12 @@ function SizeScreen({ selected, onPick }: { selected: RefillSize; onPick: (s: Re
                         style={cardSkin(selected === id)}
                         aria-pressed={selected === id}
                       >
-                        {/* A colour a glance can learn the size by, before the
-                            name is read. */}
+                        {/* A colour a glance can learn the size by, before
+                            the name is read, and as tall as the row: the one
+                            fixed-height thing on a card whose every other
+                            part is to scale looked like a mistake. */}
                         <span
-                          className="h-14 w-[5px] shrink-0 rounded-full"
+                          className="w-[5px] shrink-0 self-stretch rounded-full"
                           style={{ background: SIZE_TINT[id].line }}
                         />
                         <span className="flex min-w-0 flex-1 flex-col gap-0.5">
@@ -282,17 +301,25 @@ function SizeScreen({ selected, onPick }: { selected: RefillSize; onPick: (s: Re
                             {sizeMm(SIZES[id])}
                           </span>
                         </span>
-                        <SizeIcon size={SIZES[id]} tint={SIZE_TINT[id]} />
+                        <span className="flex shrink-0 items-center justify-center" style={slot}>
+                          <SizeIcon size={SIZES[id]} tint={SIZE_TINT[id]} scale={group.scale} />
+                        </span>
                         {/* Decoration: it says "this opens something", which
                             the button already says, so it stays out of the
-                            name a screen reader reads. */}
-                        <span aria-hidden="true" className="shrink-0 text-[13px] leading-none text-faint">›</span>
+                            name a screen reader reads -- and off a 320px
+                            screen entirely. It and its gap cost 9px of the
+                            135px card, which at that width is the difference
+                            between "148×210mm" and "148×210m…", and the
+                            millimetres are the only clue left to someone who
+                            does not know the names. */}
+                        <span aria-hidden="true" className="hidden shrink-0 text-[13px] leading-none text-faint min-[360px]:block">›</span>
                       </button>
                     )
                 ))}
               </div>
             </section>
-          ))}
+            );
+          })}
         </div>
       </div>
     </div>
@@ -302,13 +329,19 @@ function SizeScreen({ selected, onPick }: { selected: RefillSize; onPick: (s: Re
 // The same card as the size picker, one per choice: the colour of the size
 // just chosen, its own sheet drawn to scale, and the accent outline for the
 // one that is selected. Two screens in a row that look unrelated read as two
-// unrelated decisions, and this is the second half of one decision.
+// unrelated decisions, and this is the second half of one decision -- so the
+// sheet is drawn at the picker's own scale, in a slot the picker's own
+// height, and the paper the finger just touched is the same paper, the same
+// size, on the screen that follows. Drawing it larger here because there was
+// room made the two screens look like two different apps.
 function SidesScreen({ size, spread, onPick, onBack, onConfirm }: {
   size: RefillSize; spread: boolean; onPick: (v: boolean) => void;
   onBack: () => void; onConfirm: () => void;
 }) {
   const spec = SIZES[size];
   const tint = SIZE_TINT[size];
+  const common = SIZE_GROUPS[0];
+  const slot = slotOf(common);
   const rows: { on: boolean; pick: boolean; title: string; note: string; sheets: boolean[] }[] = [
     {
       on: spread, pick: true, title: '見開き（2ページ）', note: '左右セットで1ヶ月分',
@@ -331,21 +364,19 @@ function SidesScreen({ size, spread, onPick, onBack, onConfirm }: {
         {rows.map(row => (
           <button
             key={row.title}
-            className="card flex items-center gap-3 rounded-[18px] border-[1.5px] py-3 pl-2.5 pr-3 text-left"
+            className="card flex items-center gap-3 rounded-[18px] border-[1.5px] py-2 pl-2.5 pr-3 text-left"
             style={cardSkin(row.on)}
             aria-pressed={row.on}
             onClick={() => onPick(row.pick)}
           >
-            <span className="h-14 w-[5px] shrink-0 rounded-full" style={{ background: tint.line }} />
+            <span className="w-[5px] shrink-0 self-stretch rounded-full" style={{ background: tint.line }} />
             <span className="flex min-w-0 flex-1 flex-col gap-0.5">
               <strong className="text-[14px] font-semibold leading-tight">{row.title}</strong>
               <span className="text-[11px] leading-tight text-faint">{row.note}</span>
             </span>
-            <span className="flex shrink-0 items-center gap-[3px]">
+            <span className="flex shrink-0 items-center justify-center gap-[3px]" style={{ height: slot.height }}>
               {row.sheets.map((flip, i) => (
-                // This screen has one choice on it and the room to draw it
-                // properly, so the sheets come out larger than in the picker.
-                <SizeIcon key={i} size={spec} tint={tint} flip={flip} box={{ h: 84, w: 54 }} />
+                <SizeIcon key={i} size={spec} tint={tint} scale={common.scale} flip={flip} />
               ))}
             </span>
           </button>
