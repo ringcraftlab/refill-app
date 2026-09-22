@@ -2,6 +2,7 @@
 // how many refills landed on each sheet, and a rendered image to look at.
 //
 //   node scripts/pdfcheck.mjs [outDir]
+//   SIZE='横長ミニ3穴' node scripts/pdfcheck.mjs out   # any card in the picker
 import { chromium } from 'playwright';
 import { mkdir, readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
@@ -9,6 +10,7 @@ import { PDFDocument } from 'pdf-lib';
 
 const BASE = process.env.BASE_URL ?? 'http://localhost:4173';
 const OUT = process.argv[2] ?? 'shots';
+const SIZE = process.env.SIZE ?? 'M6';
 const MM = 25.4 / 72;
 await mkdir(OUT, { recursive: true });
 
@@ -20,7 +22,7 @@ const page = await ctx.newPage();
 await page.setViewportSize({ width: 390, height: 844 });
 await page.goto(BASE);
 
-await page.locator('.sizerow', { hasText: 'M6' }).click();
+await page.locator('.sizerow', { hasText: SIZE }).first().click();
 await page.locator('.card', { hasText: '見開き' }).click();
 await page.getByRole('button', { name: 'この構成で作る' }).click();
 await page.locator('.page').first().waitFor();

@@ -12,7 +12,7 @@ import type { HoleSpec, RefillSize, SizeSpec } from '../types';
 //   Mini 6  16.5×2 + 19×5 = 128        (one even run, no middle gap)
 //   Micro 5 14.5×2 + 19×4 = 105        (five holes, not six)
 //   M5 sq   14.5×2 + 19×4 = 105        (Micro 5's punch on a square sheet)
-//   Card    8.5×2 + 19×2 = 55          (three holes across the top)
+//   Card 3  8.5×2 + 19×2 = 55          (three holes, on the 55mm edge)
 //   Mini 3  11.5×2 + 28.5×2 = 80        (three holes at a wider pitch)
 //
 // Hole diameter is measured, not derived: the ring wire gets thinner as the
@@ -23,16 +23,17 @@ export const SIZES: Record<RefillSize, SizeSpec> = {
   // the 19mm every ring binder uses, so nothing about this one can be
   // borrowed from the sizes below it.
   MINI3: {
-    id: 'MINI3', label: 'ミニ3穴（60×80）', widthMm: 60, heightMm: 80, ringMarginMm: 8,
+    id: 'MINI3', label: '縦長ミニ3穴', widthMm: 60, heightMm: 80, ringMarginMm: 8,
     holes: { count: 3, diameterMm: 4, pitchMm: 28.5, marginMm: 11.5 },
   },
-  // A business card hanging from three rings across its top. Three holes at
-  // the standard pitch span 38mm, which only fits the 55mm edge, so this one
-  // binds on its short side -- the paper stays upright and the rings run
-  // along the top of it.
+  // A business card on three rings. Three holes at the standard pitch span
+  // 38mm, which only fits the 55mm edge, so that is the edge they go on --
+  // which makes this the one card-sized refill that is wider than it is tall.
+  // It is the same sheet as a 55×91 held upright with the rings above it; a
+  // wide sheet bound on its left is how it is actually written on, and how
+  // every other size here is described, so it is described that way too.
   CARD3: {
-    id: 'CARD3', label: '名刺サイズ（3穴）', widthMm: 55, heightMm: 91,
-    ringMarginMm: 8, bindEdge: 'short',
+    id: 'CARD3', label: '横長ミニ3穴', widthMm: 91, heightMm: 55, ringMarginMm: 8,
     holes: { count: 3, diameterMm: 3.5, pitchMm: 19, marginMm: 8.5 },
   },
   M5: {
@@ -68,8 +69,8 @@ export const SIZES: Record<RefillSize, SizeSpec> = {
   },
 };
 
-// Hole centres along the binding edge, from its start: down the page for a
-// refill bound on its side, across it for one bound at the top.
+// Hole centres along the binding edge, from its start: down the sheet for one
+// bound on its side, across it for one bound at the top.
 export function holeCentres(spec: HoleSpec): number[] {
   const { count, pitchMm, marginMm, centreGapMm } = spec;
   if (!centreGapMm) {

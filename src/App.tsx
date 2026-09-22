@@ -3,7 +3,9 @@ import type { ReactNode } from 'react';
 import type { Layout, PartKind, RefillSize, SizeSpec } from './types';
 import { MAX_PARTS, SCHEMA_VERSION } from './types';
 import { holeCentres, SIZES } from './lib/sizes';
-import { buildGeometry, MAX_RATIO, MIN_RATIO, placeParts as planPlacement, regionAt } from './lib/layout';
+import {
+  buildGeometry, isLandscape, MAX_RATIO, MIN_RATIO, placeParts as planPlacement, regionAt, ringsOnTop,
+} from './lib/layout';
 import type { Divider, DropPoint, Geometry } from './lib/layout';
 import { nextMonthCell } from './lib/parts';
 import { addMonths } from './lib/dates';
@@ -29,7 +31,6 @@ const GAP = 6;
 // anything pressable comes from ui/.
 const SCREEN = 'relative mx-auto flex h-full max-w-[430px] flex-col overflow-hidden bg-bg';
 const SCREEN_PAD = `${SCREEN} gap-[18px] px-[22px] py-7`;
-const SHEET_MINI = 'h-[52px] w-[34px] shrink-0 rounded-sm border border-line-strong bg-white';
 
 const TRAY: { kind: PartKind; label: string; glyph: string }[] = [
   { kind: 'monthly', label: 'マンスリー', glyph: '31' },
@@ -95,6 +96,7 @@ export function App() {
   if (stage === 'sides') {
     return (
       <SidesScreen
+        size={layout.size}
         spread={layout.spread}
         onPick={(spread) => setLayout(l => ({ ...l, spread }))}
         onBack={() => setStage('size')}
@@ -105,8 +107,6 @@ export function App() {
   return <CanvasScreen layout={layout} setLayout={setLayout} onBack={() => setStage('sides')} />;
 }
 
-// Smallest first, drawn to one scale so the list itself shows how the sizes
-// compare.
 // The picker's two groups. Four sizes are what almost everyone has; the rest
 // exist and have to be reachable, but putting them in the same run makes the
 // first choice harder than it is. Rows inside a group are pairs, and a size
@@ -130,30 +130,36 @@ const SIZE_TINT: Record<RefillSize, { fill: string; line: string }> = {
   NARROW: { fill: '#F0D4E2', line: '#AD6A8F' },
   A5SLIM: { fill: '#E3DBDB', line: '#8E7B7B' },
 };
-const SIZE_NOTE: Record<RefillSize, string> = {
-  MINI3: '極小',
-  CARD3: 'カード',
-  M5SQ: '正方形',
-  A5SLIM: '細長',
-  A5: '書き込み',
-  BIBLE: '王道',
-  NARROW: '細身',
-  M6: '携帯性',
-  M5: 'メモ帳',
+// The name on the card, and under it the reading for the four sizes that are
+// spoken as letters. The millimetres come last and are on every card: they
+// are what settles it when the names are unfamiliar, and they are read off
+// the size itself so they can never drift from what gets printed.
+const SIZE_NAME: Record<RefillSize, { code: string; read?: string }> = {
+  M5: { code: 'M5', read: 'マイクロ5' },
+  M6: { code: 'M6', read: 'ミニ6' },
+  BIBLE: { code: 'Bible', read: 'バイブル' },
+  A5: { code: 'A5' },
+  MINI3: { code: '縦長ミニ3穴' },
+  CARD3: { code: '横長ミニ3穴' },
+  M5SQ: { code: 'M5スクエア' },
+  NARROW: { code: 'ナロー' },
+  A5SLIM: { code: 'A5スリム' },
 };
-// The name on the card, and under it the thing worth knowing next: the
-// reading for the sizes that have a common one, the millimetres for the sizes
-// that do not -- which is also what tells the two three-hole binders apart.
-const SIZE_CODE: Record<RefillSize, string> = {
-  M5: 'M5', M6: 'M6', BIBLE: 'Bible', A5: 'A5',
-  MINI3: '縦長ミニ3穴', CARD3: '横長ミニ3穴',
-  M5SQ: 'M5スクエア', NARROW: 'ナロー', A5SLIM: 'A5スリム',
-};
-const SIZE_SUB: Record<RefillSize, string> = {
-  M5: 'マイクロ5', M6: 'ミニ6', BIBLE: 'バイブル', A5: '148×210mm',
-  MINI3: '60×80mm', CARD3: '55×91mm',
-  M5SQ: '105×105mm', NARROW: '80×170mm', A5SLIM: '125×210mm',
-};
+const sizeMm = (s: SizeSpec) => `${s.widthMm}×${s.heightMm}mm`;
+
+// Two columns on a 320px phone leave the name about 70px, and truncating a
+// Japanese name to 「縦長ミ…」 throws away the one word that tells the two
+// three-hole sizes apart. The long names shrink instead of being cut.
+const nameSize = (code: string) => (code.length > 4 ? 'text-[11px]' : 'text-[13px]');
+
+// The selected card is tinted with its own colour and outlined in the accent.
+// The tint is thinned so the icon, which is the same colour at full strength,
+// still reads as a sheet lying on it.
+const cardSkin = (on: boolean, tint: string) =>
+  ({
+    borderColor: on ? 'var(--color-accent)' : 'var(--color-line)',
+    background: on ? `${tint}59` : '#fff',
+  }) as const;
 
 // Two limits, not one: the height is what makes the sheet read as a sheet,
 // but a square one would then be as wide as it is tall and leave the name no
@@ -166,10 +172,17 @@ const ICON_W = 38;
 // which is what made the first version of this read as a sheet rather than as
 // a box with dots on it. Sixty pixels is where the holes of the largest size
 // are still visible; below that they thin out to nothing.
-function SizeIcon({ size, tint }: { size: SizeSpec; tint: { fill: string; line: string } }) {
-  const k = Math.min(ICON_H / size.heightMm, ICON_W / size.widthMm);
-  const onTop = size.bindEdge === 'short';
-  const band = size.ringMarginMm / 2;
+function SizeIcon({ size, tint, flip = false, box = { h: ICON_H, w: ICON_W } }: {
+  size: SizeSpec; tint: { fill: string; line: string }; flip?: boolean;
+  box?: { h: number; w: number };
+}) {
+  const k = Math.min(box.h / size.heightMm, box.w / size.widthMm);
+  const onTop = size.ringsOn === 'top';
+  // `flip` is the left page of a spread: the binding is the seam between the
+  // pages, so that one's holes sit on its far edge.
+  const band = flip
+    ? (onTop ? size.heightMm : size.widthMm) - size.ringMarginMm / 2
+    : size.ringMarginMm / 2;
   return (
     <svg
       width={size.widthMm * k} height={size.heightMm * k}
@@ -224,9 +237,9 @@ function SizeScreen({ selected, onPick }: { selected: RefillSize; onPick: (s: Re
                       <button
                         key={id}
                         onClick={() => onPick(id)}
-                        className={`sizerow flex min-w-0 items-center gap-1.5 rounded-[18px] border bg-white py-2 pl-2 pr-1.5 text-left shadow-[0_1px_3px_rgba(58,54,46,0.07)] ${
-                          selected === id ? 'border-ink' : 'border-line'
-                        }`}
+                        className="sizerow flex min-w-0 items-center gap-1 rounded-[18px] border-[1.5px] py-2 pl-1.5 pr-1 text-left shadow-[0_1px_3px_rgba(58,54,46,0.07)]"
+                        style={cardSkin(selected === id, SIZE_TINT[id].fill)}
+                        aria-pressed={selected === id}
                       >
                         {/* A colour a glance can learn the size by, before the
                             name is read. */}
@@ -235,11 +248,16 @@ function SizeScreen({ selected, onPick }: { selected: RefillSize; onPick: (s: Re
                           style={{ background: SIZE_TINT[id].line }}
                         />
                         <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-                          <strong className="truncate text-[13px] font-semibold leading-tight">
-                            {SIZE_CODE[id]}
+                          <strong className={`truncate font-semibold leading-tight ${nameSize(SIZE_NAME[id].code)}`}>
+                            {SIZE_NAME[id].code}
                           </strong>
+                          {SIZE_NAME[id].read && (
+                            <span className="truncate text-[10px] leading-tight text-muted">
+                              {SIZE_NAME[id].read}
+                            </span>
+                          )}
                           <span className="truncate text-[10px] leading-tight text-faint">
-                            {SIZE_SUB[id]}
+                            {sizeMm(SIZES[id])}
                           </span>
                         </span>
                         <SizeIcon size={SIZES[id]} tint={SIZE_TINT[id]} />
@@ -259,32 +277,57 @@ function SizeScreen({ selected, onPick }: { selected: RefillSize; onPick: (s: Re
   );
 }
 
-function SidesScreen({ spread, onPick, onBack, onConfirm }: {
-  spread: boolean; onPick: (v: boolean) => void; onBack: () => void; onConfirm: () => void;
+// The same card as the size picker, one per choice: the colour of the size
+// just chosen, its own sheet drawn to scale, and the accent outline for the
+// one that is selected. Two screens in a row that look unrelated read as two
+// unrelated decisions, and this is the second half of one decision.
+function SidesScreen({ size, spread, onPick, onBack, onConfirm }: {
+  size: RefillSize; spread: boolean; onPick: (v: boolean) => void;
+  onBack: () => void; onConfirm: () => void;
 }) {
-  const card = (on: boolean) =>
-    `card flex items-center gap-3.5 rounded-[14px] border-[1.5px] bg-white p-3.5 text-left ${
-      on ? 'border-ink' : 'border-line'
-    }`;
+  const spec = SIZES[size];
+  const tint = SIZE_TINT[size];
+  const rows: { on: boolean; pick: boolean; title: string; note: string; sheets: boolean[] }[] = [
+    {
+      on: spread, pick: true, title: '見開き（2ページ）', note: '左右セットで1ヶ月分',
+      // The left page's rings are drawn on its right: in a spread the binding
+      // is the seam, which is the one thing a picture of it has to get right.
+      sheets: [true, false],
+    },
+    { on: !spread, pick: false, title: '片面（1ページ）', note: '1ページで完結', sheets: [false] },
+  ];
   return (
     <div className={SCREEN_PAD}>
       <button className="self-start p-0 text-xs text-muted" onClick={onBack}>← サイズを選び直す</button>
-      <h1 className="text-[19px] font-bold">ページ構成を選ぶ</h1>
+      <div>
+        <h1 className="text-[19px] font-bold">ページ構成を選ぶ</h1>
+        <p className="m-0 mt-1 text-[12px] text-muted">
+          {SIZE_NAME[size].code}（{sizeMm(spec)}）のリフィルを作ります
+        </p>
+      </div>
       <div className="flex flex-col gap-2.5">
-        <button className={card(spread)} onClick={() => onPick(true)}>
-          <span className="flex shrink-0 gap-[3px]"><i className={SHEET_MINI} /><i className={SHEET_MINI} /></span>
-          <span className="flex flex-col gap-0.5">
-            <strong className="text-sm">見開き（2ページ）</strong>
-            <small className="text-[11px] text-faint">左右セットで1ヶ月分</small>
-          </span>
-        </button>
-        <button className={card(!spread)} onClick={() => onPick(false)}>
-          <span className={SHEET_MINI} />
-          <span className="flex flex-col gap-0.5">
-            <strong className="text-sm">片面（1ページ）</strong>
-            <small className="text-[11px] text-faint">1ページで完結</small>
-          </span>
-        </button>
+        {rows.map(row => (
+          <button
+            key={row.title}
+            className="card flex items-center gap-3 rounded-[18px] border-[1.5px] py-3 pl-2.5 pr-3 text-left shadow-[0_1px_3px_rgba(58,54,46,0.07)]"
+            style={cardSkin(row.on, tint.fill)}
+            aria-pressed={row.on}
+            onClick={() => onPick(row.pick)}
+          >
+            <span className="h-14 w-[5px] shrink-0 rounded-full" style={{ background: tint.line }} />
+            <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+              <strong className="text-[14px] font-semibold leading-tight">{row.title}</strong>
+              <span className="text-[11px] leading-tight text-faint">{row.note}</span>
+            </span>
+            <span className="flex shrink-0 items-center gap-[3px]">
+              {row.sheets.map((flip, i) => (
+                // This screen has one choice on it and the room to draw it
+                // properly, so the sheets come out larger than in the picker.
+                <SizeIcon key={i} size={spec} tint={tint} flip={flip} box={{ h: 84, w: 54 }} />
+              ))}
+            </span>
+          </button>
+        ))}
       </div>
       <Button variant="cta" className="mt-auto" onClick={onConfirm}>この構成で作る</Button>
     </div>
@@ -334,7 +377,17 @@ function CanvasScreen({ layout, setLayout, onBack }: {
   useLayoutEffect(() => {
     const el = boxRef.current;
     if (!el) return;
-    const measure = () => setBox({ w: el.clientWidth, h: el.clientHeight });
+    // The room the sheets get is inside the padding, not including it.
+    // `clientWidth` counts the padding, which let a spread wider than it is
+    // tall run off both edges of the screen -- invisible until a size wider
+    // than it is tall existed.
+    const measure = () => {
+      const pad = getComputedStyle(el);
+      setBox({
+        w: el.clientWidth - parseFloat(pad.paddingLeft) - parseFloat(pad.paddingRight),
+        h: el.clientHeight - parseFloat(pad.paddingTop) - parseFloat(pad.paddingBottom),
+      });
+    };
     measure();
     const ro = new ResizeObserver(measure);
     ro.observe(el);
@@ -601,6 +654,15 @@ function CanvasScreen({ layout, setLayout, onBack }: {
   // Turning the refill is a property of the paper, so it works on a blank
   // sheet and on one with only a memo. A calendar follows along: an upright
   // spread splits the weekdays, a turned one splits the weeks.
+  // What turning does depends on the sheet, not on the flag: a size that is
+  // wider than it is tall starts out "landscape" already, and a square one
+  // only moves its rings.
+  const onScreenW = isLandscape(layout) ? size.heightMm : size.widthMm;
+  const onScreenH = isLandscape(layout) ? size.widthMm : size.heightMm;
+  const turnLabel = onScreenW === onScreenH
+    ? (ringsOnTop(layout) ? 'リングを左にする' : 'リングを上にする')
+    : onScreenW > onScreenH ? '縦にする' : '横にする';
+
   const turn = () => setLayout(l => {
     const orientation = l.orientation === 'landscape' ? 'portrait' : 'landscape';
     return {
@@ -675,7 +737,7 @@ function CanvasScreen({ layout, setLayout, onBack }: {
           aria-label="リフィルを回転"
         >
           <span className="text-[13px] leading-none">↻</span>
-          {layout.orientation === 'landscape' ? '縦にする' : '横にする'}
+          {turnLabel}
         </button>
         <div
           className="flex items-center justify-center"
@@ -1036,7 +1098,7 @@ function PartSheet({ target, layout, setLayout, onClose, onRemove, onRemoveSpann
           </>
         )}
 
-        {target === 'spanning' && layout.orientation === 'portrait' && (
+        {target === 'spanning' && !ringsOnTop(layout) && (
           <Choice
             label="翌月のミニカレンダー"
             options={[{ v: 'on', label: '入れる' }, { v: 'off', label: '入れない' }]}

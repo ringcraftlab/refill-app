@@ -120,7 +120,7 @@ export const isLandscape = (layout: Layout): boolean => layout.orientation === '
 // split across it -- everything that follows from where the binder holds the
 // paper, as opposed to how the paper is shaped.
 export const ringsOnTop = (layout: Layout): boolean =>
-  ((SIZES[layout.size].bindEdge ?? 'long') === 'long') === isLandscape(layout);
+  ((SIZES[layout.size].ringsOn ?? 'side') === 'side') === isLandscape(layout);
 
 function ringEdgeFor(spread: boolean, onTop: boolean, key: PageKey, flip: boolean): RingEdge {
   // A single sheet binds on its outer edge. In a spread the binding is always

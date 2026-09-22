@@ -94,8 +94,8 @@ export const DEFAULT_PRINT: PrintOptions = {
 
 // Which edge of a sheet carries the rings. Turning a sheet over puts them on
 // the opposite edge, which is why a left page's binding sits on its right.
-// Nearly every refill binds on its long side; a card bound across its top
-// uses the other pair.
+// Every size binds on a side of the sheet as it is described; a top-bound one
+// would use the other pair.
 type Side = 'left' | 'right' | 'top' | 'bottom';
 const mirror = (s: Side): Side =>
   s === 'left' ? 'right' : s === 'right' ? 'left' : s === 'top' ? 'bottom' : 'top';
@@ -103,7 +103,7 @@ const mirror = (s: Side): Side =>
 // The two edges a size can bind on. The paper never turns, whatever the
 // layout does with the content, so this follows the size alone.
 const bindingPair = (size: SizeSpec): [Side, Side] =>
-  size.bindEdge === 'short' ? ['top', 'bottom'] : ['left', 'right'];
+  size.ringsOn === 'top' ? ['top', 'bottom'] : ['left', 'right'];
 
 const PUNCH: Color = [0.78, 0.76, 0.72];
 
