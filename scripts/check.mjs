@@ -29,6 +29,7 @@ const CHECKS = [
   { id: 'ux', script: 'uxcheck.mjs', out: 'shots/ux', what: '×と確認ダイアログ' },
   { id: 'print', script: 'printpreview.mjs', out: 'shots/print', what: '刷り上がりプレビュー' },
   { id: 'multidrop', script: 'multidrop.mjs', out: null, what: 'まとめてドラッグ' },
+  { id: 'touch', script: 'touchcheck.mjs', out: null, what: '指でのトレイ操作' },
 ];
 
 const run = (cmd, argv, env) => new Promise(resolve => {

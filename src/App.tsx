@@ -566,6 +566,23 @@ function CanvasScreen({ layout, setLayout, onBack }: {
   const [sheet, setSheet] = useState<SheetTarget>(null);
   const [toast, setToast] = useState('');
   const [ghost, setGhost] = useState<{ x: number; y: number; kinds: PartKind[] } | null>(null);
+  // Which sides of the tray still have stamps out of sight.
+  const trayRef = useRef<HTMLDivElement | null>(null);
+  const [trayEdge, setTrayEdge] = useState({ left: false, right: false });
+  const readTrayEdges = () => {
+    const el = trayRef.current;
+    if (!el) return;
+    const max = el.scrollWidth - el.clientWidth;
+    const next = { left: el.scrollLeft > 2, right: el.scrollLeft < max - 2 };
+    // Returning the same object when nothing changed lets React bail out,
+    // which is what makes it safe to call this from a ref callback -- that
+    // runs on every render, and a fresh object every time would loop.
+    setTrayEdge(prev => (prev.left === next.left && prev.right === next.right ? prev : next));
+  };
+  // Three stamps a press: enough to feel like progress, few enough that you
+  // do not lose your place in a row of twelve.
+  const nudgeTray = (dir: number) =>
+    trayRef.current?.scrollBy({ left: dir * 63 * 3, behavior: 'smooth' });
   // Where the part being dragged would land. Two arrangements are possible
   // from the same drop -- beside the calendar or under it -- so the sheet has
   // to say which one the finger is currently asking for.
@@ -712,9 +729,28 @@ function CanvasScreen({ layout, setLayout, onBack }: {
     setSheet(null);
   };
 
+  // A finger is not captured here, a mouse is.
+  //
+  // Capturing a touch pointer takes the gesture off the browser before it
+  // knows what the gesture is, and the tray is a horizontal scroller: with
+  // every stamp holding a captured pointer there was nothing left to swipe,
+  // so the tray could not be scrolled at all. A touch pointer does not need
+  // it -- the spec captures it to the element that received the down by
+  // itself -- so leaving it alone costs nothing and lets `touch-action:
+  // pan-x` do its job. A mouse has no such implicit capture, and without one
+  // the moves go to whatever is under the cursor the moment it leaves the
+  // stamp, which for anything but a slow short drag is not the stamp.
   const startDrag = (e: React.PointerEvent, kinds: PartKind[], fromSlot: number | null) => {
-    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    if (e.pointerType !== 'touch') (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
     dragRef.current = { kinds, fromSlot, moved: false, startX: e.clientX, startY: e.clientY };
+  };
+
+  // The browser took the gesture -- a sideways swipe panning the tray. The
+  // part was never picked up.
+  const cancelDrag = () => {
+    dragRef.current = null;
+    setGhost(null);
+    setPreview(null);
   };
   const moveDrag = (e: React.PointerEvent) => {
     const d = dragRef.current;
@@ -1063,17 +1099,29 @@ function CanvasScreen({ layout, setLayout, onBack }: {
             : 'タップで複数選択 → まとめてドラッグで自動配置'}
       </p>
 
-      <div className="flex shrink-0 gap-2.5 overflow-x-auto border-t border-line bg-paper px-3 pb-2.5 pt-2">
+      {/* The row is wider than the screen, and until now nothing said so: it
+          ran off the edge with no sign that there was more, and could not be
+          swiped either. The arrow appears only on the side that has more to
+          come, and goes when that side runs out. */}
+      <div className="relative shrink-0 border-t border-line bg-paper">
+        <div
+          ref={el => { trayRef.current = el; readTrayEdges(); }}
+          onScroll={readTrayEdges}
+          className="flex gap-2.5 overflow-x-auto px-3 pb-2.5 pt-2"
+        >
         {TRAY.map(t => {
           const idx = traySelected.indexOf(t.kind);
           return (
             <button
               key={t.kind}
-              className={`stamp relative flex w-[60px] shrink-0 touch-none flex-col items-center gap-[3px] rounded-xl border-[1.5px] py-[8px] text-[9px] font-semibold ${
+              // `pan-x`, not `none`: sideways belongs to the tray, every other
+              // direction belongs to the part being lifted out of it.
+              className={`stamp relative flex w-[60px] shrink-0 touch-pan-x flex-col items-center gap-[3px] rounded-xl border-[1.5px] py-[8px] text-[9px] font-semibold ${
                 idx >= 0 ? 'border-accent bg-accent-soft' : 'border-line bg-white'
               }`}
               onPointerDown={e => startDrag(e, idx >= 0 && traySelected.length > 1 ? [...traySelected] : [t.kind], null)}
               onPointerMove={moveDrag}
+              onPointerCancel={cancelDrag}
               onPointerUp={e => endTrayDrag(e, t.kind)}
             >
               {idx >= 0 && (
@@ -1086,6 +1134,29 @@ function CanvasScreen({ layout, setLayout, onBack }: {
             </button>
           );
         })}
+        </div>
+
+        {([['left', '‹'], ['right', '›']] as const).map(([side, glyph]) => (
+          trayEdge[side] && (
+            <span
+              key={side}
+              className={`tray-more pointer-events-none absolute top-0 flex h-full w-9 items-center ${
+                side === 'left'
+                  ? 'left-0 justify-start bg-gradient-to-r'
+                  : 'right-0 justify-end bg-gradient-to-l'
+              } from-paper via-paper to-transparent`}
+            >
+              <Button
+                variant="icon"
+                className="pointer-events-auto text-muted"
+                aria-label={side === 'left' ? '前のパーツ' : '次のパーツ'}
+                onClick={() => nudgeTray(side === 'left' ? -1 : 1)}
+              >
+                {glyph}
+              </Button>
+            </span>
+          )
+        ))}
       </div>
 
       <div className="flex shrink-0 gap-2 bg-paper px-3 pb-3.5 pt-2">
