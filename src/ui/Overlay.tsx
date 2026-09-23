@@ -1,15 +1,34 @@
 import type { ReactNode } from 'react';
+import { Button } from './Button';
 
 // Everything that covers the screen lives here, so the dimming, the rounding
 // and the stacking order are decided once.
 
 // Settings slide up from the bottom, the way a phone expects. Taller than the
 // screen is normal for the export sheet, so it scrolls.
-export function Sheet({ title, onClose, children }: {
+//
+// `inline` is the same sheet with nothing covered: on a wide screen it sits in
+// the column beside the paper, where a panel is nearer the mouse than the
+// bottom of a 900px window and the paper stays visible while it is open. The
+// contents are the same either way -- only the frame around them changes.
+export function Sheet({ title, onClose, inline = false, children }: {
   title: string;
   onClose: () => void;
+  inline?: boolean;
   children: ReactNode;
 }) {
+  if (inline) {
+    return (
+      <section className="sheet panel flex min-h-0 grow flex-col gap-3.5 overflow-y-auto border-t border-line bg-white px-[18px] pb-4 pt-2.5">
+        <div className="flex shrink-0 items-center gap-2">
+          <h2 className="m-0 text-sm font-bold">{title}</h2>
+          <Button variant="icon" className="ml-auto" onClick={onClose} aria-label="閉じる">×</Button>
+        </div>
+        {children}
+      </section>
+    );
+  }
+
   return (
     <>
       <Scrim onClick={onClose} />

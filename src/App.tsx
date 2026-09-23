@@ -43,6 +43,29 @@ const GAP = 6;
 // whole app is -- came out at a third of the glass. The cap lifts once there
 // is room for it, and everything in the column simply gets wider with it.
 const SCREEN = 'relative mx-auto flex h-full max-w-[430px] flex-col overflow-hidden bg-bg md:max-w-[680px]';
+// The editor, and only the editor, spreads out on a desktop: the paper takes
+// the room and the tools stand beside it. The pickers stay a column -- a list
+// of sizes 1400px wide is harder to read, not easier.
+const CANVAS_SCREEN = `${SCREEN} lg:max-w-[1440px] lg:flex-row`;
+const WIDE = '(min-width: 1024px)';
+
+// A mouse and a window are a different shape from a thumb and a phone, and the
+// difference is structural rather than a matter of spacing: the tray turns
+// from a scroller into a list, and the settings stop covering the paper. So it
+// is read once here rather than expressed as a dozen `lg:` classes.
+function useWide(): boolean {
+  const [wide, setWide] = useState(
+    () => typeof matchMedia === 'function' && matchMedia(WIDE).matches,
+  );
+  useLayoutEffect(() => {
+    const mq = matchMedia(WIDE);
+    const read = () => setWide(mq.matches);
+    read();
+    mq.addEventListener('change', read);
+    return () => mq.removeEventListener('change', read);
+  }, []);
+  return wide;
+}
 const SCREEN_PAD = `${SCREEN} gap-[18px] px-[22px] py-7`;
 
 // What a stamp shows. A character said what the part was called -- 時 for the
@@ -784,6 +807,7 @@ function CanvasScreen({ layout, setLayout, onBack }: {
   // it places what the tray has selected, and it opens a part's settings --
   // so this is a button of its own rather than a gesture competing with those.
   const [zoomed, setZoomed] = useState(false);
+  const wide = useWide();
   const [taught, setTaught] = useState(() => {
     try { return localStorage.getItem(TAUGHT_KEY) === '1'; } catch { return false; }
   });
@@ -1217,8 +1241,29 @@ function CanvasScreen({ layout, setLayout, onBack }: {
   const leftSpan = geo.pages.find(p => p.key === 'left')?.spanRect;
   const miniCell = layout.showNextMonth && leftSpan ? nextMonthCell(leftSpan, layout) : null;
 
+  // Built once and placed in one of two spots: beside the paper on a desktop,
+  // over it on a phone. Two copies of the call would be two lists of props to
+  // keep in step.
+  const sheetEl = sheet && (
+    <PartSheet
+      target={sheet}
+      layout={layout}
+      setLayout={setLayout}
+      inline={wide}
+      onClose={() => setSheet(null)}
+      onRemove={slot => askRemove(PART_LABEL[layout.surface.placed[slot]], () => removePart(slot))}
+      onRemoveSpanning={() => askRemove('マンスリー', () => setLayout(l => ({ ...l, spanning: null })))}
+      onLoad={l => { setLayout(() => l); setSheet(null); say('読み込みました'); }}
+      size={size}
+      onExport={onExport}
+    />
+  );
+
   return (
-    <div className={SCREEN}>
+    <div className={CANVAS_SCREEN}>
+      {/* The paper's side of a wide screen; the whole screen on a narrow one,
+          where the tools below are simply the next rows of the same column. */}
+      <div className="flex min-h-0 min-w-0 grow flex-col">
       {/* Turning belongs up here rather than over the paper. A folded strip
           turned a quarter turn fills the drawing area top to bottom, and a
           button floating in its corner sat on the refill itself. */}
@@ -1350,7 +1395,7 @@ function CanvasScreen({ layout, setLayout, onBack }: {
               )}
               {pg.spanRect && (
                 <button
-                  className="hitbox absolute p-0"
+                  className="hitbox absolute cursor-pointer p-0 hover:bg-[rgba(193,115,74,0.05)]"
                   onClick={() => setSheet('spanning')}
                   style={{
                     left: pg.spanRect.x * scale, top: pg.spanRect.y * scale,
@@ -1380,7 +1425,7 @@ function CanvasScreen({ layout, setLayout, onBack }: {
           {partBoxes.map(b => (
             <div
               key={b.key}
-              className="hitbox part absolute touch-none p-0 active:bg-[rgba(193,115,74,0.08)]"
+              className="hitbox part absolute cursor-grab touch-none p-0 hover:bg-[rgba(193,115,74,0.05)] active:cursor-grabbing active:bg-[rgba(193,115,74,0.08)]"
               style={{ left: b.left, top: b.top, width: b.width, height: b.height }}
               onPointerDown={e => startDrag(e, [layout.surface.placed[b.slot]], b.slot)}
               onPointerMove={moveDrag}
@@ -1430,16 +1475,21 @@ function CanvasScreen({ layout, setLayout, onBack }: {
             ? `${traySelected.length}個選択中：紙をタップすると置けます`
             : 'タップで選ぶ → 紙をタップ。ドラッグでも置けます'}
       </p>
+      </div>
+
+      {/* The tools. Under the paper on a phone, beside it on a desktop, and
+          the same blocks in the same order either way. */}
+      <aside className="flex min-h-0 shrink-0 flex-col lg:w-[340px] lg:border-l lg:border-line lg:bg-paper">
 
       {/* The row is wider than the screen, and until now nothing said so: it
           ran off the edge with no sign that there was more, and could not be
           swiped either. The arrow appears only on the side that has more to
           come, and goes when that side runs out. */}
-      <div className="relative shrink-0 border-t border-line bg-paper">
+      <div className="relative shrink-0 border-t border-line bg-paper lg:border-t-0">
         <div
           ref={el => { trayRef.current = el; readTrayEdges(); }}
           onScroll={readTrayEdges}
-          className="flex gap-2.5 overflow-x-auto px-3 pb-2.5 pt-2"
+          className="flex gap-2.5 overflow-x-auto px-3 pb-2.5 pt-2 lg:flex-wrap lg:overflow-x-visible lg:px-4 lg:pt-4"
         >
         {TRAY.map(t => {
           const idx = traySelected.indexOf(t.kind);
@@ -1448,8 +1498,10 @@ function CanvasScreen({ layout, setLayout, onBack }: {
               key={t.kind}
               // `pan-x`, not `none`: sideways belongs to the tray, every other
               // direction belongs to the part being lifted out of it.
-              className={`stamp relative flex w-[60px] shrink-0 touch-pan-x flex-col items-center gap-[3px] rounded-xl border-[1.5px] py-[8px] text-[9px] font-semibold ${
-                idx >= 0 ? 'border-accent bg-accent-soft' : 'border-line bg-white'
+              className={`stamp relative flex w-[60px] shrink-0 cursor-grab touch-pan-x flex-col items-center gap-[3px] rounded-xl border-[1.5px] py-[8px] text-[9px] font-semibold active:cursor-grabbing ${
+                idx >= 0
+                  ? 'border-accent bg-accent-soft'
+                  : 'border-line bg-white hover:border-line-strong hover:shadow-[0_2px_8px_rgba(58,54,46,0.12)]'
               }`}
               onPointerDown={e => startDrag(e, idx >= 0 && traySelected.length > 1 ? [...traySelected] : [t.kind], null)}
               onPointerMove={moveDrag}
@@ -1468,7 +1520,7 @@ function CanvasScreen({ layout, setLayout, onBack }: {
         })}
         </div>
 
-        {([['left', '‹'], ['right', '›']] as const).map(([side, glyph]) => (
+        {!wide && ([['left', '‹'], ['right', '›']] as const).map(([side, glyph]) => (
           trayEdge[side] && (
             <span
               key={side}
@@ -1491,7 +1543,9 @@ function CanvasScreen({ layout, setLayout, onBack }: {
         ))}
       </div>
 
-      <div className="flex shrink-0 gap-2 bg-paper px-3 pb-3.5 pt-2">
+      {wide && sheetEl}
+
+      <div className="flex shrink-0 gap-2 bg-paper px-3 pb-3.5 pt-2 lg:mt-auto lg:border-t lg:border-line lg:px-4 lg:pt-3">
         <Button onClick={() => setSheet('load')}>読み込み</Button>
         <Button
           onClick={() => say(saveLayout(layout)
@@ -1500,6 +1554,7 @@ function CanvasScreen({ layout, setLayout, onBack }: {
         >保存</Button>
         <Button variant="actionWide" onClick={() => setSheet('print')}>PDF出力プレビュー</Button>
       </div>
+      </aside>
 
       {ghost && (
         <div
@@ -1521,19 +1576,7 @@ function CanvasScreen({ layout, setLayout, onBack }: {
         />
       )}
 
-      {sheet && (
-        <PartSheet
-          target={sheet}
-          layout={layout}
-          setLayout={setLayout}
-          onClose={() => setSheet(null)}
-          onRemove={slot => askRemove(PART_LABEL[layout.surface.placed[slot]], () => removePart(slot))}
-          onRemoveSpanning={() => askRemove('マンスリー', () => setLayout(l => ({ ...l, spanning: null })))}
-          onLoad={l => { setLayout(() => l); setSheet(null); say('読み込みました'); }}
-          size={size}
-          onExport={onExport}
-        />
-      )}
+      {!wide && sheetEl}
     </div>
   );
 }
@@ -1730,7 +1773,7 @@ function RoundButton({ left, top, label, onClick, hook = 'clearmini', children }
 }) {
   return (
     <button
-      className={`${hook} absolute z-[5] size-4 rounded-full bg-[rgba(58,54,46,0.34)] p-0 text-[10px] leading-4 text-white active:bg-[rgba(58,54,46,0.7)]`}
+      className={`${hook} absolute z-[5] size-4 rounded-full bg-[rgba(58,54,46,0.34)] p-0 text-[10px] leading-4 text-white hover:bg-[rgba(58,54,46,0.55)] active:bg-[rgba(58,54,46,0.7)]`}
       style={{ left, top }}
       onClick={onClick}
       aria-label={label}
@@ -1759,14 +1802,14 @@ function DividerHandle({ box, teach, onDown, onMove, onUp }: {
       onPointerUp={onUp}
       onPointerCancel={onUp}
     >
-      <i className={`block rounded-sm bg-line-strong group-active:bg-accent ${
+      <i className={`block rounded-sm bg-line-strong group-hover:bg-accent group-active:bg-accent ${
         horizontal ? 'h-[3px] w-full' : 'h-full w-[3px]'
       }`} />
-      <b className={`absolute flex items-center justify-center gap-0.5 rounded-[7px] border bg-white shadow-[0_1px_3px_rgba(58,54,46,0.18)] group-active:border-accent ${
+      <b className={`absolute flex items-center justify-center gap-0.5 rounded-[7px] border bg-white shadow-[0_1px_3px_rgba(58,54,46,0.18)] group-hover:border-accent group-active:border-accent ${
         horizontal ? 'h-[13px] w-[34px] flex-col' : 'h-[34px] w-[13px]'
       } ${teach ? 'animate-knob border-accent' : 'border-line-strong'}`}>
         {[0, 1].map(i => (
-          <span key={i} className={`block rounded-[1px] group-active:bg-accent ${
+          <span key={i} className={`block rounded-[1px] group-hover:bg-accent group-active:bg-accent ${
             horizontal ? 'h-[1.5px] w-[14px]' : 'h-[14px] w-[1.5px]'
           } ${teach ? 'bg-accent' : 'bg-faint'}`} />
         ))}
@@ -1775,10 +1818,12 @@ function DividerHandle({ box, teach, onDown, onMove, onUp }: {
   );
 }
 
-function PartSheet({ target, layout, setLayout, onClose, onRemove, onRemoveSpanning, onLoad, size, onExport }: {
+function PartSheet({ target, layout, setLayout, inline, onClose, onRemove, onRemoveSpanning, onLoad, size, onExport }: {
   target: Exclude<SheetTarget, null>;
   layout: Layout;
   setLayout: (fn: (l: Layout) => Layout) => void;
+  // Beside the paper rather than over it, on a screen with room for both.
+  inline: boolean;
   onClose: () => void;
   onRemove: (slot: number) => void;
   onRemoveSpanning: () => void;
@@ -1806,7 +1851,7 @@ function PartSheet({ target, layout, setLayout, onClose, onRemove, onRemoveSpann
     : kind ? PART_LABEL[kind] : 'パーツ';
 
   return (
-    <Sheet title={title} onClose={onClose}>
+    <Sheet title={title} onClose={onClose} inline={inline}>
 
         {target === 'background' && (
           <BackgroundSheet layout={layout} setLayout={setLayout} size={size} />
