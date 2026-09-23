@@ -3,8 +3,8 @@ import type { Color, Primitive } from './draw';
 import type { Palette } from './palette';
 import { paletteOf } from './palette';
 import {
-  daysInMonth, holidayOf, monthGrid, monthLabelText, monthSubText, orderedWeekdays, rokuyoLabel,
-  sheetDays, weekdayLabel,
+  addMonths, daysInMonth, holidayOf, monthGrid, monthLabelText, monthSubText, orderedWeekdays,
+  rokuyoLabel, sheetDays, weekdayLabel,
 } from './dates';
 import { MONTHLY_HEADER_MM, ringsOnTop, weekSplit } from './layout';
 import type { Rect } from './layout';
@@ -136,7 +136,33 @@ export function drawMonthly(area: Rect, layout: Layout, slice: MonthlySlice): Pr
       text: monthSubText(layout.month, layout.words), sizePt: 6, color: pal.inkSoft, align: 'center',
     });
     if (slice.miniMonth !== false && layout.showNextMonth && weeks.length >= 2) {
-      out.push(...drawMiniMonth({ x: left, y: bodyTop + rowH, w: colW, h: rowH }, layout));
+      out.push(...drawMiniMonth({ x: left, y: bodyTop + rowH, w: colW, h: rowH }, layout, 1));
+    }
+  }
+
+  // Last month and next month, in the cells the month itself left empty at the
+  // end of its last week. Printed refills put them there because that space is
+  // dead otherwise -- and taking it costs the grid nothing, where a band along
+  // the top would take a row off every month to serve one line of reference.
+  //
+  // A mini needs about a centimetre square to be readable at all, so it takes
+  // as many cells as that comes to. February starting on the first day of the
+  // week leaves nothing free; that month simply has none, which is what a
+  // printed refill does too.
+  if (layout.showNextMonth && !lead && colStart === 0 && dayCols === 7) {
+    const lastRow = weeks[weeks.length - 1];
+    let free = 0;
+    for (let c = 6; c >= 0 && !lastRow[c]; c--) free++;
+    const span = Math.max(1, Math.ceil(MINI_MIN / colW));
+    const fits = Math.min(2, Math.floor(free / span));
+    const cellTop = bottom - rowH;
+    // Right to left: next month against the corner, last month before it.
+    for (let i = 0; i < fits; i++) {
+      out.push(...drawMiniMonth(
+        { x: right - colW * span * (i + 1), y: cellTop, w: colW * span, h: rowH },
+        layout,
+        i === 0 ? 1 : -1,
+      ));
     }
   }
 
@@ -193,11 +219,11 @@ export function drawMonthly(area: Rect, layout: Layout, slice: MonthlySlice): Pr
 const MINI_PAD = 1.4;
 const MINI_MIN = 11;
 
-// Next month tucked into a free index cell, the way printed refills do it.
-function drawMiniMonth(cell: Rect, layout: Layout): Primitive[] {
+// A neighbouring month tucked into free space, the way printed refills do it.
+// `step` is how many months away it is: +1 next, -1 last.
+function drawMiniMonth(cell: Rect, layout: Layout, step: number): Primitive[] {
   const pal = paletteOf(layout);
-  const year = layout.month === 12 ? layout.year + 1 : layout.year;
-  const month = layout.month === 12 ? 1 : layout.month + 1;
+  const { year, month } = addMonths(layout.year, layout.month, step);
   const weeks = monthGrid(year, month, layout.weekStart);
 
   const left = cell.x + MINI_PAD, top = cell.y + MINI_PAD;

@@ -447,4 +447,23 @@ if (await lookChip.count()) {
   await shot('37-和文の藍で刷る');
 }
 
+// Last month and next month in the cells the month left empty. The space is
+// dead otherwise, and a monthly on its own page had nowhere else for them.
+await page.goto(BASE);
+await page.locator('.sizerow', { hasText: '80×128mm' }).click();
+await page.locator('.card', { hasText: '片面' }).first().click();
+await page.getByRole('button', { name: 'この構成で作る' }).click();
+await page.locator('.page').first().waitFor();
+await drag(await centerOf(await stamp('マンスリー')), await centerOf(page.locator('.page').first()));
+await shot('38-前後の月の小さなカレンダー');
+await page.locator('.hitbox.part').first().click();
+await page.locator('.sheet').waitFor();
+const miniChoice = page.locator('.sheet').getByText('前後の月の小さなカレンダー');
+if (await miniChoice.count()) {
+  await page.locator('.sheet').getByRole('button', { name: '入れない', exact: true }).click();
+  await page.locator('.scrim').click({ position: { x: 10, y: 10 } });
+  await page.locator('.scrim').waitFor({ state: 'detached' });
+  await shot('39-小さなカレンダーを外す');
+}
+
 await browser.close();

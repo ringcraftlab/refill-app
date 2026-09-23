@@ -1658,6 +1658,10 @@ function PhotoField({ layout, setLayout, size, slot }: {
 }) {
   const file = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState('');
+  // Which picture has actually finished painting, so the thumbnail can wait
+  // for it rather than showing an empty frame.
+  const [shown, setShown] = useState('');
+  const [failed, setFailed] = useState('');
   const src = layout.surface.photos?.[slot] ?? null;
   // The area this stamp actually occupies on the paper, which is what the
   // picture has to be big enough for -- a stamp on a quarter of a Micro5 does
@@ -1676,11 +1680,17 @@ function PhotoField({ layout, setLayout, size, slot }: {
   const pick = async (f: File | undefined) => {
     if (!f) return;
     setBusy('読み込み中…');
+    setFailed('');
     try {
       set(await importPhoto(f, box));
       setBusy('');
     } catch (e) {
-      setBusy(e instanceof Error ? e.message : '読み込めませんでした');
+      setBusy('');
+      // Said loudly, because the quiet version of this reads as "nothing
+      // happened". The usual cause is an iPhone HEIC, which the browser
+      // cannot decode at all -- and nothing about the file picker says so.
+      setFailed(`${e instanceof Error ? e.message : '読み込めませんでした'}。`
+        + 'iPhoneのHEICはブラウザが開けないことがあります。JPEGかPNGでお試しください');
     }
   };
 
@@ -1699,10 +1709,29 @@ function PhotoField({ layout, setLayout, size, slot }: {
         <Button variant="quiet" onClick={() => file.current?.click()}>
           {src ? '選び直す' : '写真を選ぶ'}
         </Button>
-        {src && <img src={src} alt="" className="h-12 w-12 rounded-[6px] border border-line-strong object-cover" />}
+        {/* A chosen picture is a data URL of a megabyte or so, and the browser
+            does not paint it the moment React hands it over -- the first time
+            there is nothing cached, so the box sat empty with nothing saying
+            why. It says so now, and the picture fades in when it is actually
+            there. */}
+        {src && (
+          <span className="relative block size-12 shrink-0 overflow-hidden rounded-[6px] border border-line-strong bg-bg">
+            <img
+              key={src}
+              src={src}
+              alt=""
+              onLoad={() => setShown(src)}
+              className={`size-full object-cover ${shown === src ? '' : 'opacity-0'}`}
+            />
+            {shown !== src && <i className="absolute inset-0 animate-pulse bg-line" />}
+          </span>
+        )}
         {src && <Button variant="quiet" onClick={() => set(null)}>外す</Button>}
       </div>
-      {busy && <p className="m-0 text-[11px] text-muted">{busy}</p>}
+      {(busy || (src && shown !== src)) && (
+        <p className="m-0 text-[11px] text-muted">{busy || '読み込み中…'}</p>
+      )}
+      {failed && <p className="photo-failed m-0 text-[11px] leading-snug text-danger">{failed}</p>}
       {src ? (
         <p className={`photo-size m-0 text-[11px] ${bytes > PHOTO_WARN_BYTES ? 'text-danger' : 'text-faint'}`}>
           {`${Math.round(bytes / 1024)}KB。刷る大きさ（${Math.round(box.w)}×${Math.round(box.h)}mm）に合わせて縮めてあります`}
@@ -2194,9 +2223,12 @@ function PartSheet({ target, layout, setLayout, inline, onClose, onRemove, onRem
           </>
         )}
 
-        {target === 'spanning' && !ringsOnTop(layout) && (
+        {/* One value, said where it is being looked at. The spread's band has
+            one free cell and puts next month in it; a monthly on its own page
+            has the cells after the last day, which fit last month as well. */}
+        {((target === 'spanning' && !ringsOnTop(layout)) || kind === 'monthly') && (
           <Choice
-            label="翌月のミニカレンダー"
+            label={kind === 'monthly' ? '前後の月の小さなカレンダー' : '翌月のミニカレンダー'}
             options={[{ v: 'on', label: '入れる' }, { v: 'off', label: '入れない' }]}
             value={layout.showNextMonth ? 'on' : 'off'}
             onPick={v => setLayout(l => ({ ...l, showNextMonth: v === 'on' }))}
