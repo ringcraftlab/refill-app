@@ -466,4 +466,25 @@ if (await miniChoice.count()) {
   await shot('39-小さなカレンダーを外す');
 }
 
+// Two calendars on one spread are two months. The band is not a part -- it is
+// the spread's own monthly -- so a monthly dropped under it used to count
+// itself as the first calendar on the sheet and print September twice.
+await page.goto(BASE);
+await page.locator('.sizerow', { hasText: '148×210mm' }).click();
+await page.locator('.card', { hasText: '見開き' }).first().click();
+await page.getByRole('button', { name: 'この構成で作る' }).click();
+await page.locator('.page').first().waitFor();
+{
+  const paper = await page.locator('.page').first().boundingBox();
+  await drag(await centerOf(await stamp('マンスリー')),
+    { x: paper.x + paper.width / 2, y: paper.y + paper.height * 0.3 });
+  await drag(await centerOf(await stamp('マンスリー')),
+    { x: paper.x + paper.width / 2, y: paper.y + paper.height * 0.85 });
+  const months = await page.locator('.page svg text').evaluateAll(
+    els => els.map(e => e.textContent).filter(t => /^(9|10|11)$/.test(t)),
+  );
+  console.log('帯と下のマンスリーの月:', JSON.stringify(months));
+  await shot('40-帯の下にもう1ヶ月');
+}
+
 await browser.close();

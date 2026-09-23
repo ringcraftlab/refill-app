@@ -25,6 +25,7 @@ import {
   sheetSizeOf,
 } from './lib/render/pages';
 import type { BackFill, PrintOptions } from './lib/render/pages';
+import type { TilePlan } from './lib/render/impose';
 import { PAPER_ORDER, PAPERS } from './lib/render/impose';
 import type { PaperId } from './lib/render/impose';
 import { PageSvg, SheetSvg } from './lib/render/svg';
@@ -2106,6 +2107,35 @@ function SaveSheet({ layout, size, grain, onSave }: {
   );
 }
 
+// The last sheet of the job, drawn as its places. "Where does it go" is a
+// question about the paper, and no sentence answers it as fast as the paper
+// does: the filled places are what is already going on it, the dashed ones are
+// what pressing 足す takes.
+function FillMap({ plan, filled }: { plan: TilePlan; filled: number }) {
+  const cells = Array.from({ length: plan.cols * plan.rows }, (_, i) => i < filled);
+  const wide = plan.paper.widthMm > plan.paper.heightMm;
+  return (
+    <span
+      className="fillmap grid gap-[3px] rounded-[4px] border border-line-strong bg-white p-1"
+      style={{
+        gridTemplateColumns: `repeat(${plan.cols}, 1fr)`,
+        width: wide ? 96 : 68,
+      }}
+      aria-hidden="true"
+    >
+      {cells.map((on, i) => (
+        <i
+          key={i}
+          className={`block rounded-[2px] ${
+            on ? 'bg-accent/45' : 'border border-dashed border-line-strong'
+          }`}
+          style={{ aspectRatio: `${plan.paper.widthMm / plan.cols} / ${plan.paper.heightMm / plan.rows}` }}
+        />
+      ))}
+    </span>
+  );
+}
+
 // One saved refill, small enough to sit in a list and big enough to tell a
 // calendar from a memo.
 function Thumb({ layout, size }: { layout: Layout; size: SizeSpec }) {
@@ -2160,9 +2190,10 @@ function PartSheet({
     }),
     [canShare, print.also],
   );
-  const perPaper = paperPlan(
+  const plan = paperPlan(
     size, imposeCount(layout, size, print, also), sheetSizeOf(layout, size), print.paper,
-  ).perPage;
+  );
+  const perPaper = plan.perPage;
   // What the last sheet has left over. Zero when it comes out even, which is
   // worth saying too: it stops the reader looking for room that is not there.
   const used = imposeCount(layout, size, print, also);
@@ -2246,13 +2277,16 @@ function PartSheet({
                 {/* The numbers first, because the question this answers is
                     "how much room is left", and the answer is what makes
                     someone press anything here at all. */}
-                <p className="fill-note m-0 text-[12px] text-muted">
-                  {PAPERS[print.paper].label} 1枚に{perPaper}面・このリフィルで
-                  {imposeCount(layout, size, print)}面
-                  {spare > 0
-                    ? `・最後の1枚に${spare}面あいています`
-                    : '・あきはありません'}
-                </p>
+                <div className="flex items-center gap-3">
+                  <FillMap plan={plan} filled={perPaper - spare} />
+                  <p className="fill-note m-0 flex-1 text-[12px] text-muted">
+                    {PAPERS[print.paper].label} 1枚に{perPaper}面・このリフィルで
+                    {imposeCount(layout, size, print)}面
+                    {spare > 0
+                      ? `・最後の1枚に${spare}面あいています`
+                      : '・あきはありません'}
+                  </p>
+                </div>
                 {canShare.length === 0 ? (
                   <p className="m-0 text-[11px] leading-snug text-faint">
                     保存したリフィルをここに並べられます。別のリフィルを作って

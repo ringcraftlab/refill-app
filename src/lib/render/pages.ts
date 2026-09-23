@@ -86,15 +86,24 @@ function trimEdge(pg: PageGeometry): Primitive[] {
   });
 }
 
+// The spread's band is a calendar too. It is not in `placed` -- it is the
+// spanning monthly, which is a property of the refill rather than a part -- so
+// anything counting calendars has to add it back, or a monthly under the band
+// comes out as the same month the band already shows.
+const bandMonths = (layout: Layout, kind: PartKind): number =>
+  (kind === 'monthly' && layout.spanning ? 1 : 0);
+
 // Two calendars on one sheet are two months, not the same month twice. The
 // count is taken within the kind, which is the whole rule: a calendar facing a
 // day list is the standard printed spread and both show September, while a
 // calendar facing a calendar is September and October.
-const monthOrdinal = (placed: PartKind[], i: number): number =>
-  placed.slice(0, i).filter(k => k === placed[i]).length;
+const monthOrdinal = (layout: Layout, i: number): number => {
+  const { placed } = layout.surface;
+  return bandMonths(layout, placed[i]) + placed.slice(0, i).filter(k => k === placed[i]).length;
+};
 
 const monthFor = (layout: Layout, i: number): Layout => {
-  const n = monthOrdinal(layout.surface.placed, i);
+  const n = monthOrdinal(layout, i);
   return n === 0 ? layout : { ...layout, ...addMonths(layout.year, layout.month, n) };
 };
 
@@ -109,9 +118,13 @@ const slotLayout = (layout: Layout, i: number): Layout => {
 
 // How many months one sheet gets through, so the run can step by that much:
 // a spread carrying two calendars covers two, and a year of it is six sheets
-// rather than twelve of September.
-export const monthsPerSheet = (layout: Layout): number =>
-  Math.max(1, ...MONTH_PACED.map(k => layout.surface.placed.filter(p => p === k).length));
+// rather than twelve of September. The band counts as one of them -- otherwise
+// the run steps by one while the sheet shows two, and every second month is
+// printed twice.
+export const monthsPerSheet = (layout: Layout): number => Math.max(
+  1,
+  ...MONTH_PACED.map(k => bandMonths(layout, k) + layout.surface.placed.filter(p => p === k).length),
+);
 
 // A region that crosses the gutter covers two sheets. The part gets a say in
 // how it breaks there, because trimming a calendar at the page edge would
