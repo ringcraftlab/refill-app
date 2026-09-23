@@ -4,8 +4,8 @@ import type { FoldCount, Layout, PartKind, RefillSize, SizeSpec } from './types'
 import { MAX_PARTS, SCHEMA_VERSION } from './types';
 import { holeCentres, SIZES } from './lib/sizes';
 import {
-  buildGeometry, canTurn, foldOf, isLandscape, MAX_RATIO, MIN_RATIO, placeParts as planPlacement,
-  regionAt, ringsOnTop,
+  buildGeometry, canTurn, foldMaxParts, foldOf, isLandscape, MAX_RATIO, MIN_RATIO,
+  placeParts as planPlacement, regionAt, removeFromFold, ringsOnTop,
 } from './lib/layout';
 import type { Divider, DropPoint, Geometry, PageGeometry } from './lib/layout';
 import { FOLD_PANELS, foldPanels, foldPlan } from './lib/fold';
@@ -818,8 +818,9 @@ function CanvasScreen({ layout, setLayout, onBack }: {
         const what = kinds.length === 1 ? PART_LABEL[kinds[0]] : 'パーツ';
         // A fold has no draggable borders to make room with: the creases are
         // where the paper bends. Either a panel is free or it is not.
-        say(prev.fold > 1 && prev.surface.placed.length >= prev.fold
-          ? `${prev.fold}面すべて埋まっています。外してから置いてください`
+        const folded = foldOf(prev, size);
+        say(folded && prev.surface.placed.length >= foldMaxParts(folded.panels)
+          ? `1面に2つまでです。外してから置いてください`
           : `${what}を置く広さがありません。つまみで空けてください`);
         return prev;
       }
@@ -839,6 +840,10 @@ function CanvasScreen({ layout, setLayout, onBack }: {
 
   const removePart = (slot: number) => {
     setLayout(prev => {
+      const folded = foldOf(prev, size);
+      if (folded) {
+        return { ...prev, surface: removeFromFold(prev.surface, folded.panels, slot) };
+      }
       const placed = prev.surface.placed.filter((_, i) => i !== slot);
       return {
         ...prev,
@@ -948,9 +953,25 @@ function CanvasScreen({ layout, setLayout, onBack }: {
     const { d, extentPx } = drag;
     const delta = d.axis === 'h' ? e.clientY - drag.startY : e.clientX - drag.startX;
     const next = Math.min(MAX_RATIO, Math.max(MIN_RATIO, d.ratio + delta / extentPx));
-    setLayout(prev => d.key === 'span'
-      ? { ...prev, spanning: prev.spanning ? { ...prev.spanning, ratio: next } : null }
-      : { ...prev, surface: { ...prev.surface, ratios: { ...prev.surface.ratios, [d.key]: next } } });
+    setLayout(prev => {
+      if (d.key === 'span') {
+        return { ...prev, spanning: prev.spanning ? { ...prev.spanning, ratio: next } : null };
+      }
+      // A fold keeps one set of ratios per group, because each group divides
+      // its own panels and knows nothing about the others.
+      if (d.group !== undefined && prev.surface.fold) {
+        return {
+          ...prev,
+          surface: {
+            ...prev.surface,
+            fold: prev.surface.fold.map((g, i) => (
+              i === d.group ? { ...g, ratios: { ...g.ratios, [d.key]: next } } : g
+            )),
+          },
+        };
+      }
+      return { ...prev, surface: { ...prev.surface, ratios: { ...prev.surface.ratios, [d.key]: next } } };
+    });
   };
   const endDivider = () => { dividerRef.current = null; };
 

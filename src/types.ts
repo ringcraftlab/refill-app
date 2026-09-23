@@ -99,6 +99,21 @@ export type PageKey = 'single' | 'left' | 'right' | 'f1' | 'f2' | 'f3';
 // deliberately absent: see lib/fold.ts.
 export type FoldCount = 1 | 2 | 3;
 
+// How a 蛇腹's panels are shared out. The creases cannot be dragged -- the
+// paper bends where it bends -- so the structure is which panels go together,
+// not where a border sits. Within one of these the ordinary division applies:
+// its parts split its area by ratios, with borders you can drag.
+export interface FoldGroup {
+  // How many panels this covers. The whole list adds up to the fold count, so
+  // one group covering them all is a part across the unfolded strip.
+  panels: number;
+  // How many of `placed` sit here, in order: the first group takes the first
+  // `parts` of the list, and so on.
+  parts: number;
+  split?: 'h' | 'v';
+  ratios?: { a?: number; b?: number; c?: number };
+}
+
 // The area left over once the calendar has taken its band. In a spread this is
 // ONE surface across both pages: a part whose region crosses the gutter spans
 // the spread, one that fits in a half sits on that page alone.
@@ -115,6 +130,10 @@ export interface Surface {
   // How two parts divide the surface. 'h' stacks them, so in a spread both
   // cross the gutter; 'v' sets them side by side, one per page.
   split: 'h' | 'v';
+  // Only on a 蛇腹, and omitted on one that has nothing on it yet: which
+  // panels are shared with which. `split` and `ratios` above are the plain
+  // sheet's; a fold keeps one of each per group.
+  fold?: FoldGroup[];
 }
 
 export interface Layout {

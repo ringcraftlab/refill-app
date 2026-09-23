@@ -236,11 +236,17 @@ if (await foldCard.count()) {
   await page.locator('.page').first().waitFor();
 
   // One calendar over the whole strip: a fold-out month, which is the thing a
-  // spread does across its two pages.
+  // spread does across its two pages. Then a memo dropped low, which is the
+  // gesture that puts something under what is already there rather than
+  // breaking another panel off.
   const strip = await page.locator('.page').first().boundingBox();
   await drag(await centerOf(await stamp('マンスリー')),
     { x: strip.x + strip.width / 2, y: strip.y + strip.height / 2 });
   await shot('20-蛇腹の全面にマンスリー');
+  await drag(await centerOf(await stamp('メモ')),
+    { x: strip.x + strip.width / 2, y: strip.y + strip.height * 0.88 });
+  console.log('全面の仕切り:', await page.locator('.divider').count());
+  await shot('21-全面に重ねる');
 
   // Then one per panel, which is the other thing a fold is for.
   await page.goto(BASE);
@@ -253,7 +259,7 @@ if (await foldCard.count()) {
     await drag(await centerOf(await stamp('マンスリー')),
       { x: s3.x + s3.width * at, y: s3.y + s3.height / 2 });
   }
-  await shot('21-蛇腹3面に3ヶ月');
+  await shot('22-蛇腹3面に3ヶ月');
 
   // Selected in the tray, then placed by tapping the paper -- the path that
   // does not depend on the browser letting go of the gesture.
@@ -266,11 +272,11 @@ if (await foldCard.count()) {
   const s2 = await page.locator('.page').first().boundingBox();
   await page.mouse.click(s2.x + s2.width * 0.25, s2.y + s2.height / 2);
   await page.waitForTimeout(150);
-  await shot('22-タップで置く');
+  await shot('23-タップで置く');
   await page.getByRole('button', { name: 'PDF出力プレビュー' }).click();
   await page.locator('.duplex-note').waitFor();
   console.log('duplex says:', await page.locator('.duplex-note').textContent());
-  await shot('23-蛇腹2面の書き出し');
+  await shot('24-蛇腹2面の書き出し');
 }
 
 await browser.close();

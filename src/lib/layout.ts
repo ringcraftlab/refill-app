@@ -1,4 +1,6 @@
-import type { FoldCount, Layout, PageKey, PartKind, SizeSpec, Spanning, Surface } from '../types';
+import type {
+  FoldCount, FoldGroup, Layout, PageKey, PartKind, SizeSpec, Spanning, Surface,
+} from '../types';
 import { MAX_PARTS, PART_FIT } from '../types';
 import type { FoldPanels, FoldPlan } from './fold';
 import { foldGroups, foldPanels, foldPlan } from './fold';
@@ -45,6 +47,9 @@ export interface DropPoint {
 export interface Divider {
   id: string;
   key: DividerKey;
+  // Which fold group's ratio this border belongs to. A plain sheet has one
+  // set of ratios and leaves this out.
+  group?: number;
   axis: 'h' | 'v';
   x: number; y: number; length: number;
   ratio: number;
@@ -294,6 +299,51 @@ function foldCreases(plan: FoldPlan, ox: number, flip: boolean): number[] {
   return out;
 }
 
+// How the panels are shared out. A layout that has not said -- one saved
+// before groups existed, or one with nothing on it yet -- gets the reading
+// that was true then: every part on its own panel, or the single part across
+// the whole strip.
+export function foldLayoutOf(surface: Surface, panels: number): FoldGroup[] {
+  const count = surface.placed.length;
+  const saved = surface.fold;
+  if (saved?.length) {
+    const ok = saved.reduce((t, g) => t + g.parts, 0) === count
+      && saved.reduce((t, g) => t + g.panels, 0) === panels;
+    if (ok) return saved;
+  }
+  if (count === 0) return [];
+  if (count > panels) return [{ panels, parts: count }];
+  return foldGroups(panels, count).map(([a, b]) => ({ panels: b - a + 1, parts: 1 }));
+}
+
+// Where each group sits on the strip, in surface millimetres. The trim margin
+// goes on at whichever ends are creases, so a group stops short of a fold it
+// does not cross and runs straight through one it does.
+function foldRects(
+  groups: FoldGroup[], creases: number[], surfaceW: number, surfaceH: number,
+): Rect[] {
+  const edges = [0, ...creases, surfaceW];
+  const out: Rect[] = [];
+  let panel = 0;
+  for (const g of groups) {
+    const a = panel, b = Math.min(panel + g.panels - 1, creases.length);
+    const from = edges[a] + (a > 0 ? OUTER_MM : 0);
+    const to = edges[b + 1] - (b < creases.length ? OUTER_MM : 0);
+    out.push({ x: from, y: 0, w: Math.max(0, to - from), h: surfaceH });
+    panel += g.panels;
+  }
+  return out;
+}
+
+// A group divides its own area exactly as a sheet divides its surface, so the
+// same splitter does both -- it is handed the group's parts, ratios and
+// direction, and its answer is moved onto the strip.
+const groupSurface = (g: FoldGroup, placed: PartKind[], r: Rect): Surface => ({
+  placed,
+  ratios: g.ratios ?? {},
+  split: g.split ?? splitFor(r.w, r.h),
+});
+
 // `flipBinding` mirrors a single page's binding edge, for when that page is
 // printed on the back of a sheet.
 export function buildGeometry(layout: Layout, size: SizeSpec, flipBinding = false): Geometry {
@@ -383,19 +433,21 @@ export function buildGeometry(layout: Layout, size: SizeSpec, flipBinding = fals
   // the fold, not by a ratio. One part to a panel, which is also what a folded
   // refill is for: a month you turn to rather than a page you share.
   const creases = fold ? foldCreases(fold, boxes[0].box.ox, flipBinding) : [];
-
-  // One part takes the whole strip, three take a panel each, and in between
-  // the earlier parts take the extra panel. The trim margin goes on at
-  // whichever ends are creases, so a part stops short of a fold it does not
-  // cross and runs straight through one it does.
-  const foldRegions = (): Rect[] => {
-    const edges = [0, ...creases, surfaceW];
-    return foldGroups(creases.length + 1, count).map(([a, b]) => {
-      const from = edges[a] + (a > 0 ? OUTER_MM : 0);
-      const to = edges[b + 1] - (b < creases.length ? OUTER_MM : 0);
-      return { x: from, y: 0, w: to - from, h: surfaceH };
-    });
+  const groups = fold ? foldLayoutOf(layout.surface, creases.length + 1) : [];
+  const rects = foldRects(groups, creases, surfaceW, surfaceH);
+  const partsOf = (i: number): PartKind[] => {
+    const from = groups.slice(0, i).reduce((t, g) => t + g.parts, 0);
+    return layout.surface.placed.slice(from, from + groups[i].parts);
   };
+  const shift = (r: Rect, by: Rect): Rect => ({ ...r, x: r.x + by.x, y: r.y + by.y });
+
+  const foldRegions = (): Rect[] => groups.flatMap((g, i) =>
+    splitRegions(g.parts, groupSurface(g, partsOf(i), rects[i]), rects[i].w, rects[i].h)
+      .map(r => shift(r, rects[i])));
+
+  const foldDividers = (): Divider[] => groups.flatMap((g, i) =>
+    surfaceDividers(g.parts, groupSurface(g, partsOf(i), rects[i]), rects[i].w, rects[i].h)
+      .map(d => ({ ...d, id: `f${i}-${d.id}`, x: d.x + rects[i].x, y: d.y + rects[i].y, group: i })));
 
   return {
     pages,
@@ -410,7 +462,7 @@ export function buildGeometry(layout: Layout, size: SizeSpec, flipBinding = fals
       heightMm: surfaceH,
       slices,
       regions: fold ? foldRegions() : splitRegions(count, layout.surface, surfaceW, surfaceH),
-      dividers: fold ? [] : surfaceDividers(count, layout.surface, surfaceW, surfaceH),
+      dividers: fold ? foldDividers() : surfaceDividers(count, layout.surface, surfaceW, surfaceH),
     },
   };
 }
@@ -506,36 +558,131 @@ function edgePage(layout: Layout, size: SizeSpec, at: DropPoint): PageKey | null
   return null;
 }
 
-// Which panel a drop landed on, or the next free one when it landed nowhere.
-function foldSlotAt(layout: Layout, size: SizeSpec, at: DropPoint | null): number {
-  const placed = layout.surface.placed.length;
-  if (!at) return placed;
+// Which panel a drop landed on. Nowhere in particular means the last one.
+function panelAt(layout: Layout, size: SizeSpec, at: DropPoint | null): number {
   const { creases } = buildGeometry(layout, size);
-  return Math.min(creases.filter(c => at.sx > c).length, placed);
+  if (!at) return creases.length;
+  return creases.filter(c => at.sx > c).length;
+}
+
+// How much a fold can carry. Two to a panel: a panel is a page, and a page of
+// a folded refill is small enough that a third thing on it is a stripe rather
+// than a place to write.
+export const foldMaxParts = (panels: number): number => panels * 2;
+
+// Adding one part to a fold. The creases decide the shape, so there are only
+// two things that can happen: the panel dropped on splits off as its own
+// division, or -- if it already is one -- the part joins what is there and the
+// two share it, with a border between them to drag.
+function addToFold(
+  groups: FoldGroup[], panels: number, placed: PartKind[], kind: PartKind,
+  panel: number, stack: boolean,
+): { groups: FoldGroup[]; placed: PartKind[]; at: number } | null {
+  if (!groups.length) {
+    return { groups: [{ panels, parts: 1 }], placed: [kind], at: 0 };
+  }
+  let lo = 0, g = 0;
+  for (; g < groups.length; g++) {
+    if (panel < lo + groups[g].panels) break;
+    lo += groups[g].panels;
+  }
+  if (g >= groups.length) { g = groups.length - 1; lo -= groups[g].panels; }
+  const group = groups[g];
+  const hi = lo + group.panels - 1;
+  const before = groups.slice(0, g).reduce((t, x) => t + x.parts, 0);
+
+  // Dropped low, or onto a panel that is already a division of its own:
+  // share what is there rather than breaking the paper up further. Low means
+  // the same quarter of the height that puts a part under a spread's calendar
+  // -- one gesture, whichever shape is on the screen.
+  if (group.panels === 1 || stack) {
+    if (group.parts >= MAX_PARTS) return null;
+    const at = before + group.parts;
+    return {
+      // Under, not beside: that is what the drop said.
+      groups: groups.map((x, i) => (i === g ? { ...x, parts: x.parts + 1, split: 'h' } : x)),
+      placed: [...placed.slice(0, at), kind, ...placed.slice(at)],
+      at,
+    };
+  }
+
+  // Spans more than one: the dropped panel breaks off, and what was here keeps
+  // the rest. Dropping on the near end puts the new part first, so the split
+  // always leaves two runs of panels rather than a hole in the middle.
+  const near = panel === lo;
+  const kept: FoldGroup = {
+    ...group,
+    panels: near ? group.panels - 1 : panel - lo,
+    // The ratios described a different shape; keeping them would move borders
+    // nobody dragged.
+    ratios: {},
+  };
+  const made: FoldGroup = { panels: near ? 1 : hi - panel + 1, parts: 1 };
+  const at = near ? before : before + group.parts;
+  return {
+    groups: [...groups.slice(0, g), ...(near ? [made, kept] : [kept, made]), ...groups.slice(g + 1)],
+    placed: [...placed.slice(0, at), kind, ...placed.slice(at)],
+    at,
+  };
+}
+
+// Taking one out. The group it was in gives up a part, and a group left with
+// none gives its panels back to the neighbour rather than leaving a gap.
+export function removeFromFold(surface: Surface, panels: number, slot: number): Surface {
+  const groups = foldLayoutOf(surface, panels);
+  const placed = surface.placed.filter((_, i) => i !== slot);
+  let seen = 0;
+  const next: FoldGroup[] = [];
+  for (const g of groups) {
+    const mine = slot >= seen && slot < seen + g.parts;
+    seen += g.parts;
+    const parts = mine ? g.parts - 1 : g.parts;
+    if (parts === 0) {
+      // Fold its panels into whichever neighbour there is.
+      if (next.length) next[next.length - 1].panels += g.panels;
+      else if (groups.length > 1) groups[groups.indexOf(g) + 1].panels += g.panels;
+      continue;
+    }
+    next.push({ ...g, parts, ratios: mine ? {} : g.ratios });
+  }
+  return { ...surface, placed, fold: placed.length ? next : undefined };
 }
 
 // A fold fills panels, so placing is a question of which panel rather than of
-// how to divide a shared area. Nothing to search: the panel widths are the
-// paper's, and a part either fits one or does not.
+// how to divide one shared area. Nothing to search: the panel widths are the
+// paper's, and a part either fits where it lands or does not.
 function placeOnFold(
   prev: Layout, size: SizeSpec, fold: FoldPlan, kinds: PartKind[], at: DropPoint | null,
 ): Placement | null {
-  const room = fold.panels - prev.surface.placed.length;
+  const panel = panelAt(prev, size, at);
+  // Low on the paper means under what is there; anywhere else means the panel
+  // dropped on becomes a division of its own.
+  const surfaceH = buildGeometry(prev, size).surface.heightMm;
+  const stack = !!at && surfaceH > 0 && at.sy > surfaceH * BESIDE_BAND;
+  const room = foldMaxParts(fold.panels) - prev.surface.placed.length;
   const toAdd = kinds.slice(0, Math.max(0, room));
   if (!toAdd.length) return null;
 
-  const slot = foldSlotAt(prev, size, at);
-  const placed = [...prev.surface.placed];
-  placed.splice(slot, 0, ...toAdd);
+  let groups = foldLayoutOf(prev.surface, fold.panels);
+  let placed = prev.surface.placed;
+  let landed: number | null = null;
+  for (const kind of toAdd) {
+    const step = addToFold(groups, fold.panels, placed, kind, panel, stack);
+    if (!step) return null;
+    groups = step.groups;
+    placed = step.placed;
+    if (landed === null) landed = step.at;
+  }
+
   const layout: Layout = {
     ...prev,
-    // The band is a spread's way of holding one calendar across two pages.
-    // A fold has no seam to cross, so the calendar is an ordinary part.
+    // The band is a spread's way of holding one calendar across two pages. A
+    // fold has no seam to cross, so the calendar is an ordinary part.
     spanning: null,
-    surface: { ...prev.surface, placed, ratios: {}, page: undefined },
+    surface: { ...prev.surface, placed, fold: groups, page: undefined },
   };
   if (!everyPartFits(layout, size)) return null;
-  return { layout, overflow: kinds.length - toAdd.length, landed: slot };
+  return { layout, overflow: kinds.length - toAdd.length, landed };
 }
 
 export function placeParts(
