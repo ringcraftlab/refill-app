@@ -67,6 +67,12 @@ function useWide(): boolean {
   return wide;
 }
 const SCREEN_PAD = `${SCREEN} gap-[18px] px-[22px] py-7`;
+// The two pickers on a desktop. Wider than the phone column, because the cards
+// are a comparison and a comparison reads across: the four common sizes fit on
+// one row and the whole list is in view without scrolling. Not as wide as the
+// editor -- past four across the cards get narrower than the phone's, which is
+// how a list of nine turns back into a wall.
+const PICK_SCREEN = `${SCREEN_PAD} lg:max-w-[1000px]`;
 
 // What a stamp shows. A character said what the part was called -- 時 for the
 // vertical, 週 for the horizontal -- which is no help at all when the question
@@ -439,8 +445,9 @@ function SizeIcon({ size, tint, flip = false }: {
 }
 
 function SizeScreen({ selected, onPick }: { selected: RefillSize; onPick: (s: RefillSize) => void }) {
+  const wide = useWide();
   return (
-    <div className={SCREEN_PAD}>
+    <div className={PICK_SCREEN}>
       <div className="text-[13px] font-bold tracking-[0.04em] text-muted">RingCraftLab</div>
       <div>
         <h1 className="text-[19px] font-bold">手帳のサイズを選ぶ</h1>
@@ -459,8 +466,8 @@ function SizeScreen({ selected, onPick }: { selected: RefillSize; onPick: (s: Re
                   each, where a flex item would refuse to shrink below its own
                   name and the longest one on a row would push the column edge
                   over. */}
-              <div className="grid grid-cols-2 gap-1.5">
-                {group.rows.flatMap(row => (row.length === 1 ? [...row, null] : row)).map((id, i) => (
+              <div className="grid grid-cols-2 gap-1.5 lg:grid-cols-4">
+                {(wide ? group.rows.flat() : group.rows.flatMap(row => (row.length === 1 ? [...row, null] : row))).map((id, i) => (
                   id === null
                     // A size with no partner leaves the rest of its row empty
                     // rather than pulling the next pair apart.
@@ -613,7 +620,7 @@ function SidesScreen({ size, spread, fold, foldGrain, onPick, onBack, onConfirm 
   );
 
   return (
-    <div className={SCREEN_PAD}>
+    <div className={PICK_SCREEN}>
       <Button variant="chip" className="self-start" onClick={onBack}>
         <span className="text-[13px] leading-none">←</span>
         サイズを選び直す
@@ -631,7 +638,7 @@ function SidesScreen({ size, spread, fold, foldGrain, onPick, onBack, onConfirm 
           beside the paper, so the paper goes on top and the words underneath.
           Every card keeps one box the height of the largest sheet, so a folded
           strip and a pair of pages are drawn to the same scale. */}
-      <div className="grid grid-cols-2 gap-1.5">
+      <div className="grid grid-cols-2 gap-1.5 lg:grid-cols-4">
         {choices.map(choice => card(choice))}
       </div>
       {special.length > 0 && (
@@ -643,7 +650,7 @@ function SidesScreen({ size, spread, fold, foldGrain, onPick, onBack, onConfirm 
                 + `内側の面は綴じ側を${special[0].plan!.insetMm}mm切り落とします`}
             </p>
           </div>
-          <div className="grid grid-cols-2 gap-1.5">
+          <div className="grid grid-cols-2 gap-1.5 lg:grid-cols-4">
             {special.map(choice => card(choice))}
           </div>
         </div>
