@@ -15,7 +15,8 @@ let bad = 0;
 const check = (ok, line) => { if (!ok) bad++; console.log(`${ok ? 'ok  ' : 'NG  '} ${line}`); };
 
 const browser = await launch();
-const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+const window0 = { w: 1440, h: 900 };
+const ctx = await browser.newContext({ viewport: { width: window0.w, height: window0.h } });
 const page = await ctx.newPage();
 
 const centerOf = async (l) => {
@@ -85,6 +86,21 @@ check(sheet.x >= tools.x - 1, `設定は右の列に出る（x=${Math.round(shee
 check(await page.locator('.scrim').count() === 0, '紙は暗くならない');
 check(Math.abs(after.width - paper.width) < 1, '設定を開いても紙の大きさは変わらない');
 await page.screenshot({ path: `${OUT}/02-設定は横に.png` });
+
+// The settings must not be squeezed into the bottom of the column. Thirteen
+// stamps took the whole of it, and the photo settings opened with the button
+// that chooses a picture below the fold -- which reads as "I cannot insert a
+// photo", because that is what it is.
+const trayBox = await page.locator('.stamp').first().evaluate(el => {
+  const b = el.parentElement.getBoundingClientRect();
+  return { h: b.height };
+});
+check(trayBox.h <= window0.h * 0.42, `設定を開くとトレイは譲る（${Math.round(trayBox.h)}px / 窓 ${window0.h}px）`);
+const firstControl = await page.locator('.sheet button').first().boundingBox();
+check(
+  firstControl.y + firstControl.height <= window0.h,
+  `設定の最初のボタンが画面に入っている（下端 ${Math.round(firstControl.y + firstControl.height)}px）`,
+);
 
 // Hover says what a control is before it is pressed. Tailwind puts these
 // behind `@media (hover:hover)`, so they never reach a finger.

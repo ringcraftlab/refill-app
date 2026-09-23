@@ -1523,7 +1523,15 @@ function CanvasScreen({ layout, setLayout, onBack }: {
         <div
           ref={el => { trayRef.current = el; readTrayEdges(); }}
           onScroll={readTrayEdges}
-          className="flex gap-2.5 overflow-x-auto px-3 pb-2.5 pt-2 lg:grid lg:grid-cols-3 lg:overflow-x-visible lg:px-4 lg:pt-4"
+          // On a desktop the tray and the settings share one column, and the
+          // tray is the one that can give way: it is a palette that is always
+          // there, while the settings are what was just asked for. Without
+          // this the thirteen stamps took the whole column and the settings
+          // were a 200px slot at the bottom -- open the photo settings and
+          // the button to choose a picture was below the fold.
+          className={`flex gap-2.5 overflow-x-auto px-3 pb-2.5 pt-2 lg:grid lg:grid-cols-3 lg:overflow-x-visible lg:px-4 lg:pt-4 ${
+            sheetEl ? 'lg:max-h-[34vh] lg:overflow-y-auto' : ''
+          }`}
         >
         {TRAY.map(t => {
           const idx = traySelected.indexOf(t.kind);
