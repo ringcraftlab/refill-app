@@ -222,39 +222,55 @@ await page.locator('.scrim').click({ position: { x: 10, y: 10 } });
 await page.locator('.scrim').waitFor({ state: 'detached' });
 await shot('18-バーチカルを今日から');
 
-// The fold. Panels are not pages: only the first is punched, the rest are
-// narrower by what the rings take up, and a part cannot cross a crease. The
-// card is looked for rather than assumed, so baseline can still replay this
-// script against a build from before folding existed.
+// The fold. One sheet that bends: the panels are marked by creases, not cut
+// apart, only the first is punched, and the rest are narrower by what the
+// rings take up. The card is looked for rather than assumed, so baseline can
+// still replay this script against a build from before folding existed.
 await page.goto(BASE);
 await page.locator('.sizerow', { hasText: '62×105mm' }).click();
-const foldCard = page.locator('.card', { hasText: '蛇腹' });
+const foldCard = page.locator('.card', { hasText: '蛇腹3面' });
 if (await foldCard.count()) {
   await foldCard.click();
-  await page.getByRole('button', { name: '3面', exact: true }).click();
   await shot('19-蛇腹を選ぶ');
   await page.getByRole('button', { name: 'この構成で作る' }).click();
   await page.locator('.page').first().waitFor();
-  const panels = page.locator('.page');
-  for (let i = 0; i < 3; i++) {
-    await drag(await centerOf(await stamp('マンスリー')), await centerOf(panels.nth(i)));
-  }
-  await shot('20-蛇腹3面に3ヶ月');
 
-  // Two panels instead of three: the inner one gets wider, and the strip is
-  // short enough that the paper turns and the duplex setting changes with it.
+  // One calendar over the whole strip: a fold-out month, which is the thing a
+  // spread does across its two pages.
+  const strip = await page.locator('.page').first().boundingBox();
+  await drag(await centerOf(await stamp('マンスリー')),
+    { x: strip.x + strip.width / 2, y: strip.y + strip.height / 2 });
+  await shot('20-蛇腹の全面にマンスリー');
+
+  // Then one per panel, which is the other thing a fold is for.
   await page.goto(BASE);
   await page.locator('.sizerow', { hasText: '62×105mm' }).click();
-  await page.locator('.card', { hasText: '蛇腹' }).click();
-  await page.getByRole('button', { name: '2面', exact: true }).click();
+  await page.locator('.card', { hasText: '蛇腹3面' }).click();
   await page.getByRole('button', { name: 'この構成で作る' }).click();
   await page.locator('.page').first().waitFor();
-  await drag(await centerOf(await stamp('マンスリー')), await centerOf(page.locator('.page').first()));
-  await drag(await centerOf(await stamp('メモ')), await centerOf(page.locator('.page').last()));
+  const s3 = await page.locator('.page').first().boundingBox();
+  for (const at of [0.17, 0.5, 0.84]) {
+    await drag(await centerOf(await stamp('マンスリー')),
+      { x: s3.x + s3.width * at, y: s3.y + s3.height / 2 });
+  }
+  await shot('21-蛇腹3面に3ヶ月');
+
+  // Selected in the tray, then placed by tapping the paper -- the path that
+  // does not depend on the browser letting go of the gesture.
+  await page.goto(BASE);
+  await page.locator('.sizerow', { hasText: '62×105mm' }).click();
+  await page.locator('.card', { hasText: '蛇腹2面' }).click();
+  await page.getByRole('button', { name: 'この構成で作る' }).click();
+  await page.locator('.page').first().waitFor();
+  await (await stamp('マンスリー')).click();
+  const s2 = await page.locator('.page').first().boundingBox();
+  await page.mouse.click(s2.x + s2.width * 0.25, s2.y + s2.height / 2);
+  await page.waitForTimeout(150);
+  await shot('22-タップで置く');
   await page.getByRole('button', { name: 'PDF出力プレビュー' }).click();
   await page.locator('.duplex-note').waitFor();
   console.log('duplex says:', await page.locator('.duplex-note').textContent());
-  await shot('21-蛇腹2面の書き出し');
+  await shot('23-蛇腹2面の書き出し');
 }
 
 await browser.close();

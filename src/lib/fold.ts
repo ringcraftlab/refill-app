@@ -36,6 +36,14 @@ export const bindSpanMm = (size: SizeSpec): number =>
 export const innerCapMm = (size: SizeSpec): number =>
   foldSpanMm(size) - ringReachMm(size) - FOLD_SLACK_MM;
 
+// 内側の面が1面目に対してこれより狭くなる組み合わせは出さない。狭い面は
+// 「もう1ページ」ではなく出っ張りで、折っても使えない。
+//
+// 線の位置は迷うところがなかった。9サイズ×2面数のうち、この比が0.89を
+// 下回るのは A5の3面（74.5/148 = 0.50）ただ1つで、残りは全部0.89以上。
+// A5は幅148mmで、3面にすると紙（A4の297mm）が先に尽きて面が半分になる。
+export const FOLD_MIN_SHARE = 0.75;
+
 export interface FoldPlan {
   panels: FoldPanels;
   // 1面目の幅。リフィルそのものの寸法で、ここだけ穴があく。
@@ -74,8 +82,7 @@ export function foldPlan(size: SizeSpec, panels: FoldPanels, paper = FOLD_PAPER)
 
   const byPaper = (room - headMm) / (panels - 1);
   const innerMm = Math.min(cap, Math.floor(byPaper * 100) / 100);
-  // 面が1面目の半分も残らないなら、それは蛇腹として使える形ではない。
-  if (innerMm < headMm * 0.5) return null;
+  if (innerMm < headMm * FOLD_MIN_SHARE) return null;
 
   return {
     panels, headMm, innerMm,
@@ -84,6 +91,22 @@ export function foldPlan(size: SizeSpec, panels: FoldPanels, paper = FOLD_PAPER)
     paperCapped: byPaper < cap,
     innerCapMm: cap,
   };
+}
+
+// 面をパーツで分け合う。1つなら全面、面数と同じ数なら1面ずつ、その間は
+// 先のパーツから多めに取る。折り目が動かせない以上、分け方は数で決まる。
+export function foldGroups(panels: number, parts: number): [number, number][] {
+  const n = Math.max(1, Math.min(parts, panels));
+  const base = Math.floor(panels / n);
+  const extra = panels % n;
+  const out: [number, number][] = [];
+  let at = 0;
+  for (let i = 0; i < n; i++) {
+    const take = base + (i < extra ? 1 : 0);
+    out.push([at, at + take - 1]);
+    at += take;
+  }
+  return out;
 }
 
 // 各面の左端（折る向きの座標）と幅。先頭だけが綴じ側。

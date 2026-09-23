@@ -42,7 +42,11 @@
 }
 
 @layer base {
-  html, body, #root { height: 100%; }
+  /* `dvh` rather than `%`: on iOS the toolbars come and go, and a column
+     measured against the tall viewport puts its own bottom row -- the tray and
+     the export button -- below what anyone can see or reach. */
+  html, body { height: 100%; }
+  #root { height: 100dvh; }
 
   /* Preflight sets 1.5 here. This app is a dense phone UI of 9-13px labels
      laid out against a drawing, and every one of them was measured against

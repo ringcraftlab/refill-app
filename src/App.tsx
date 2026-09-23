@@ -4,8 +4,8 @@ import type { FoldCount, Layout, PartKind, RefillSize, SizeSpec } from './types'
 import { MAX_PARTS, SCHEMA_VERSION } from './types';
 import { holeCentres, SIZES } from './lib/sizes';
 import {
-  buildGeometry, canTurn, isLandscape, MAX_RATIO, MIN_RATIO, placeParts as planPlacement, regionAt,
-  ringsOnTop,
+  buildGeometry, canTurn, foldOf, isLandscape, MAX_RATIO, MIN_RATIO, placeParts as planPlacement,
+  regionAt, ringsOnTop,
 } from './lib/layout';
 import type { Divider, DropPoint, Geometry, PageGeometry } from './lib/layout';
 import { FOLD_PANELS, foldPanels, foldPlan } from './lib/fold';
@@ -487,26 +487,40 @@ function SidesScreen({ size, spread, fold, onPick, onBack, onConfirm }: {
   const spec = SIZES[size];
   const tint = SIZE_TINT[size];
   const flat = fold <= 1;
-  const choices: { on: boolean; pick: { spread: boolean; fold: FoldCount }; title: string; note: string; sheets: boolean[] }[] = [
+
+  // Every choice is its own card with its own drawing, because the drawing is
+  // the choice: a control that redraws one card makes the fold a setting of
+  // something else, and you cannot compare two shapes you cannot see at once.
+  // A size whose panels would come out unusably narrow simply has no card --
+  // A5 at three panels is the one, where the paper runs out before the rings
+  // do and each inner panel comes to half a page.
+  const choices: {
+    key: string; on: boolean; pick: { spread: boolean; fold: FoldCount };
+    title: string; note: string; sheets?: boolean[]; plan?: FoldPlan;
+  }[] = [
     {
-      on: flat && spread, pick: { spread: true, fold: 1 },
+      key: 'spread', on: flat && spread, pick: { spread: true, fold: 1 },
       title: '見開き（2ページ）', note: '左右セットで1ヶ月分',
       // The left page's rings are drawn on its right: in a spread the binding
       // is the seam, which is the one thing a picture of it has to get right.
       sheets: [true, false],
     },
     {
-      on: flat && !spread, pick: { spread: false, fold: 1 },
+      key: 'single', on: flat && !spread, pick: { spread: false, fold: 1 },
       title: '片面（1ページ）', note: '1ページで完結', sheets: [false],
     },
+    ...FOLD_PANELS.flatMap(n => {
+      const plan = foldPlan(spec, n);
+      if (!plan) return [];
+      return [{
+        key: `fold${n}`, on: fold === n, pick: { spread: false, fold: n as FoldCount },
+        title: `蛇腹${n}面`,
+        note: `広げて${plan.alongMm}×${plan.acrossMm}mm`,
+        plan,
+      }];
+    }),
   ];
-  // A size whose inner panels would come out unusably narrow simply does not
-  // fold, and the card says so rather than offering a shape that cannot be
-  // made.
-  const plans = FOLD_PANELS.map(n => foldPlan(spec, n));
-  const foldable = plans.some(Boolean);
-  const shown = fold > 1 ? fold : 3;
-  const plan = plans[FOLD_PANELS.indexOf(shown as FoldPanels)] ?? plans.find(Boolean) ?? null;
+  const picked = choices.find(c => c.on);
 
   return (
     <div className={SCREEN_PAD}>
@@ -517,27 +531,28 @@ function SidesScreen({ size, spread, fold, onPick, onBack, onConfirm }: {
           {SIZE_NAME[size]}（{sizeMm(spec)}・{sizeHoles(spec)}）のリフィルを作ります
         </p>
       </div>
-      {/* Side by side, on the same two-column grid as the picker. Two choices
-          are one comparison, and a comparison reads across, not down: stacked,
-          the spread and the single page were the same drawing seen twice in a
-          row instead of one beside the other. Which also settles the shape of
-          the card -- half the screen is too narrow to set a title beside the
-          paper, so the paper goes on top and the words underneath, and the
-          colour bar goes away: on a screen where both cards are the same size
-          it was the same stripe twice, saying nothing either time. */}
+      {/* Side by side, on the same two-column grid as the picker. A comparison
+          reads across, not down: stacked, these were the same drawing seen
+          twice in a row instead of one beside the other. Which also settles
+          the shape of the card -- half the screen is too narrow to set a title
+          beside the paper, so the paper goes on top and the words underneath.
+          Every card keeps one box the height of the largest sheet, so a folded
+          strip and a pair of pages are drawn to the same scale. */}
       <div className="grid grid-cols-2 gap-1.5">
         {choices.map(choice => (
           <button
-            key={choice.title}
+            key={choice.key}
             className="card flex flex-col items-center gap-2 rounded-[18px] border-[1.5px] px-2 py-3 text-center"
             style={cardSkin(choice.on, tint.line)}
             aria-pressed={choice.on}
             onClick={() => onPick(choice.pick)}
           >
             <span className="flex items-center justify-center gap-[3px]" style={{ height: SHEET_SLOT.height }}>
-              {choice.sheets.map((flip, i) => (
-                <SizeIcon key={i} size={spec} tint={tint} flip={flip} />
-              ))}
+              {choice.plan
+                ? <FoldIcon size={spec} tint={tint} plan={choice.plan} />
+                : choice.sheets!.map((flip, i) => (
+                  <SizeIcon key={i} size={spec} tint={tint} flip={flip} />
+                ))}
             </span>
             <span className="flex flex-col gap-0.5">
               <strong className="text-[13px] font-semibold leading-tight">{choice.title}</strong>
@@ -546,44 +561,17 @@ function SidesScreen({ size, spread, fold, onPick, onBack, onConfirm }: {
           </button>
         ))}
       </div>
-      {/* The fold goes full width and underneath, because it is not a third
-          option of the same kind: it is one sheet that unfolds, so the picture
-          of it is a strip rather than a page, and a strip beside two pages in
-          the same row would be drawn at a different scale to fit. Below them
-          it keeps the scale the picker set, which is the whole point of that
-          scale. */}
-      {foldable && plan && (
-        <div
-          className="card flex flex-col gap-2 rounded-[18px] border-[1.5px] px-3 py-3"
-          style={cardSkin(!flat, tint.line)}
-        >
-          <button
-            className="flex flex-col items-center gap-2 p-0 text-center"
-            aria-pressed={!flat}
-            onClick={() => onPick({ spread: false, fold: shown })}
-          >
-            <span className="flex items-center justify-center" style={{ height: SHEET_SLOT.height }}>
-              <FoldIcon size={spec} tint={tint} plan={plan} />
-            </span>
-            <span className="flex flex-col gap-0.5">
-              <strong className="text-[13px] font-semibold leading-tight">蛇腹（折りたたみ）</strong>
-              <span className="text-[10px] leading-tight text-faint">
-                1枚を折って{plan.panels}面。穴は先頭の面だけ
-              </span>
-            </span>
-          </button>
-          <Segmented
-            value={String(shown)}
-            options={FOLD_PANELS.filter((_, i) => plans[i]).map(n => ({ v: String(n), label: `${n}面` }))}
-            onPick={v => onPick({ spread: false, fold: Number(v) as FoldCount })}
-          />
-          <p className="m-0 text-[10px] leading-snug text-faint">
-            広げると {plan.alongMm}×{plan.acrossMm}mm。
-            {plan.paperCapped
-              ? `内側の面は紙に合わせて${plan.innerMm}mm（リングの逃げなら${plan.innerCapMm.toFixed(1)}mmまで可）`
-              : `内側の面は${plan.innerMm}mm。畳むと先頭の面に隠れます`}
-          </p>
-        </div>
+      {/* What the fold costs, under the cards rather than inside one: it is the
+          number you check before printing, and it changes with the panel count
+          the card above just set. */}
+      {picked?.plan && (
+        <p className="fold-note m-0 text-[11px] leading-snug text-muted">
+          穴は先頭の面だけ。内側の面は
+          {picked.plan.paperCapped
+            ? `${picked.plan.innerMm}mm（紙で決まり。リングの逃げなら${picked.plan.innerCapMm.toFixed(1)}mmまで）`
+            : `${picked.plan.innerMm}mm（リングの逃げで決まり）`}
+          。畳むと先頭の面に隠れます
+        </p>
       )}
       <Button variant="cta" className="mt-auto" onClick={onConfirm}>この構成で作る</Button>
     </div>
@@ -722,6 +710,9 @@ function CanvasScreen({ layout, setLayout, onBack }: {
   const dragRef = useRef<DragState | null>(null);
   const dividerRef = useRef<{ d: Divider; startX: number; startY: number; extentPx: number } | null>(null);
   const setRef = useRef<HTMLDivElement>(null);
+  // Set when a tap has just placed something, so the click behind that tap
+  // does not also open what it placed.
+  const tapPlaced = useRef(false);
   const toastTimer = useRef<number>();
 
   const boxRef = useRef<HTMLDivElement>(null);
@@ -748,7 +739,12 @@ function CanvasScreen({ layout, setLayout, onBack }: {
 
   const first = geo.pages[0];
   const n = geo.pages.length;
-  const gapPx = (n - 1) * GAP;
+  // A spread's gap is the binder between two sheets. A fold has no gap to
+  // draw: it is one sheet that bends, so the panels butt up and the creases
+  // are marked on top of them.
+  const folded = !!foldOf(layout, size);
+  const gap = folded ? 0 : GAP;
+  const gapPx = (n - 1) * gap;
   // A fold's panels are not all the same width -- only the punched one is a
   // whole page -- so the row is measured by what the pages actually add up to
   // rather than by one of them times the count.
@@ -763,7 +759,7 @@ function CanvasScreen({ layout, setLayout, onBack }: {
   const pageH = (i: number) => geo.pages[i].heightMm * scale;
   const pageOrigin = (i: number) => {
     let at = 0;
-    for (let j = 0; j < i; j++) at += (geo.flow === 'row' ? pageW(j) : pageH(j)) + GAP;
+    for (let j = 0; j < i; j++) at += (geo.flow === 'row' ? pageW(j) : pageH(j)) + gap;
     return geo.flow === 'row' ? { x: at, y: 0 } : { x: 0, y: at };
   };
 
@@ -890,6 +886,11 @@ function CanvasScreen({ layout, setLayout, onBack }: {
     const d = dragRef.current;
     if (!d) return;
     if (!d.moved && Math.abs(e.clientX - d.startX) + Math.abs(e.clientY - d.startY) < 8) return;
+    // `touch-action: pan-x` already tells the browser that up and down belong
+    // to us, but Safari can still decide mid-gesture that it wants the touch
+    // and fire pointercancel, which drops the part. Saying so again once the
+    // drag is real costs nothing where it was never in doubt.
+    if (e.cancelable) e.preventDefault();
     d.moved = true;
     setGhost({ x: e.clientX, y: e.clientY, kinds: d.kinds });
     // Only a single part coming from the tray has a landing place to show:
@@ -1145,12 +1146,53 @@ function CanvasScreen({ layout, setLayout, onBack }: {
         <div
           className="flex items-center justify-center"
           ref={setRef}
-          style={{ flexDirection: geo.flow, gap: GAP, position: 'relative' }}
+          style={{ flexDirection: geo.flow, gap, position: 'relative' }}
+          // Tapping the paper places what the tray has selected. Dragging is
+          // the better gesture and stays the one the app teaches, but it rides
+          // on pointer capture and on the browser not taking the gesture for a
+          // scroll, and neither can be guaranteed on every device. A tap has
+          // nothing to take.
+          //
+          // On the pointer going down, not on the click: by the time a click
+          // is dispatched the part is already drawn under the finger, and the
+          // click carries on into it and opens its settings. Captured, so it
+          // lands on the paper rather than on whatever is drawn over it, and
+          // the click that follows is swallowed for the same reason.
+          onPointerDownCapture={e => {
+            if (!traySelected.length) return;
+            const at = toSurface(e.clientX, e.clientY);
+            if (!at) return;
+            e.stopPropagation();
+            tapPlaced.current = true;
+            placeParts([...traySelected], at);
+            setTraySelected([]);
+          }}
+          onClickCapture={e => {
+            if (!tapPlaced.current) return;
+            tapPlaced.current = false;
+            e.preventDefault();
+            e.stopPropagation();
+          }}
         >
+          {/* Where the paper bends. A fold is one sheet, so this is a line on
+              it rather than a gap between two -- which is the difference
+              between a fold and a spread, and the picture has to say which
+              this is. */}
+          {geo.surface.slices[0] && geo.creases.map((at, i) => (
+            <span
+              key={`crease-${i}`}
+              className="crease pointer-events-none absolute top-0 z-10 h-full border-l border-dashed border-line-strong"
+              style={{ left: (geo.surface.slices[0].ox - geo.surface.slices[0].fromMm + at) * scale }}
+            />
+          ))}
           {geo.pages.map((pg, i) => (
             <div
               key={pg.key}
-              className="page relative shrink-0 touch-none overflow-hidden rounded-sm bg-white shadow-[0_10px_30px_rgba(58,54,46,0.16)]"
+              className={`page relative shrink-0 touch-none overflow-hidden bg-white ${
+                folded
+                  ? 'shadow-[0_10px_30px_rgba(58,54,46,0.10)]'
+                  : 'rounded-sm shadow-[0_10px_30px_rgba(58,54,46,0.16)]'
+              }`}
               style={{ width: pageW(i), height: pageH(i) }}
             >
               <PageSvg page={pages[i]} scale={scale} showGuides />
@@ -1228,13 +1270,13 @@ function CanvasScreen({ layout, setLayout, onBack }: {
       </div>
 
       <p className={`m-0 shrink-0 px-3.5 py-1 text-[10px] ${
-        traySelected.length > 1 || teachDivider ? 'text-accent' : 'text-faint'
+        traySelected.length > 0 || teachDivider ? 'text-accent' : 'text-faint'
       }`}>
         {teachDivider
           ? 'つまみを上下にドラッグすると、パーツの広さを変えられます'
-          : traySelected.length > 1
-            ? `${traySelected.length}個選択中：まとめてドラッグで自動配置`
-            : 'タップで複数選択 → まとめてドラッグで自動配置'}
+          : traySelected.length > 0
+            ? `${traySelected.length}個選択中：紙をタップすると置けます`
+            : 'タップで選ぶ → 紙をタップ。ドラッグでも置けます'}
       </p>
 
       {/* The row is wider than the screen, and until now nothing said so: it
@@ -1791,7 +1833,7 @@ function PrintPreview({ layout, size, print }: { layout: Layout; size: SizeSpec;
           >×</button>
           <div
             className={`overflow-auto rounded-sm bg-white ${
-              zoom ? 'h-[calc(100vh-128px)] w-[calc(100vw-32px)]' : ''
+              zoom ? 'h-[calc(100dvh-128px)] w-[calc(100dvw-32px)]' : ''
             }`}
             onClick={e => { e.stopPropagation(); setZoom(z => !z); }}
           >
@@ -1801,8 +1843,8 @@ function PrintPreview({ layout, size, print }: { layout: Layout; size: SizeSpec;
               sheet={sheets[open]}
               boxPx={1400}
               className={zoom
-                ? 'block w-[calc((100vw-32px)*2.4)] max-w-none'
-                : 'block h-auto w-auto max-h-[calc(100vh-128px)] max-w-[calc(100vw-32px)]'}
+                ? 'block w-[calc((100dvw-32px)*2.4)] max-w-none'
+                : 'block h-auto w-auto max-h-[calc(100dvh-128px)] max-w-[calc(100dvw-32px)]'}
             />
           </div>
           <div className="lightbox-bar flex items-center gap-3.5 text-xs text-white" onClick={e => e.stopPropagation()}>

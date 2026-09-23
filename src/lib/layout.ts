@@ -1,7 +1,7 @@
 import type { FoldCount, Layout, PageKey, PartKind, SizeSpec, Spanning, Surface } from '../types';
 import { MAX_PARTS, PART_FIT } from '../types';
 import type { FoldPanels, FoldPlan } from './fold';
-import { foldPanels, foldPlan } from './fold';
+import { foldGroups, foldPanels, foldPlan } from './fold';
 import type { SheetRotation } from './draw';
 import { monthGrid } from './dates';
 import { holeCentres, SIZES } from './sizes';
@@ -79,6 +79,11 @@ export interface Geometry {
   pages: PageGeometry[];
   landscape: boolean;
   flow: 'row' | 'column';
+  // Where the paper bends, in surface millimetres. Empty unless this is a
+  // fold. A crease is not a page boundary -- the strip is one sheet and one
+  // canvas -- so it is carried separately, for the editor to mark and for
+  // the print path to draw a fold line on.
+  creases: number[];
   surface: {
     widthMm: number;
     heightMm: number;
@@ -251,44 +256,42 @@ function punchHoles(box: PageBox, size: SizeSpec) {
   }));
 }
 
-// A fold's panels sit in a row starting from the punched one. Turning the
-// strip over puts that one at the other end with its rings on the other edge,
-// which is the same thing `flipBinding` does to a single page. Only the
-// punched panel reserves a ring strip; the rest are plain paper on all four
-// sides, which is most of what makes an inner panel worth having.
 interface Pane { key: PageKey; W: number; H: number; box: PageBox }
 
-function foldPaneBoxes(
-  plan: FoldPlan, count: FoldCount, H: number, ring: number, flip: boolean,
-): Pane[] {
-  const order = flip ? [...foldKeys(count)].reverse() : foldKeys(count);
-  const widths = foldPanels(plan).map(p => p.widthMm);
-  const edge: RingEdge = flip ? 'right' : 'left';
+// A fold prints on one strip of paper, so it is one page: the panels are not
+// separate sheets and nothing is trimmed where they meet. Only the punched
+// panel's outer edge keeps a ring strip clear; the far end takes the ordinary
+// trim margin, and everything between is continuous paper. Turning the strip
+// over puts the punched panel -- and its rings -- at the other end.
+function foldStripPane(plan: FoldPlan, H: number, ring: number, flip: boolean): Pane {
+  const W = plan.alongMm;
   const O = OUTER_MM;
-  return order.map((key, i) => {
-    const W = (flip ? [...widths].reverse() : widths)[i];
-    if (key !== 'f1') {
-      return {
-        key, W, H,
-        box: {
-          edge,
-          ringBand: { x: 0, y: 0, w: 0, h: 0 },
-          ox: O, oy: O, usableW: W - O * 2, usableH: H - O * 2,
-        },
-      };
-    }
-    return {
-      key, W, H,
-      box: {
-        edge,
-        ringBand: { x: edge === 'left' ? 0 : W - ring, y: 0, w: ring, h: H },
-        ox: edge === 'left' ? ring : O,
-        oy: O,
-        usableW: W - ring - O,
-        usableH: H - O * 2,
-      },
-    };
-  });
+  const edge: RingEdge = flip ? 'right' : 'left';
+  return {
+    key: 'f1', W, H,
+    box: {
+      edge,
+      ringBand: { x: flip ? W - ring : 0, y: 0, w: ring, h: H },
+      ox: flip ? O : ring,
+      oy: O,
+      usableW: W - ring - O,
+      usableH: H - O * 2,
+    },
+  };
+}
+
+// The creases, in surface millimetres. Measured from the punched end, so
+// turning the strip over reverses them with the panels.
+function foldCreases(plan: FoldPlan, ox: number, flip: boolean): number[] {
+  const widths = foldPanels(plan).map(p => p.widthMm);
+  const drawn = flip ? [...widths].reverse() : widths;
+  const out: number[] = [];
+  let at = 0;
+  for (let i = 0; i < drawn.length - 1; i++) {
+    at += drawn[i];
+    out.push(at - ox);
+  }
+  return out;
 }
 
 // `flipBinding` mirrors a single page's binding edge, for when that page is
@@ -313,7 +316,7 @@ export function buildGeometry(layout: Layout, size: SizeSpec, flipBinding = fals
       };
 
   const boxes: Pane[] = fold
-    ? foldPaneBoxes(fold, foldCountOf(layout), H, ring, flipBinding)
+    ? [foldStripPane(fold, H, ring, flipBinding)]
     : (layout.spread ? (['left', 'right'] as PageKey[]) : (['single'] as PageKey[]))
         .map(key => ({ key, W, H, box: pageBox(layout.spread, onTop, key, W, H, ring, flipBinding) }));
   const usableH = boxes[0].box.usableH;
@@ -345,8 +348,7 @@ export function buildGeometry(layout: Layout, size: SizeSpec, flipBinding = fals
       sheet,
       ringEdge: box.edge,
       ringBand: box.ringBand,
-      // Only the panel in the rings is punched. The rest fold in behind it.
-      holes: fold && key !== 'f1' ? [] : punchHoles(box, size),
+      holes: punchHoles(box, size),
       spanRect: span ? { x: box.ox, y: box.oy, w: box.usableW, h: bandH } : null,
       spanDivider: span && layout.surface.placed.length > 0
         ? { id: `${key}-span`, key: 'span', axis: 'h', x: box.ox, y: box.oy + bandH, length: box.usableW, ratio: span.ratio, extentMm: extent }
@@ -380,16 +382,29 @@ export function buildGeometry(layout: Layout, size: SizeSpec, flipBinding = fals
   // dragged across one and the panels are the surface's divisions -- fixed by
   // the fold, not by a ratio. One part to a panel, which is also what a folded
   // refill is for: a month you turn to rather than a page you share.
-  const foldRegions = (): Rect[] =>
-    slices.slice(0, count).map(s => ({ x: s.fromMm, y: 0, w: s.toMm - s.fromMm, h: surfaceH }));
+  const creases = fold ? foldCreases(fold, boxes[0].box.ox, flipBinding) : [];
+
+  // One part takes the whole strip, three take a panel each, and in between
+  // the earlier parts take the extra panel. The trim margin goes on at
+  // whichever ends are creases, so a part stops short of a fold it does not
+  // cross and runs straight through one it does.
+  const foldRegions = (): Rect[] => {
+    const edges = [0, ...creases, surfaceW];
+    return foldGroups(creases.length + 1, count).map(([a, b]) => {
+      const from = edges[a] + (a > 0 ? OUTER_MM : 0);
+      const to = edges[b + 1] - (b < creases.length ? OUTER_MM : 0);
+      return { x: from, y: 0, w: to - from, h: surfaceH };
+    });
+  };
 
   return {
     pages,
     landscape,
     // Pages hanging from rings along their top stack; pages held at their
-    // side sit next to each other. A fold is upright and side-bound, so its
-    // panels always run across.
+    // side sit next to each other. A fold is one page, so its flow never
+    // comes up.
     flow: !fold && layout.spread && onTop ? 'column' : 'row',
+    creases,
     surface: {
       widthMm: surfaceW,
       heightMm: surfaceH,
@@ -495,9 +510,8 @@ function edgePage(layout: Layout, size: SizeSpec, at: DropPoint): PageKey | null
 function foldSlotAt(layout: Layout, size: SizeSpec, at: DropPoint | null): number {
   const placed = layout.surface.placed.length;
   if (!at) return placed;
-  const { slices } = buildGeometry(layout, size).surface;
-  const i = slices.findIndex(s => at.sx >= s.fromMm && at.sx <= s.toMm);
-  return i < 0 ? placed : Math.min(i, placed);
+  const { creases } = buildGeometry(layout, size);
+  return Math.min(creases.filter(c => at.sx > c).length, placed);
 }
 
 // A fold fills panels, so placing is a question of which panel rather than of

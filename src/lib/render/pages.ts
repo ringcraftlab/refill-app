@@ -8,7 +8,7 @@ import type { FoldPlan } from '../fold';
 import { drawGrid, drawLines, drawMemo, drawPart, drawPartAcross, drawSpanningMonthly } from '../parts';
 import { holeCentres } from '../sizes';
 import { addMonths, isoDate, sheetStarts } from '../dates';
-import { DEFAULT_IMPOSE, duplexFlip, impose, planTiles, translate } from './impose';
+import { DEFAULT_IMPOSE, duplexFlip, impose, planTiles } from './impose';
 import type { DuplexFlip, TilePlan } from './impose';
 import type { SheetContent } from './impose';
 
@@ -157,22 +157,23 @@ function foldPunchGuide(size: SizeSpec, plan: FoldPlan, flip: boolean): Primitiv
   }));
 }
 
-// One side of a folded strip. The panels are the same pages the editor draws,
-// laid end to end on the paper they are folded out of, with a crease between
-// each pair.
+// One side of a folded strip. The strip is one page, so this is that page with
+// the creases marked on it -- drawn from the panel widths rather than from
+// where the content happens to break, because the paper bends there whatever
+// is printed across it.
 function foldFace(layout: Layout, size: SizeSpec, plan: FoldPlan, flip: boolean): Primitive[] {
-  const out: Primitive[] = [];
+  const widths = foldPanels(plan).map(p => p.widthMm);
+  const drawn = flip ? [...widths].reverse() : widths;
   const creases: Primitive[] = [];
   let x = 0;
-  for (const page of buildPages(layout, size, flip)) {
-    out.push(...translate(flattenToSheet(page), x, 0));
-    x += page.widthMm;
-    if (x < plan.alongMm - 0.01) creases.push({
+  for (const w of drawn.slice(0, -1)) {
+    x += w;
+    creases.push({
       type: 'line', x1: x, y1: 1, x2: x, y2: plan.acrossMm - 1,
       stroke: CREASE, strokeMm: 0.2, dashMm: [4, 2.2],
     });
   }
-  return [...creases, ...out];
+  return [...creases, ...flattenToSheet(buildPages(layout, size, flip)[0])];
 }
 
 // The spare side of a folded strip, panel by panel: only the punched one keeps
