@@ -292,6 +292,16 @@ if (await foldCard.count()) {
   await drag(await centerOf(await stamp('方眼')),
     { x: turned.x + turned.width * 0.4, y: turned.y + turned.height * 0.9 });
   await shot('25-蛇腹を横にする');
+
+  // The drawing on its own, bigger than the paper really is. A tap on the
+  // paper is already taken by placing and by settings, so this is a button.
+  await page.locator('.magnify').click();
+  await page.locator('.lightbox').waitFor();
+  await shot('26-大きく見る');
+  await page.locator('.lightbox svg').first().click();
+  await page.waitForTimeout(200);
+  console.log('拡大の紙:', JSON.stringify(await page.locator('.lightbox svg').first().boundingBox()));
+  await shot('27-さらに拡大');
 }
 
 await browser.close();

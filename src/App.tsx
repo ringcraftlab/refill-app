@@ -8,6 +8,7 @@ import {
   placeParts as planPlacement, regionAt, removeFromFold, ringsOnTop,
 } from './lib/layout';
 import type { Divider, DropPoint, Geometry, PageGeometry } from './lib/layout';
+import type { Page } from './lib/draw';
 import { FOLD_PANELS, foldPanels, foldPlan } from './lib/fold';
 import type { FoldPanels, FoldPlan } from './lib/fold';
 import { nextMonthCell } from './lib/parts';
@@ -33,7 +34,11 @@ const GAP = 6;
 
 // The app is one phone-width column whatever it is shown on. Layout only —
 // anything pressable comes from ui/.
-const SCREEN = 'relative mx-auto flex h-full max-w-[430px] flex-col overflow-hidden bg-bg';
+// Phone-first, but a tablet is not a tall phone: on a wide screen the column
+// was 430px of app in the middle of 834, and the drawing -- which is what the
+// whole app is -- came out at a third of the glass. The cap lifts once there
+// is room for it, and everything in the column simply gets wider with it.
+const SCREEN = 'relative mx-auto flex h-full max-w-[430px] flex-col overflow-hidden bg-bg md:max-w-[680px]';
 const SCREEN_PAD = `${SCREEN} gap-[18px] px-[22px] py-7`;
 
 // What a stamp shows. A character said what the part was called -- 時 for the
@@ -703,6 +708,10 @@ function CanvasScreen({ layout, setLayout, onBack }: {
   const askRemove = (what: string, run: () => void) => { setSheet(null); setConfirm({ what, run }); };
   // Dragging a border is the app's one irreplaceable gesture, so the handles
   // keep asking for it until it has been used once.
+  // Looking at the design big. A plain tap on the paper is already taken --
+  // it places what the tray has selected, and it opens a part's settings --
+  // so this is a button of its own rather than a gesture competing with those.
+  const [zoomed, setZoomed] = useState(false);
   const [taught, setTaught] = useState(() => {
     try { return localStorage.getItem(TAUGHT_KEY) === '1'; } catch { return false; }
   });
@@ -1133,7 +1142,11 @@ function CanvasScreen({ layout, setLayout, onBack }: {
           button floating in its corner sat on the refill itself. */}
       <header className="flex shrink-0 items-center gap-2 px-4 pb-2 pt-3 text-xs font-semibold text-label">
         <Button variant="icon" onClick={onBack} aria-label="戻る">←</Button>
-        <span>{size.label} {size.widthMm}×{size.heightMm}mm ・ {formLabel(layout)}</span>
+        {/* The two buttons keep their room; the name gives way. A long size
+            name pushing them off the edge is worse than a name cut short. */}
+        <span className="min-w-0 truncate">
+          {size.label} {size.widthMm}×{size.heightMm}mm ・ {formLabel(layout)}
+        </span>
         <button
           className="rotate ml-auto flex shrink-0 items-center gap-1 rounded-full border border-line-strong bg-white px-2.5 py-1 text-[11px] font-normal text-label"
           onClick={turn}
@@ -1142,7 +1155,22 @@ function CanvasScreen({ layout, setLayout, onBack }: {
           <span className="text-[13px] leading-none">↻</span>
           {turnLabel}
         </button>
+        <button
+          className="magnify flex shrink-0 items-center gap-1 rounded-full border border-line-strong bg-white px-2.5 py-1 text-[11px] font-normal text-label"
+          onClick={() => setZoomed(true)}
+          aria-label="大きく見る"
+        >
+          <span className="text-[13px] leading-none">⤢</span>
+          大きく
+        </button>
       </header>
+
+      {/* The design filling the glass, to check rather than to edit. Editing
+          needs the tray and the borders, which are what make the drawing small
+          in the first place; taking them away is the whole point of this. */}
+      {zoomed && (
+        <ZoomView pages={pages} flow={geo.flow} onClose={() => setZoomed(false)} />
+      )}
 
       {dated && (
         // Which months this makes is a design decision, not a printing one,
@@ -1890,6 +1918,73 @@ function PrintPreview({ layout, size, print }: { layout: Layout; size: SizeSpec;
         </div>
       )}
     </Field>
+  );
+}
+
+// The design filling the glass. Fitting it is not enough on a phone, where the
+// drawing is as wide as the screen already and taking the tray away buys
+// nothing: the point of looking at it big is to look closer than the paper
+// really is, so a tap goes past fit and the view scrolls. Nothing here is
+// editable, which is what lets it scroll under a finger at all -- the editor's
+// pages take the touch themselves.
+const ZOOM_STEP = 2.5;
+
+function ZoomView({ pages, flow, onClose }: {
+  pages: Page[]; flow: 'row' | 'column'; onClose: () => void;
+}) {
+  const boxRef = useRef<HTMLDivElement>(null);
+  const [box, setBox] = useState({ w: 320, h: 480 });
+  const [big, setBig] = useState(false);
+  useLayoutEffect(() => {
+    const el = boxRef.current;
+    if (!el) return;
+    const measure = () => setBox({ w: el.clientWidth, h: el.clientHeight });
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  const gapPx = (pages.length - 1) * GAP;
+  const acrossMm = flow === 'row'
+    ? pages.reduce((t, p) => t + p.widthMm, 0)
+    : Math.max(...pages.map(p => p.widthMm));
+  const downMm = flow === 'column'
+    ? pages.reduce((t, p) => t + p.heightMm, 0)
+    : Math.max(...pages.map(p => p.heightMm));
+  const fit = Math.max(0.1, Math.min(
+    (box.w - 24 - (flow === 'row' ? gapPx : 0)) / acrossMm,
+    (box.h - 24 - (flow === 'column' ? gapPx : 0)) / downMm,
+  ));
+  const scale = big ? fit * ZOOM_STEP : fit;
+
+  return (
+    <div className="lightbox fixed inset-0 z-50 flex flex-col bg-[rgba(28,26,22,0.9)]">
+      <button
+        className="absolute right-3.5 top-3 z-10 size-[34px] rounded-full bg-white/20 p-0 text-[17px] leading-[34px] text-white"
+        onClick={onClose}
+        aria-label="閉じる"
+      >×</button>
+      <div className="flex min-h-0 grow overflow-auto p-3" ref={boxRef} onClick={onClose}>
+        <div
+          className="m-auto flex items-center justify-center"
+          style={{ flexDirection: flow, gap: GAP }}
+          onClick={e => { e.stopPropagation(); setBig(z => !z); }}
+        >
+          {pages.map((page, i) => (
+            <div
+              key={i}
+              className="shrink-0 overflow-hidden rounded-sm bg-white shadow-[0_10px_30px_rgba(0,0,0,0.4)]"
+            >
+              <PageSvg page={page} scale={scale} showGuides />
+            </div>
+          ))}
+        </div>
+      </div>
+      <p className="zoom-hint m-0 pb-[18px] text-center text-[11px] text-white/55">
+        {big ? '紙をタップで全体・外をタップで閉じる' : '紙をタップでさらに拡大・外をタップで閉じる'}
+      </p>
+    </div>
   );
 }
 
