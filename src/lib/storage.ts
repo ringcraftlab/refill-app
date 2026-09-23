@@ -70,9 +70,17 @@ function load(): Layout[] {
 // its own, the difference between "saved" and "did not save" has to reach the
 // screen -- a layout that silently did not save is one the user finds missing
 // later.
+// Bumped on every write. The editor asks what else could share the paper on
+// every render now, and reading the store means parsing every saved design
+// (photographs included) -- so the answer is cached against this, and saving
+// or deleting one is what makes it stale.
+let revision = 0;
+export const layoutsRevision = (): number => revision;
+
 function persist(layouts: Layout[]): boolean {
   try {
     localStorage.setItem(KEY, JSON.stringify({ layouts }));
+    revision++;
     return true;
   } catch {
     return false;

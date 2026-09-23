@@ -5,8 +5,14 @@
 //
 // A year of monthlies is twelve refills and an A3 holds more, so the rest of
 // the paper can carry something else -- but only something the same tiling can
-// place. What this checks is that rule: what is offered, what it adds up to,
-// and that the paper that comes out has all of it on it.
+// place. What this checks is that rule, and the way it is reached: the paper
+// is a picture in the editor, its empty places are buttons, and what comes out
+// of the export has all of it on it.
+//
+// Twice now the answer to "how do I add one" was a list with a number to
+// raise, once in the export screen and once in the saved list, and twice it
+// was unreadable. So the check is written from the editor: chip, empty square,
+// pick -- and it fails if any of those three is not there.
 import { BASE, launch } from './browser.mjs';
 import { mkdir, readFile } from 'node:fs/promises';
 import { PDFDocument } from 'pdf-lib';
@@ -68,55 +74,80 @@ await make('62×105mm', '見開き', 'マンスリー', '見開きのほう');
 await make('62×105mm', '蛇腹2面', 'マンスリー', '蛇腹のほう');
 await make('62×105mm', '片面', 'マンスリー', '月間');
 
-// Adding happens where the other refills are: the saved list. Going to the
-// export screen to look for another refill is a strange place to look.
-await page.getByRole('button', { name: '読み込み' }).click();
-await page.locator('.sheet').waitFor();
-const savedRows = page.locator('.sheet li');
-const memoRow = savedRows.filter({ hasText: 'メモ' });
-await memoRow.getByRole('button', { name: '同じ紙に' }).click();
-await memoRow.getByRole('button', { name: '増やす' }).click();
-await page.waitForTimeout(200);
-check(
-  (await page.locator('.sheet li').filter({ hasText: '蛇腹のほう' }).textContent()).includes('紙の形がちがいます'),
-  '紙の形が違うものは、違うと言う',
-);
-await page.screenshot({ path: `${OUT}/00-保存したリフィルから足す.png` });
-await page.locator('.scrim').click({ position: { x: 10, y: 10 } }).catch(() => {});
-await page.locator('.sheet .flex button[aria-label=閉じる]').click().catch(() => {});
-await page.waitForTimeout(200);
-check(
-  (await page.locator('.alsonote').textContent().catch(() => '')).includes('2枚'),
-  '編集画面にも「同じ紙に2枚並べます」と出る',
-);
+// The paper is said in the editor, before anything is exported: which paper,
+// how many sheets, and how much of the last one is empty.
+const chip = page.locator('button.paper');
+const chipText = (await chip.textContent()).replace(/\s+/g, '');
+// Micro5 twelve months duplex is six sheets and an upright A4 takes six, so
+// this one comes out even -- which is worth saying too.
+check(/A4\d+枚/.test(chipText), `用紙が編集画面に出ている（「${chipText}」）`);
 
-await page.getByRole('button', { name: 'PDF出力プレビュー' }).click();
-await page.locator('.preview').waitFor();
+await chip.click();
+await page.locator('.sheet').waitFor();
 await page.locator('.sheet').getByRole('button', { name: 'A3', exact: true }).click();
 await page.waitForTimeout(300);
+const onA3 = (await chip.textContent()).replace(/\s+/g, '');
+check(onA3.includes('あと'), `あきが編集画面から見える（「${onA3}」）`);
 
-const rows = page.locator('.basket li');
-const names = (await rows.allTextContents()).map(t => t.replace(/\s+/g, ' ').trim());
+const note = () => page.locator('.fill-note').textContent();
+check((await note()).includes('A3'), `用紙を変えると数も変わる（${(await note()).trim()}）`);
+
+// The empty places are buttons. This is the whole answer to "where does it
+// go": press the place you want filled.
+const empty = page.locator('.fillmap .empty');
+const mine = page.locator('.fillmap .mine');
+const emptied = await empty.count();
+check(emptied > 0, `空いているところが押せる（${emptied}面）`);
+check(await mine.count() > 0, `このリフィルのぶんは埋まって見える（${await mine.count()}面）`);
+await page.screenshot({ path: `${OUT}/00-用紙の空きを押す.png` });
+
+await empty.first().click();
+const picks = page.locator('.basket li');
+const names = (await picks.allTextContents()).map(t => t.replace(/\s+/g, ' ').trim());
 check(
-  await rows.count() === 2 && names.some(n => n.includes('メモ')) && names.some(n => n.includes('見開き')),
+  names.some(n => n.includes('メモ')) && names.some(n => n.includes('見開き')),
   `同じ穴の紙のものが出る（${names.join(' / ') || 'なし'}）`,
 );
 check(!names.join(' ').includes('蛇腹'), '蛇腹は混ぜられない（帯の寸法が違う）');
+check(await page.locator('.basket .thumb svg').count() >= 2, '候補は絵で見える');
 
-const label = () => page.locator('.fill-note').textContent();
-const facesIn = async () => Number((await label()).match(/このリフィルで(\d+)面/)[1]);
-const before = await facesIn();
+await picks.filter({ hasText: 'メモ' }).click();
+await page.waitForTimeout(200);
+check(await page.locator('.fillmap .added').count() === 1, '押した紙に入る（1面）');
+await picks.filter({ hasText: 'メモ' }).click();
+await page.waitForTimeout(200);
+check(await page.locator('.fillmap .added').count() === 2, 'もう一度押せば2面');
+check(await page.locator('.fillmap .added .thumb svg').count() === 2, '入れたものが紙の上で絵になる');
+await page.screenshot({ path: `${OUT}/01-入れたあと.png` });
 
-check(await page.locator('.basket .thumb svg').count() === 2, '候補は絵で見える');
+// And back out again, in the same place: the square that has it is the button
+// that takes it off.
+await page.locator('.fillmap .added').first().click();
+await page.waitForTimeout(200);
+check(await page.locator('.fillmap .added').count() === 1, '入れた面を押すと外れる');
+await page.locator('.fillmap .empty').first().click();
+await page.locator('.basket li').filter({ hasText: 'メモ' }).click();
+await page.waitForTimeout(200);
+
+// Closing the paper does not lose it: the editor says what is going on the
+// sheet beside the design.
+await page.locator('.scrim').click({ position: { x: 10, y: 10 } }).catch(() => {});
+await page.locator('.sheet button[aria-label=閉じる]').first().click().catch(() => {});
+await page.waitForTimeout(200);
+const also = (await page.locator('.alsonote').textContent().catch(() => '')).replace(/\s+/g, '');
+check(also.includes('メモ') && also.includes('2つ'), `編集画面にも残る（「${also}」）`);
+
+// The export screen shows the same picture, because it is the same control.
+await page.getByRole('button', { name: 'PDF出力プレビュー' }).click();
+await page.locator('.preview').waitFor();
+await page.waitForTimeout(300);
 check(
-  (await rows.filter({ hasText: 'メモ' }).textContent()).includes('2'),
-  '読み込みで足したものが、書き出しにも出ている',
+  await page.locator('.fillmap .added').count() === 2,
+  '書き出し画面にも同じ紙の絵が出ている',
 );
-const spare = (await label()).match(/(\d+)面あいて/);
-check(!!spare, `あきが出る（${(await label()).trim()}）`);
-const after = before;
-
-await page.screenshot({ path: `${OUT}/01-同じ紙に足す.png` });
+const spare = (await note()).match(/(\d+)面あいて/);
+check(!!spare, `あきが出る（${(await note()).trim()}）`);
+await page.screenshot({ path: `${OUT}/02-書き出し.png` });
 
 const dl = page.waitForEvent('download');
 await page.getByRole('button', { name: '書き出す' }).click();
@@ -126,10 +157,7 @@ const doc = await PDFDocument.load(await readFile(file));
 const { width, height } = doc.getPage(0).getSize();
 const mm = [width * MM, height * MM].map(Math.round).sort((a, b) => a - b);
 check(mm[0] === 297 && mm[1] === 420, `A3で出る（${mm[1]}×${mm[0]}mm）`);
-
-// The faces have to fit on the sheets that came out: two sides to a sheet.
-const perPage = Number((await page.locator('.print-summary').textContent().catch(() => '')).match(/に (\d+) /)?.[1] ?? 0);
-console.log(`  ${after}面・1枚に${perPage || '?'}面・${doc.getPageCount()}ページ`);
+console.log(`  ${doc.getPageCount()}ページ`);
 
 await browser.close();
 if (bad) process.exitCode = 1;
