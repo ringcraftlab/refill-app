@@ -285,14 +285,13 @@ function ruled(area: Rect, title: string | null, pitch: number, pal: Palette): P
 // frame. With nothing in it yet, a hairline says where it will go; it is
 // faint enough to be no worse than a ruling if it ever reaches paper.
 export function drawPhoto(area: Rect, layout: Layout): Primitive[] {
-  const pal = paletteOf(layout);
   if (layout.slotPhoto) {
     return [{ type: 'image', ...area, src: layout.slotPhoto, fit: 'cover' }];
   }
-  return [{
-    type: 'rect', ...area,
-    stroke: pal.rule, strokeMm: 0.15, dashMm: [1.6, 1.6],
-  }];
+  // A slot with no picture prints nothing. It used to print a dashed frame,
+  // which is a thing nobody asked to have on their paper -- the frame is
+  // there to say "choose one", and saying it belongs on the screen.
+  return [];
 }
 
 export const drawMemo = (area: Rect, pal: Palette): Primitive[] => ruled(area, 'MEMO', 5, pal);

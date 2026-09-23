@@ -952,6 +952,16 @@ function CanvasScreen({ layout, setLayout, onBack }: {
         return prev;
       }
       if (planned.overflow > 0) say(`一度に置けるのは${MAX_PARTS}つまでです`);
+      // A photo is the one part that does nothing until a picture is chosen,
+      // so the place to choose one comes to you rather than waiting to be
+      // found. Only when a single photo was dropped: opening a sheet over a
+      // handful of parts someone just laid out would be in the way.
+      if (kinds.length === 1 && kinds[0] === 'photo') {
+        const { placed, photos } = planned.layout.surface;
+        for (let i = placed.length - 1; i >= 0; i--) {
+          if (placed[i] === 'photo' && !photos?.[i]) { setSheet({ slot: i }); break; }
+        }
+      }
       return planned.layout;
     });
   };
@@ -1456,17 +1466,34 @@ function CanvasScreen({ layout, setLayout, onBack }: {
             />
           ))}
 
-          {partBoxes.map(b => (
-            <div
-              key={b.key}
-              className="hitbox part absolute cursor-grab touch-none p-0 hover:bg-[rgba(193,115,74,0.05)] active:cursor-grabbing active:bg-[rgba(193,115,74,0.08)]"
-              style={{ left: b.left, top: b.top, width: b.width, height: b.height }}
-              onPointerDown={e => startDrag(e, [layout.surface.placed[b.slot]], b.slot)}
-              onPointerMove={moveDrag}
-              onPointerUp={e => endPartDrag(e, b.slot)}
-              title={PART_LABEL[layout.surface.placed[b.slot]]}
-            />
-          ))}
+          {/* A photo slot with nothing in it is the one part that is not
+              finished when it is placed, and an empty dashed box does not say
+              so. The frame and the words are drawn here rather than by the
+              part, because they are for the screen: nothing of this goes on
+              the paper -- an empty slot prints nothing at all. */}
+          {partBoxes.map(b => {
+            const waiting = layout.surface.placed[b.slot] === 'photo'
+              && !layout.surface.photos?.[b.slot];
+            return (
+              <div
+                key={b.key}
+                className={`hitbox part absolute cursor-grab touch-none p-0 hover:bg-[rgba(193,115,74,0.05)] active:cursor-grabbing active:bg-[rgba(193,115,74,0.08)] ${
+                  waiting ? 'flex items-center justify-center rounded-[3px] border border-dashed border-line-strong' : ''
+                }`}
+                style={{ left: b.left, top: b.top, width: b.width, height: b.height }}
+                onPointerDown={e => startDrag(e, [layout.surface.placed[b.slot]], b.slot)}
+                onPointerMove={moveDrag}
+                onPointerUp={e => endPartDrag(e, b.slot)}
+                title={PART_LABEL[layout.surface.placed[b.slot]]}
+              >
+                {waiting && (
+                  <span className="photo-empty pointer-events-none rounded-full bg-white/85 px-2 py-1 text-[10px] text-muted">
+                    ＋ 写真を選ぶ
+                  </span>
+                )}
+              </div>
+            );
+          })}
 
           {clears.map(c => (
             <RoundButton

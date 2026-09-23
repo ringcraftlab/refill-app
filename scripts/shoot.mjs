@@ -362,6 +362,14 @@ if (await bgChip.count()) {
 // A picture placed as a stamp. The file is made in the page rather than kept
 // as a fixture: what matters is that a photo lands in the slot it was dropped
 // in and stays inside it, not which photo it was.
+async function openPhotoSheet() {
+  await page.waitForTimeout(250);
+  if (!(await page.locator('.sheet').count())) {
+    await page.locator('.hitbox.part[title="写真"]').first().click();
+  }
+  await page.locator('.sheet').waitFor();
+}
+
 async function feedPhoto() {
   await page.evaluate(async () => {
     const c = document.createElement('canvas');
@@ -391,8 +399,12 @@ const photoStamp = page.locator('.stamp', { hasText: '写真' });
 if (await photoStamp.count()) {
   await drag(await centerOf(await stamp('マンスリー')), await centerOf(page.locator('.page').first()));
   await drag(await centerOf(await stamp('写真')), await centerOf(page.locator('.page').nth(1)));
-  await shot('33-写真の枠を置く');
-  await page.locator('.hitbox.part[title="写真"]').click();
+  // Placing one opens its settings by itself: the slot does nothing until a
+  // picture is in it, so the place to choose one comes to you. baseline
+  // replays this against older builds that did not, so the scene opens it by
+  // hand when it did not open on its own.
+  await openPhotoSheet();
+  await shot('33-写真を置くと選ぶところが開く');
   await feedPhoto();
   await page.locator('.scrim').click({ position: { x: 10, y: 10 } });
   await page.locator('.scrim').waitFor({ state: 'detached' });
@@ -406,7 +418,7 @@ if (await photoStamp.count()) {
   await page.getByRole('button', { name: 'この構成で作る' }).click();
   await page.locator('.page').first().waitFor();
   await drag(await centerOf(await stamp('写真')), await centerOf(page.locator('.page').first()));
-  await page.locator('.hitbox.part[title="写真"]').first().click();
+  await openPhotoSheet();
   await feedPhoto();
   await page.locator('.scrim').click({ position: { x: 10, y: 10 } });
   await page.locator('.scrim').waitFor({ state: 'detached' });
