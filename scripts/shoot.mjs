@@ -277,6 +277,21 @@ if (await foldCard.count()) {
   await page.locator('.duplex-note').waitFor();
   console.log('duplex says:', await page.locator('.duplex-note').textContent());
   await shot('24-蛇腹2面の書き出し');
+
+  // Turned a quarter turn: the panels hang from the rings instead of running
+  // out sideways. Same strip of paper, same punch -- only the content turns.
+  await page.goto(BASE);
+  await page.locator('.sizerow', { hasText: '62×105mm' }).click();
+  await page.locator('.card', { hasText: '蛇腹3面' }).click();
+  await page.getByRole('button', { name: 'この構成で作る' }).click();
+  await page.locator('.page').first().waitFor();
+  await page.locator('.rotate').click();
+  const turned = await page.locator('.page').first().boundingBox();
+  await drag(await centerOf(await stamp('マンスリー')),
+    { x: turned.x + turned.width / 2, y: turned.y + turned.height / 2 });
+  await drag(await centerOf(await stamp('方眼')),
+    { x: turned.x + turned.width * 0.4, y: turned.y + turned.height * 0.9 });
+  await shot('25-蛇腹を横にする');
 }
 
 await browser.close();

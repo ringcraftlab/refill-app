@@ -4,7 +4,7 @@ import type { FoldCount, Layout, PartKind, RefillSize, SizeSpec } from './types'
 import { MAX_PARTS, SCHEMA_VERSION } from './types';
 import { holeCentres, SIZES } from './lib/sizes';
 import {
-  buildGeometry, canTurn, foldMaxParts, foldOf, isLandscape, MAX_RATIO, MIN_RATIO,
+  buildGeometry, foldMaxParts, foldOf, isLandscape, MAX_RATIO, MIN_RATIO,
   placeParts as planPlacement, regionAt, removeFromFold, ringsOnTop,
 } from './lib/layout';
 import type { Divider, DropPoint, Geometry, PageGeometry } from './lib/layout';
@@ -1071,10 +1071,11 @@ function CanvasScreen({ layout, setLayout, onBack }: {
   // What turning does depends on the sheet, not on the flag: a size that is
   // wider than it is tall starts out "landscape" already, and a square one
   // only moves its rings.
-  const onScreenW = isLandscape(layout) ? size.heightMm : size.widthMm;
-  const onScreenH = isLandscape(layout) ? size.widthMm : size.heightMm;
-  // A 蛇腹 is upright only; see canTurn().
-  const turnable = canTurn(layout, size);
+  // Taken from the page the editor is actually drawing, not from the size: a
+  // folded strip is a different shape from the sheet it folds down to, and the
+  // button has to name the turn the user is about to see.
+  const onScreenW = geo.pages[0].widthMm;
+  const onScreenH = geo.pages[0].heightMm;
   const turnLabel = onScreenW === onScreenH
     ? (ringsOnTop(layout) ? 'リングを左にする' : 'リングを上にする')
     : onScreenW > onScreenH ? '縦にする' : '横にする';
@@ -1127,9 +1128,20 @@ function CanvasScreen({ layout, setLayout, onBack }: {
 
   return (
     <div className={SCREEN}>
+      {/* Turning belongs up here rather than over the paper. A folded strip
+          turned a quarter turn fills the drawing area top to bottom, and a
+          button floating in its corner sat on the refill itself. */}
       <header className="flex shrink-0 items-center gap-2 px-4 pb-2 pt-3 text-xs font-semibold text-label">
         <Button variant="icon" onClick={onBack} aria-label="戻る">←</Button>
         <span>{size.label} {size.widthMm}×{size.heightMm}mm ・ {formLabel(layout)}</span>
+        <button
+          className="rotate ml-auto flex shrink-0 items-center gap-1 rounded-full border border-line-strong bg-white px-2.5 py-1 text-[11px] font-normal text-label"
+          onClick={turn}
+          aria-label="リフィルを回転"
+        >
+          <span className="text-[13px] leading-none">↻</span>
+          {turnLabel}
+        </button>
       </header>
 
       {dated && (
@@ -1154,16 +1166,6 @@ function CanvasScreen({ layout, setLayout, onBack }: {
       )}
 
       <div className="relative flex min-h-0 grow items-center justify-center px-3 py-2" ref={boxRef}>
-        {turnable && (
-          <button
-            className="rotate absolute right-3 top-1 z-10 flex items-center gap-1 rounded-full border border-line-strong bg-white px-2.5 py-1 text-[11px] text-label"
-            onClick={turn}
-            aria-label="リフィルを回転"
-          >
-            <span className="text-[13px] leading-none">↻</span>
-            {turnLabel}
-          </button>
-        )}
         <div
           className="flex items-center justify-center"
           ref={setRef}
@@ -1199,13 +1201,22 @@ function CanvasScreen({ layout, setLayout, onBack }: {
               it rather than a gap between two -- which is the difference
               between a fold and a spread, and the picture has to say which
               this is. */}
-          {geo.surface.slices[0] && geo.creases.map((at, i) => (
-            <span
-              key={`crease-${i}`}
-              className="crease pointer-events-none absolute top-0 z-10 h-full border-l border-dashed border-line-strong"
-              style={{ left: (geo.surface.slices[0].ox - geo.surface.slices[0].fromMm + at) * scale }}
-            />
-          ))}
+          {geo.surface.slices[0] && geo.creases.map((at, i) => {
+            const s0 = geo.surface.slices[0];
+            return geo.foldDown ? (
+              <span
+                key={`crease-${i}`}
+                className="crease pointer-events-none absolute left-0 z-10 w-full border-t border-dashed border-line-strong"
+                style={{ top: (s0.oy + at) * scale }}
+              />
+            ) : (
+              <span
+                key={`crease-${i}`}
+                className="crease pointer-events-none absolute top-0 z-10 h-full border-l border-dashed border-line-strong"
+                style={{ left: (s0.ox - s0.fromMm + at) * scale }}
+              />
+            );
+          })}
           {geo.pages.map((pg, i) => (
             <div
               key={pg.key}
@@ -1294,7 +1305,7 @@ function CanvasScreen({ layout, setLayout, onBack }: {
         traySelected.length > 0 || teachDivider ? 'text-accent' : 'text-faint'
       }`}>
         {teachDivider
-          ? 'つまみを上下にドラッグすると、パーツの広さを変えられます'
+          ? 'つまみをドラッグすると、パーツの広さを変えられます'
           : traySelected.length > 0
             ? `${traySelected.length}個選択中：紙をタップすると置けます`
             : 'タップで選ぶ → 紙をタップ。ドラッグでも置けます'}

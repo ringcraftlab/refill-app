@@ -84,11 +84,14 @@ export interface Geometry {
   pages: PageGeometry[];
   landscape: boolean;
   flow: 'row' | 'column';
-  // Where the paper bends, in surface millimetres. Empty unless this is a
-  // fold. A crease is not a page boundary -- the strip is one sheet and one
-  // canvas -- so it is carried separately, for the editor to mark and for
-  // the print path to draw a fold line on.
+  // Where the paper bends, in surface millimetres along the fold's own axis.
+  // Empty unless this is a fold. A crease is not a page boundary -- the strip
+  // is one sheet and one canvas -- so it is carried separately, for the editor
+  // to mark and for the print path to draw a fold line on.
   creases: number[];
+  // Whether those creases run across the page rather than down it: a fold
+  // turned a quarter turn hangs its panels from the rings.
+  foldDown: boolean;
   surface: {
     widthMm: number;
     heightMm: number;
@@ -134,17 +137,15 @@ export const foldOf = (layout: Layout, size: SizeSpec): FoldPlan | null =>
 // portrait" to the next is the kind of thing that shows up as a turned page.
 export const foldCountOf = (layout: Layout): FoldCount => layout.fold ?? 1;
 
-// A 蛇腹 is upright only. Turning it a quarter turn would put the rings along
-// the top, and a page turned about its top edge shows its back upside down --
-// so the back of every panel would have to print inverted, and the duplex
-// setting would stop matching the one the sheet asks for. Not worth it for a
-// shape the binder holds sideways anyway.
-export const canTurn = (layout: Layout, size: SizeSpec): boolean => !foldOf(layout, size);
-
 // Landscape is the planner turned a quarter turn. It never transposes a
 // calendar grid — only the page shape and the ring edge change.
-export const isLandscape = (layout: Layout): boolean =>
-  layout.orientation === 'landscape' && foldCountOf(layout) <= 1;
+//
+// A fold turns like anything else. It was held back at first over the back
+// side coming out upside down, which was wrong: turning the planner does not
+// move the paper's binding edge, only the content on it. The strip is the
+// same punched sheet either way, and `flattenToSheet` puts the quarter turn
+// back before anything is printed or imposed.
+export const isLandscape = (layout: Layout): boolean => layout.orientation === 'landscape';
 
 // Whether the rings run along the top of the sheet rather than down its side.
 // A refill bound on its long edge has them on the side until it is turned a
@@ -264,29 +265,19 @@ function punchHoles(box: PageBox, size: SizeSpec) {
 interface Pane { key: PageKey; W: number; H: number; box: PageBox }
 
 // A fold prints on one strip of paper, so it is one page: the panels are not
-// separate sheets and nothing is trimmed where they meet. Only the punched
-// panel's outer edge keeps a ring strip clear; the far end takes the ordinary
-// trim margin, and everything between is continuous paper. Turning the strip
-// over puts the punched panel -- and its rings -- at the other end.
-function foldStripPane(plan: FoldPlan, H: number, ring: number, flip: boolean): Pane {
-  const W = plan.alongMm;
-  const O = OUTER_MM;
-  const edge: RingEdge = flip ? 'right' : 'left';
-  return {
-    key: 'f1', W, H,
-    box: {
-      edge,
-      ringBand: { x: flip ? W - ring : 0, y: 0, w: ring, h: H },
-      ox: flip ? O : ring,
-      oy: O,
-      usableW: W - ring - O,
-      usableH: H - O * 2,
-    },
-  };
+// separate sheets and nothing is trimmed where they meet. The punched end
+// keeps a ring strip clear and the rest takes the ordinary trim margin, which
+// is what an unfolded sheet does -- so the strip's box is an ordinary page
+// box, and turning the planner moves the rings from its side to its top
+// without this knowing about it.
+function foldStripPane(plan: FoldPlan, onTop: boolean, ring: number, flip: boolean): Pane {
+  const W = onTop ? plan.acrossMm : plan.alongMm;
+  const H = onTop ? plan.alongMm : plan.acrossMm;
+  return { key: 'f1', W, H, box: pageBox(false, onTop, 'f1', W, H, ring, flip) };
 }
 
-// The creases, in surface millimetres. Measured from the punched end, so
-// turning the strip over reverses them with the panels.
+// The creases, in surface millimetres along the fold's own axis. Measured from
+// the punched end, so turning the strip over reverses them with the panels.
 function foldCreases(plan: FoldPlan, ox: number, flip: boolean): number[] {
   const widths = foldPanels(plan).map(p => p.widthMm);
   const drawn = flip ? [...widths].reverse() : widths;
@@ -320,16 +311,19 @@ export function foldLayoutOf(surface: Surface, panels: number): FoldGroup[] {
 // goes on at whichever ends are creases, so a group stops short of a fold it
 // does not cross and runs straight through one it does.
 function foldRects(
-  groups: FoldGroup[], creases: number[], surfaceW: number, surfaceH: number,
+  groups: FoldGroup[], creases: number[], surfaceW: number, surfaceH: number, down: boolean,
 ): Rect[] {
-  const edges = [0, ...creases, surfaceW];
+  const edges = [0, ...creases, down ? surfaceH : surfaceW];
   const out: Rect[] = [];
   let panel = 0;
   for (const g of groups) {
     const a = panel, b = Math.min(panel + g.panels - 1, creases.length);
     const from = edges[a] + (a > 0 ? OUTER_MM : 0);
     const to = edges[b + 1] - (b < creases.length ? OUTER_MM : 0);
-    out.push({ x: from, y: 0, w: Math.max(0, to - from), h: surfaceH });
+    const span = Math.max(0, to - from);
+    out.push(down
+      ? { x: 0, y: from, w: surfaceW, h: span }
+      : { x: from, y: 0, w: span, h: surfaceH });
     panel += g.panels;
   }
   return out;
@@ -356,9 +350,15 @@ export function buildGeometry(layout: Layout, size: SizeSpec, flipBinding = fals
   const H = landscape ? size.widthMm : size.heightMm;
   const ring = size.ringMarginMm;
   // A fold prints as one strip, not as separate sheets: the panels are cut
-  // apart by nobody, they are folded.
+  // apart by nobody, they are folded. The strip is the same piece of paper
+  // whichever way the planner is held, so turning it is a quarter turn of the
+  // content onto that paper -- exactly what an unfolded sheet does.
   const sheet = fold
-    ? { widthMm: fold.alongMm, heightMm: fold.acrossMm, rotation: 0 as SheetRotation }
+    ? {
+        widthMm: fold.alongMm,
+        heightMm: fold.acrossMm,
+        rotation: (landscape ? 90 : 0) as SheetRotation,
+      }
     : {
         widthMm: size.widthMm,
         heightMm: size.heightMm,
@@ -366,7 +366,7 @@ export function buildGeometry(layout: Layout, size: SizeSpec, flipBinding = fals
       };
 
   const boxes: Pane[] = fold
-    ? [foldStripPane(fold, H, ring, flipBinding)]
+    ? [foldStripPane(fold, onTop, ring, flipBinding)]
     : (layout.spread ? (['left', 'right'] as PageKey[]) : (['single'] as PageKey[]))
         .map(key => ({ key, W, H, box: pageBox(layout.spread, onTop, key, W, H, ring, flipBinding) }));
   const usableH = boxes[0].box.usableH;
@@ -385,7 +385,10 @@ export function buildGeometry(layout: Layout, size: SizeSpec, flipBinding = fals
     return key === 'left' ? top : MONTHLY_HEADER_MM + rowH * bottomRows;
   };
 
-  const pages: PageGeometry[] = boxes.map(({ key, W: paneW, box }) => {
+  // Both taken from the pane, not from the size: a folded strip is a
+  // different shape from the sheet it folds down to, and its height stopped
+  // matching the size's the moment the planner could be turned.
+  const pages: PageGeometry[] = boxes.map(({ key, W: paneW, H: paneH, box }) => {
     const bandH = bandOf(key);
     // Dragging either page's band edge moves the same ratio; on the shorter
     // page of a stacked spread a millimetre of drag is worth proportionally
@@ -394,7 +397,7 @@ export function buildGeometry(layout: Layout, size: SizeSpec, flipBinding = fals
     return {
       key,
       widthMm: paneW,
-      heightMm: H,
+      heightMm: paneH,
       sheet,
       ringEdge: box.edge,
       ringBand: box.ringBand,
@@ -432,9 +435,14 @@ export function buildGeometry(layout: Layout, size: SizeSpec, flipBinding = fals
   // dragged across one and the panels are the surface's divisions -- fixed by
   // the fold, not by a ratio. One part to a panel, which is also what a folded
   // refill is for: a month you turn to rather than a page you share.
-  const creases = fold ? foldCreases(fold, boxes[0].box.ox, flipBinding) : [];
+  // Turned a quarter turn, the panels hang from the rings instead of running
+  // out sideways, so the creases and everything measured against them move to
+  // the other axis.
+  const creases = fold
+    ? foldCreases(fold, onTop ? boxes[0].box.oy : boxes[0].box.ox, flipBinding)
+    : [];
   const groups = fold ? foldLayoutOf(layout.surface, creases.length + 1) : [];
-  const rects = foldRects(groups, creases, surfaceW, surfaceH);
+  const rects = foldRects(groups, creases, surfaceW, surfaceH, onTop);
   const partsOf = (i: number): PartKind[] => {
     const from = groups.slice(0, i).reduce((t, g) => t + g.parts, 0);
     return layout.surface.placed.slice(from, from + groups[i].parts);
@@ -450,6 +458,7 @@ export function buildGeometry(layout: Layout, size: SizeSpec, flipBinding = fals
       .map(d => ({ ...d, id: `f${i}-${d.id}`, x: d.x + rects[i].x, y: d.y + rects[i].y, group: i })));
 
   return {
+    foldDown: !!fold && onTop,
     pages,
     landscape,
     // Pages hanging from rings along their top stack; pages held at their
@@ -560,9 +569,10 @@ function edgePage(layout: Layout, size: SizeSpec, at: DropPoint): PageKey | null
 
 // Which panel a drop landed on. Nowhere in particular means the last one.
 function panelAt(layout: Layout, size: SizeSpec, at: DropPoint | null): number {
-  const { creases } = buildGeometry(layout, size);
+  const { creases, foldDown } = buildGeometry(layout, size);
   if (!at) return creases.length;
-  return creases.filter(c => at.sx > c).length;
+  const along = foldDown ? at.sy : at.sx;
+  return creases.filter(c => along > c).length;
 }
 
 // How much a fold can carry. Two to a panel: a panel is a page, and a page of
@@ -576,7 +586,7 @@ export const foldMaxParts = (panels: number): number => panels * 2;
 // two share it, with a border between them to drag.
 function addToFold(
   groups: FoldGroup[], panels: number, placed: PartKind[], kind: PartKind,
-  panel: number, stack: boolean,
+  panel: number, stack: boolean, down: boolean,
 ): { groups: FoldGroup[]; placed: PartKind[]; at: number } | null {
   if (!groups.length) {
     return { groups: [{ panels, parts: 1 }], placed: [kind], at: 0 };
@@ -599,8 +609,9 @@ function addToFold(
     if (group.parts >= MAX_PARTS) return null;
     const at = before + group.parts;
     return {
-      // Under, not beside: that is what the drop said.
-      groups: groups.map((x, i) => (i === g ? { ...x, parts: x.parts + 1, split: 'h' } : x)),
+      // Across the fold's direction: under it when the panels run sideways,
+      // beside it when they hang. That is what the drop said.
+      groups: groups.map((x, i) => (i === g ? { ...x, parts: x.parts + 1, split: down ? 'v' : 'h' } : x)),
       placed: [...placed.slice(0, at), kind, ...placed.slice(at)],
       at,
     };
@@ -655,10 +666,14 @@ function placeOnFold(
   prev: Layout, size: SizeSpec, fold: FoldPlan, kinds: PartKind[], at: DropPoint | null,
 ): Placement | null {
   const panel = panelAt(prev, size, at);
-  // Low on the paper means under what is there; anywhere else means the panel
-  // dropped on becomes a division of its own.
-  const surfaceH = buildGeometry(prev, size).surface.heightMm;
-  const stack = !!at && surfaceH > 0 && at.sy > surfaceH * BESIDE_BAND;
+  // Dropped at the far side of the paper -- across the fold's own direction --
+  // means under or beside what is there; anywhere else means the panel dropped
+  // on becomes a division of its own. Turned a quarter turn the panels run
+  // down instead of across, so the gesture turns with them.
+  const geo = buildGeometry(prev, size);
+  const across = geo.foldDown ? geo.surface.widthMm : geo.surface.heightMm;
+  const far = geo.foldDown ? at?.sx : at?.sy;
+  const stack = far !== undefined && across > 0 && far > across * BESIDE_BAND;
   const room = foldMaxParts(fold.panels) - prev.surface.placed.length;
   const toAdd = kinds.slice(0, Math.max(0, room));
   if (!toAdd.length) return null;
@@ -667,7 +682,7 @@ function placeOnFold(
   let placed = prev.surface.placed;
   let landed: number | null = null;
   for (const kind of toAdd) {
-    const step = addToFold(groups, fold.panels, placed, kind, panel, stack);
+    const step = addToFold(groups, fold.panels, placed, kind, panel, stack, geo.foldDown);
     if (!step) return null;
     groups = step.groups;
     placed = step.placed;
