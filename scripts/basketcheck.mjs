@@ -68,6 +68,28 @@ await make('62×105mm', '見開き', 'マンスリー', '見開きのほう');
 await make('62×105mm', '蛇腹2面', 'マンスリー', '蛇腹のほう');
 await make('62×105mm', '片面', 'マンスリー', '月間');
 
+// Adding happens where the other refills are: the saved list. Going to the
+// export screen to look for another refill is a strange place to look.
+await page.getByRole('button', { name: '読み込み' }).click();
+await page.locator('.sheet').waitFor();
+const savedRows = page.locator('.sheet li');
+const memoRow = savedRows.filter({ hasText: 'メモ' });
+await memoRow.getByRole('button', { name: '同じ紙に' }).click();
+await memoRow.getByRole('button', { name: '増やす' }).click();
+await page.waitForTimeout(200);
+check(
+  (await page.locator('.sheet li').filter({ hasText: '蛇腹のほう' }).textContent()).includes('紙の形がちがいます'),
+  '紙の形が違うものは、違うと言う',
+);
+await page.screenshot({ path: `${OUT}/00-保存したリフィルから足す.png` });
+await page.locator('.scrim').click({ position: { x: 10, y: 10 } }).catch(() => {});
+await page.locator('.sheet .flex button[aria-label=閉じる]').click().catch(() => {});
+await page.waitForTimeout(200);
+check(
+  (await page.locator('.alsonote').textContent().catch(() => '')).includes('2枚'),
+  '編集画面にも「同じ紙に2枚並べます」と出る',
+);
+
 await page.getByRole('button', { name: 'PDF出力プレビュー' }).click();
 await page.locator('.preview').waitFor();
 await page.locator('.sheet').getByRole('button', { name: 'A3', exact: true }).click();
@@ -86,10 +108,10 @@ const facesIn = async () => Number((await label()).match(/このリフィルで(
 const before = await facesIn();
 
 check(await page.locator('.basket .thumb svg').count() === 2, '候補は絵で見える');
-const memo = rows.filter({ hasText: 'メモ' });
-await memo.getByRole('button', { name: '足す' }).click();
-await memo.getByRole('button', { name: '増やす' }).click();
-await page.waitForTimeout(300);
+check(
+  (await rows.filter({ hasText: 'メモ' }).textContent()).includes('2'),
+  '読み込みで足したものが、書き出しにも出ている',
+);
 const spare = (await label()).match(/(\d+)面あいて/);
 check(!!spare, `あきが出る（${(await label()).trim()}）`);
 const after = before;

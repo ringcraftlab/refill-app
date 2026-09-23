@@ -858,6 +858,7 @@ function CanvasScreen({ layout, setLayout, onBack }: {
   // it places what the tray has selected, and it opens a part's settings --
   // so this is a button of its own rather than a gesture competing with those.
   const [zoomed, setZoomed] = useState(false);
+  const [print, setPrint] = useState<PrintOptions>(DEFAULT_PRINT);
   const wide = useWide();
   const [taught, setTaught] = useState(() => {
     try { return localStorage.getItem(TAUGHT_KEY) === '1'; } catch { return false; }
@@ -1335,6 +1336,8 @@ function CanvasScreen({ layout, setLayout, onBack }: {
       }}
       size={size}
       onExport={onExport}
+      print={print}
+      setPrint={setPrint}
     />
   );
 
@@ -1584,6 +1587,15 @@ function CanvasScreen({ layout, setLayout, onBack }: {
           ))}
         </div>
       </div>
+
+      {/* Added from the saved list, and shown here: otherwise the only sign
+          that anything was added is inside the export screen, which is where
+          it used to have to be done in the first place. */}
+      {print.also.length > 0 && (
+        <p className="alsonote m-0 shrink-0 px-3.5 pt-1 text-[10px] text-accent">
+          同じ紙に {print.also.reduce((n, a) => n + a.n, 0)}枚 並べます（PDF出力プレビューで確認できます）
+        </p>
+      )}
 
       <p className={`m-0 shrink-0 px-3.5 py-1 text-[10px] ${
         traySelected.length > 0 || teachDivider ? 'text-accent' : 'text-faint'
@@ -2158,7 +2170,7 @@ function basketOf(layout: Layout, size: SizeSpec): Layout[] {
 
 function PartSheet({
   target, layout, setLayout, inline, onClose, onRemove, onRemoveSpanning, onLoad, onSave, size,
-  onExport,
+  onExport, print, setPrint,
 }: {
   target: Exclude<SheetTarget, null>;
   layout: Layout;
@@ -2172,13 +2184,17 @@ function PartSheet({
   onSave: (name: string) => void;
   size: SizeSpec;
   onExport: (opts: PrintOptions) => void;
+  // Held by the editor: what is going on the paper has to survive closing one
+  // sheet and opening another, because that is exactly what adding to it
+  // means -- look at the saved refills, then look at the paper.
+  print: PrintOptions;
+  setPrint: (fn: (p: PrintOptions) => PrintOptions) => void;
 }) {
-  const [print, setPrint] = useState<PrintOptions>(DEFAULT_PRINT);
   const lastMonth = addMonths(layout.year, layout.month, Math.max(1, layout.monthCount) - 1);
   const saved = useMemo(() => target === 'load' ? listLayouts() : [], [target]);
   // Everything that could share the paper, and the ones actually asked for.
   const canShare = useMemo(
-    () => (target === 'print' ? basketOf(layout, size) : []),
+    () => (target === 'print' || target === 'load' ? basketOf(layout, size) : []),
     [target, layout, size],
   );
   // Expanded to one entry per copy: the engine lays out designs, and two of
@@ -2208,7 +2224,7 @@ function PartSheet({
     ? planPlacement(layout, size, ['monthly'], { sx: 0, sy: 0, band: 0 })
     : null;
 
-  const title = target === 'load' ? '保存済みレイアウト'
+  const title = target === 'load' ? '保存したリフィル'
     : target === 'save' ? '保存'
     : target === 'print' ? 'PDF出力プレビュー'
     : target === 'background' ? '紙の背景'
@@ -2229,19 +2245,53 @@ function PartSheet({
           <SaveSheet layout={layout} size={size} grain={foldOf(layout, size)?.grain} onSave={onSave} />
         )}
 
+        {/* Two things can be done with a saved refill and they are different
+            questions: open it instead of this one, or print it beside this one.
+            The second used to be reachable only from inside the export screen,
+            which is a strange place to go looking for another refill. */}
         {target === 'load' && (
           saved.length === 0
             ? <p className="text-[13px] text-faint">まだ保存されていません</p>
-            : <ul className="m-0 flex max-h-60 list-none flex-col gap-1.5 overflow-y-auto p-0">
-                {saved.map(l => (
-                  <li key={l.id} className="flex gap-2">
-                    <button
-                      className="flex-1 rounded-[9px] border border-line-strong bg-white px-3 py-[11px] text-left text-[13px]"
-                      onClick={() => onLoad(l)}
-                    >{l.name}</button>
-                    <Button variant="quiet" onClick={() => { deleteLayout(l.id); onClose(); }}>削除</Button>
-                  </li>
-                ))}
+            : <ul className="m-0 flex max-h-[22rem] list-none flex-col gap-1.5 overflow-y-auto p-0">
+                {saved.map(l => {
+                  const sharable = canShare.some(c => c.id === l.id);
+                  const n = print.also.find(a => a.id === l.id)?.n ?? 0;
+                  const step = (d: number) => setPrint(p => {
+                    const next = Math.max(0, Math.min(24, n + d));
+                    const rest = p.also.filter(a => a.id !== l.id);
+                    return { ...p, also: next ? [...rest, { id: l.id, n: next }] : rest };
+                  });
+                  return (
+                    // The name and the buttons are on two lines: four
+                    // controls beside a picture squeeze the name to nothing in
+                    // a 340px column, and the name is what is being chosen.
+                    <li
+                      key={l.id}
+                      className={`flex flex-col gap-1.5 rounded-[9px] border bg-white p-2 ${
+                        n ? 'border-accent bg-accent-soft' : 'border-line-strong'
+                      }`}
+                    >
+                      <span className="flex items-center gap-2.5">
+                        <Thumb layout={l} size={SIZES[l.size]} />
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-[13px]">{l.name}</span>
+                          <span className="block text-[10px] text-faint">
+                            {l.id === layout.id ? '編集中' : sharable ? '同じ紙に並べられます' : '紙の形がちがいます'}
+                          </span>
+                        </span>
+                      </span>
+                      <span className="flex items-center gap-1.5">
+                        {sharable && (n === 0
+                          ? <Button variant="quiet" onClick={() => step(1)}>同じ紙に</Button>
+                          : <Stepper value={`${n}枚`} onStep={step} tight />
+                        )}
+                        <span className="flex-1" />
+                        <Button variant="quiet" onClick={() => onLoad(l)}>開く</Button>
+                        <Button variant="quiet" onClick={() => { deleteLayout(l.id); onClose(); }}>削除</Button>
+                      </span>
+                    </li>
+                  );
+                })}
               </ul>
         )}
 

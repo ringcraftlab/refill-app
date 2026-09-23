@@ -38,17 +38,20 @@ export function Segmented<T extends string | number>({ options, value, onPick }:
 }
 
 // Minus, value, plus. Used for months, counts and the print scale.
-export function Stepper({ value, onStep, canDown = true, canUp = true }: {
+// `tight` is the same stepper standing next to other buttons in one row
+// instead of owning its line: the reading stays, the air around it goes.
+export function Stepper({ value, onStep, canDown = true, canUp = true, tight = false }: {
   value: ReactNode;
   onStep: (n: number) => void;
   canDown?: boolean;
   canUp?: boolean;
+  tight?: boolean;
 }) {
-  const box = 'size-[38px] rounded-lg border border-line-strong bg-bg text-base disabled:opacity-40';
+  const box = `${tight ? 'size-[34px]' : 'size-[38px]'} shrink-0 rounded-lg border border-line-strong bg-bg text-base disabled:opacity-40`;
   return (
-    <div className="stepper flex items-center gap-2.5">
+    <div className={`stepper flex shrink-0 items-center ${tight ? 'gap-1.5' : 'gap-2.5'}`}>
       <button className={box} disabled={!canDown} onClick={() => onStep(-1)} aria-label="減らす">−</button>
-      <strong className="min-w-[84px] text-center text-[13px]">{value}</strong>
+      <strong className={`${tight ? 'min-w-[2.2rem]' : 'min-w-[84px]'} text-center text-[13px]`}>{value}</strong>
       <button className={box} disabled={!canUp} onClick={() => onStep(1)} aria-label="増やす">＋</button>
     </div>
   );
