@@ -134,6 +134,8 @@ const CREASE: Color = [0.58, 0.62, 0.68];
 // The line that says which way to turn the paper over. Faint, small, and out
 // of the way -- it is an instruction to the printer, not part of the refill.
 const NOTE: Color = [0.62, 0.60, 0.55];
+// Same as the imposition's, because it means the same thing: cut here.
+const CUT: Color = [0.72, 0.70, 0.66];
 const NOTE_PT = 5;
 
 // What one refill occupies on paper. A fold prints as a single strip of
@@ -142,7 +144,7 @@ const NOTE_PT = 5;
 export const sheetSizeOf = (layout: Layout, size: SizeSpec): { widthMm: number; heightMm: number } => {
   const fold = foldOf(layout, size);
   return fold
-    ? { widthMm: fold.alongMm, heightMm: fold.acrossMm }
+    ? { widthMm: fold.sheetWmm, heightMm: fold.sheetHmm }
     : { widthMm: size.widthMm, heightMm: size.heightMm };
 };
 
@@ -150,7 +152,7 @@ export const sheetSizeOf = (layout: Layout, size: SizeSpec): { widthMm: number; 
 // over puts that panel at the other end.
 function foldPunchGuide(size: SizeSpec, plan: FoldPlan, flip: boolean): Primitive[] {
   const r = size.ringMarginMm / 2;
-  const across = flip ? plan.alongMm - r : r;
+  const across = flip ? plan.sheetWmm - r : r;
   return holeCentres(size.holes).map((along): Primitive => ({
     type: 'circle', cx: across, cy: along, r: size.holes.diameterMm / 2,
     stroke: PUNCH, strokeMm: 0.15,
@@ -158,22 +160,44 @@ function foldPunchGuide(size: SizeSpec, plan: FoldPlan, flip: boolean): Primitiv
 }
 
 // One side of a folded strip. The strip is one page, so this is that page with
-// the creases marked on it -- drawn from the panel widths rather than from
-// where the content happens to break, because the paper bends there whatever
-// is printed across it.
+// the creases marked on it -- drawn from the panel sizes rather than from where
+// the content happens to break, because the paper bends there whatever is
+// printed across it.
+//
+// In sheet space the strip always stands the way it folds: a fold that runs
+// away from the binding lies across the sheet, one that runs along it stands
+// down it. Which side is up is decided before this, by `flattenToSheet`.
 function foldFace(layout: Layout, size: SizeSpec, plan: FoldPlan, flip: boolean): Primitive[] {
-  const widths = foldPanels(plan).map(p => p.widthMm);
-  const drawn = flip ? [...widths].reverse() : widths;
-  const creases: Primitive[] = [];
-  let x = 0;
-  for (const w of drawn.slice(0, -1)) {
-    x += w;
-    creases.push({
-      type: 'line', x1: x, y1: 1, x2: x, y2: plan.acrossMm - 1,
-      stroke: CREASE, strokeMm: 0.2, dashMm: [4, 2.2],
-    });
+  const sizes = foldPanels(plan).map(p => p.widthMm);
+  // Turning the strip over reverses the panels only when the fold runs away
+  // from the binding; folding along it mirrors across them.
+  const drawn = flip && plan.grain === 'out' ? [...sizes].reverse() : sizes;
+  const down = plan.grain === 'along';
+  const marks: Primitive[] = [];
+  let at = 0;
+  for (const span of drawn.slice(0, -1)) {
+    at += span;
+    marks.push(down
+      ? { type: 'line', x1: 1, y1: at, x2: plan.sheetWmm - 1, y2: at, stroke: CREASE, strokeMm: 0.2, dashMm: [4, 2.2] }
+      : { type: 'line', x1: at, y1: 1, x2: at, y2: plan.sheetHmm - 1, stroke: CREASE, strokeMm: 0.2, dashMm: [4, 2.2] });
   }
-  return [...creases, ...flattenToSheet(buildPages(layout, size, flip)[0])];
+  marks.push(...notchCut(plan, flip));
+  return [...marks, ...flattenToSheet(buildPages(layout, size, flip)[0])];
+}
+
+// The corner that comes off. Only a fold that runs along the binding has one:
+// the panels after the punched one stop short of the holes, so the strip is an
+// L and the line where it turns has to be cut.
+function notchCut(plan: FoldPlan, flip: boolean): Primitive[] {
+  if (plan.insetMm <= 0) return [];
+  const line = (x1: number, y1: number, x2: number, y2: number): Primitive =>
+    ({ type: 'line', x1, y1, x2, y2, stroke: CUT, strokeMm: 0.15, dashMm: [1.2, 1.2] });
+  const near = !flip;
+  const x = near ? plan.insetMm : plan.sheetWmm - plan.insetMm;
+  return [
+    line(x, plan.headMm, x, plan.sheetHmm),
+    line(near ? 0 : x, plan.headMm, near ? x : plan.sheetWmm, plan.headMm),
+  ];
 }
 
 // The spare side of a folded strip, panel by panel: only the punched one keeps
@@ -181,17 +205,29 @@ function foldFace(layout: Layout, size: SizeSpec, plan: FoldPlan, flip: boolean)
 function foldFiller(size: SizeSpec, plan: FoldPlan, fill: BackFill, flip: boolean): Primitive[] {
   if (fill === 'blank') return [];
   const m = 4;
-  const widths = foldPanels(plan).map(p => p.widthMm);
-  const order = flip ? [...widths].reverse() : widths;
-  const headAt = flip ? order.length - 1 : 0;
+  const down = plan.grain === 'along';
+  const sizes = foldPanels(plan).map(p => p.widthMm);
+  const order = flip && plan.grain === 'out' ? [...sizes].reverse() : sizes;
+  const headAt = flip && plan.grain === 'out' ? order.length - 1 : 0;
+  // Whatever the binding takes out of the width, measured once: the ring strip
+  // beside the punched panel, or the cut beside the others.
+  const keep = Math.max(size.ringMarginMm, plan.insetMm + m);
   const out: Primitive[] = [];
-  let x = 0;
-  order.forEach((w, i) => {
-    const left = x + (i === headAt && !flip ? size.ringMarginMm : m);
-    const right = x + w - (i === headAt && flip ? size.ringMarginMm : m);
-    const area = { x: left, y: m, w: right - left, h: plan.acrossMm - m * 2 };
+  let at = 0;
+  order.forEach((span, i) => {
+    const head = i === headAt;
+    let area: { x: number; y: number; w: number; h: number };
+    if (down) {
+      const left = flip ? m : keep;
+      const right = flip ? keep : m;
+      area = { x: left, y: at + m, w: plan.sheetWmm - left - right, h: span - m * 2 };
+    } else {
+      const left = at + (head && !flip ? size.ringMarginMm : m);
+      const right = at + span - (head && flip ? size.ringMarginMm : m);
+      area = { x: left, y: m, w: right - left, h: plan.sheetHmm - m * 2 };
+    }
     out.push(...(fill === 'grid' ? drawGrid(area) : fill === 'lines' ? drawLines(area) : drawMemo(area)));
-    x += w;
+    at += span;
   });
   return out;
 }

@@ -71,6 +71,11 @@ export interface PageGeometry {
   key: PageKey;
   widthMm: number;
   heightMm: number;
+  // Paper that is cut away. A fold whose creases run across the binding edge
+  // has to lose a strip on the binding side of every panel but the punched
+  // one, or the folded panel lands on the holes and the ring cannot pass.
+  // Absent on every other shape, which is a plain rectangle.
+  notch?: Rect;
   sheet: { widthMm: number; heightMm: number; rotation: SheetRotation };
   ringEdge: RingEdge;
   ringBand: Rect;
@@ -264,28 +269,69 @@ function punchHoles(box: PageBox, size: SizeSpec) {
 
 interface Pane { key: PageKey; W: number; H: number; box: PageBox }
 
+// Which way the panels run on the page. 'out' folds away from the binding, so
+// the panels follow the edge the rings are NOT on; 'along' folds across it, so
+// they follow the binding edge itself.
+const foldRunsDown = (plan: FoldPlan, onTop: boolean): boolean =>
+  plan.grain === 'out' ? onTop : !onTop;
+
 // A fold prints on one strip of paper, so it is one page: the panels are not
-// separate sheets and nothing is trimmed where they meet. The punched end
-// keeps a ring strip clear and the rest takes the ordinary trim margin, which
-// is what an unfolded sheet does -- so the strip's box is an ordinary page
-// box, and turning the planner moves the rings from its side to its top
-// without this knowing about it.
-function foldStripPane(plan: FoldPlan, onTop: boolean, ring: number, flip: boolean): Pane {
-  const W = onTop ? plan.acrossMm : plan.alongMm;
-  const H = onTop ? plan.alongMm : plan.acrossMm;
-  return { key: 'f1', W, H, box: pageBox(false, onTop, 'f1', W, H, ring, flip) };
+// separate sheets and nothing is trimmed where they meet.
+//
+// Which side is the binding side depends on the grain. Folding away from the
+// rings ('out') leaves an ordinary page box: a ring strip down one edge, trim
+// on the other three. Folding along them ('along') does not -- the rings only
+// run beside the punched panel, and the panels after it are cut back so they
+// clear the holes when they fold in. Content then keeps clear of whichever is
+// deeper, the ring strip or the cut, which is one number for the whole strip
+// and saves the surface from being L-shaped as well as the paper.
+function foldStripPane(
+  plan: FoldPlan, onTop: boolean, ring: number, flip: boolean,
+): Pane & { notch?: Rect } {
+  const down = foldRunsDown(plan, onTop);
+  const W = down ? plan.acrossMm : plan.alongMm;
+  const H = down ? plan.alongMm : plan.acrossMm;
+  if (plan.grain === 'out') {
+    return { key: 'f1', W, H, box: pageBox(false, onTop, 'f1', W, H, ring, flip) };
+  }
+
+  const O = OUTER_MM;
+  const keep = Math.max(ring, plan.insetMm + O);
+  // `near` is the low side of the axis the binding runs across: left when the
+  // panels run down, top when they run across.
+  const near = !flip;
+  const edge: RingEdge = down ? (near ? 'left' : 'right') : (near ? 'top' : 'bottom');
+  const band = down
+    ? { x: near ? 0 : W - ring, y: 0, w: ring, h: plan.headMm }
+    : { x: 0, y: near ? 0 : H - ring, w: plan.headMm, h: ring };
+  const notch = down
+    ? { x: near ? 0 : W - plan.insetMm, y: plan.headMm, w: plan.insetMm, h: H - plan.headMm }
+    : { x: plan.headMm, y: near ? 0 : H - plan.insetMm, w: W - plan.headMm, h: plan.insetMm };
+  return {
+    key: 'f1', W, H, notch,
+    box: {
+      edge,
+      ringBand: band,
+      ox: down && near ? keep : O,
+      oy: !down && near ? keep : O,
+      usableW: W - (down ? keep + O : O * 2),
+      usableH: H - (down ? O * 2 : keep + O),
+    },
+  };
 }
 
-// The creases, in surface millimetres along the fold's own axis. Measured from
-// the punched end, so turning the strip over reverses them with the panels.
-function foldCreases(plan: FoldPlan, ox: number, flip: boolean): number[] {
+// The creases, in surface millimetres along the fold's own axis. Turning the
+// strip over reverses the panels only when the fold runs away from the
+// binding; folding along it mirrors across the panels, leaving their order
+// alone.
+function foldCreases(plan: FoldPlan, origin: number, flip: boolean): number[] {
   const widths = foldPanels(plan).map(p => p.widthMm);
-  const drawn = flip ? [...widths].reverse() : widths;
+  const drawn = flip && plan.grain === 'out' ? [...widths].reverse() : widths;
   const out: number[] = [];
   let at = 0;
   for (let i = 0; i < drawn.length - 1; i++) {
     at += drawn[i];
-    out.push(at - ox);
+    out.push(at - origin);
   }
   return out;
 }
@@ -355,8 +401,8 @@ export function buildGeometry(layout: Layout, size: SizeSpec, flipBinding = fals
   // content onto that paper -- exactly what an unfolded sheet does.
   const sheet = fold
     ? {
-        widthMm: fold.alongMm,
-        heightMm: fold.acrossMm,
+        widthMm: fold.sheetWmm,
+        heightMm: fold.sheetHmm,
         rotation: (landscape ? 90 : 0) as SheetRotation,
       }
     : {
@@ -365,8 +411,9 @@ export function buildGeometry(layout: Layout, size: SizeSpec, flipBinding = fals
         rotation: (landscape ? 90 : 0) as SheetRotation,
       };
 
-  const boxes: Pane[] = fold
-    ? [foldStripPane(fold, onTop, ring, flipBinding)]
+  const strip = fold ? foldStripPane(fold, onTop, ring, flipBinding) : null;
+  const boxes: Pane[] = strip
+    ? [strip]
     : (layout.spread ? (['left', 'right'] as PageKey[]) : (['single'] as PageKey[]))
         .map(key => ({ key, W, H, box: pageBox(layout.spread, onTop, key, W, H, ring, flipBinding) }));
   const usableH = boxes[0].box.usableH;
@@ -399,6 +446,7 @@ export function buildGeometry(layout: Layout, size: SizeSpec, flipBinding = fals
       widthMm: paneW,
       heightMm: paneH,
       sheet,
+      notch: strip?.notch,
       ringEdge: box.edge,
       ringBand: box.ringBand,
       holes: punchHoles(box, size),
@@ -438,11 +486,12 @@ export function buildGeometry(layout: Layout, size: SizeSpec, flipBinding = fals
   // Turned a quarter turn, the panels hang from the rings instead of running
   // out sideways, so the creases and everything measured against them move to
   // the other axis.
+  const down = !!fold && foldRunsDown(fold, onTop);
   const creases = fold
-    ? foldCreases(fold, onTop ? boxes[0].box.oy : boxes[0].box.ox, flipBinding)
+    ? foldCreases(fold, down ? boxes[0].box.oy : boxes[0].box.ox, flipBinding)
     : [];
   const groups = fold ? foldLayoutOf(layout.surface, creases.length + 1) : [];
-  const rects = foldRects(groups, creases, surfaceW, surfaceH, onTop);
+  const rects = foldRects(groups, creases, surfaceW, surfaceH, down);
   const partsOf = (i: number): PartKind[] => {
     const from = groups.slice(0, i).reduce((t, g) => t + g.parts, 0);
     return layout.surface.placed.slice(from, from + groups[i].parts);
@@ -458,7 +507,7 @@ export function buildGeometry(layout: Layout, size: SizeSpec, flipBinding = fals
       .map(d => ({ ...d, id: `f${i}-${d.id}`, x: d.x + rects[i].x, y: d.y + rects[i].y, group: i })));
 
   return {
-    foldDown: !!fold && onTop,
+    foldDown: down,
     pages,
     landscape,
     // Pages hanging from rings along their top stack; pages held at their

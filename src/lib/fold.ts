@@ -44,15 +44,35 @@ export const innerCapMm = (size: SizeSpec): number =>
 // A5は幅148mmで、3面にすると紙（A4の297mm）が先に尽きて面が半分になる。
 export const FOLD_MIN_SHARE = 0.75;
 
+// 折る向き。どちらもリングを避けるが、避け方が違う。
+//
+//   'out'   折り目が綴じ辺と平行。面は綴じ辺から外へ伸び、内側の面は
+//           その向きに短い。帯は長方形。
+//   'along' 折り目が綴じ辺と直角。面は綴じ辺に沿って伸び、内側の面は
+//           綴じ側をリングぶん削る。帯はL字になる。
+//
+// 'along' は綴じ辺が短辺のサイズ（＝幅より高さのないリフィル）のための
+// 向き。横長ミニ3穴は91×55で綴じ辺が55mm側なので、'out' だと3面で
+// 260.5×55mmの細長い帯になる。'along' なら91×164mmで、紙として扱える。
+export type FoldGrain = 'out' | 'along';
+
 export interface FoldPlan {
   panels: FoldPanels;
-  // 1面目の幅。リフィルそのものの寸法で、ここだけ穴があく。
+  grain: FoldGrain;
+  // 1面目の、折る向きの寸法。ここだけ穴があく。
   headMm: number;
-  // 2面目以降の幅。すべて同じ。
+  // 2面目以降の、折る向きの寸法。すべて同じ。
   innerMm: number;
-  // 伸ばした帯。alongMm が折る向き、acrossMm が綴じ辺の向き。
+  // 伸ばした帯。alongMm が折る向き、acrossMm がそれと直角。
   alongMm: number;
   acrossMm: number;
+  // 'along' のとき、内側の面を綴じ側から削る量。折り返した面が穴の列の
+  // 手前で止まるための切り込みで、これがあるから帯はL字になる。
+  // 'out' では0。
+  insetMm: number;
+  // 立てて置いたときの帯の外枠。面付けはこれを並べる。
+  sheetWmm: number;
+  sheetHmm: number;
   // リングの逃げではなく紙のほうで頭を打ったか。打っていれば内側の面は
   // 上限より狭く、畳むと1面目より引っ込む。
   paperCapped: boolean;
@@ -70,13 +90,26 @@ function maxAlongMm(acrossMm: number, paper = FOLD_PAPER): number {
   );
 }
 
+// 折る向きは選ばせない。綴じ辺が短辺のサイズだけ 'along' で、それ以外は
+// 'out'。9サイズのうち幅が高さを上回るのは横長ミニ3穴だけなので、実質は
+// そのためのもの。選択肢にしないのは、どちらが良いかが紙の形で決まって
+// しまっていて、ユーザーに選ばせるところがないため。
+export const foldGrainOf = (size: SizeSpec): FoldGrain =>
+  foldSpanMm(size) > bindSpanMm(size) ? 'along' : 'out';
+
 // 面は「リングに当たらない最大」を狙い、紙に入らなければそこで頭を打つ。
 // 幅を広くとるほど書ける面積は増えるが、面数と紙は動かせないので、
-// 削るのは内側の面の幅だけ。
+// 削るのは内側の面の寸法だけ。
 export function foldPlan(size: SizeSpec, panels: FoldPanels, paper = FOLD_PAPER): FoldPlan | null {
-  const headMm = foldSpanMm(size);
-  const acrossMm = bindSpanMm(size);
-  const cap = innerCapMm(size);
+  const grain = foldGrainOf(size);
+  const along = grain === 'along';
+  // 折る向きに1面目がどれだけあるか。'out' は綴じ辺と直角の寸法、
+  // 'along' は綴じ辺そのものの長さ。
+  const headMm = along ? bindSpanMm(size) : foldSpanMm(size);
+  const acrossMm = along ? foldSpanMm(size) : bindSpanMm(size);
+  // 内側の面の上限。'out' はリングの逃げぶん短く、'along' は1面目の陰に
+  // 収まればよいので余裕だけ引く（逃げは幅のほうで削る）。
+  const cap = along ? headMm - FOLD_SLACK_MM : innerCapMm(size);
   const room = maxAlongMm(acrossMm, paper);
   if (cap <= 0 || room <= headMm) return null;
 
@@ -84,10 +117,12 @@ export function foldPlan(size: SizeSpec, panels: FoldPanels, paper = FOLD_PAPER)
   const innerMm = Math.min(cap, Math.floor(byPaper * 100) / 100);
   if (innerMm < headMm * FOLD_MIN_SHARE) return null;
 
+  const alongMm = headMm + innerMm * (panels - 1);
   return {
-    panels, headMm, innerMm,
-    alongMm: headMm + innerMm * (panels - 1),
-    acrossMm,
+    panels, grain, headMm, innerMm, alongMm, acrossMm,
+    insetMm: along ? ringReachMm(size) + FOLD_SLACK_MM : 0,
+    sheetWmm: along ? acrossMm : alongMm,
+    sheetHmm: along ? alongMm : acrossMm,
     paperCapped: byPaper < cap,
     innerCapMm: cap,
   };
@@ -109,7 +144,7 @@ export function foldGroups(panels: number, parts: number): [number, number][] {
   return out;
 }
 
-// 各面の左端（折る向きの座標）と幅。先頭だけが綴じ側。
+// 各面の、折る向きの開始位置と寸法。先頭だけが綴じ側。
 export function foldPanels(plan: FoldPlan): { atMm: number; widthMm: number; head: boolean }[] {
   const out: { atMm: number; widthMm: number; head: boolean }[] = [];
   let at = 0;

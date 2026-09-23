@@ -13,7 +13,7 @@ import { holeCentres, SIZES } from '../src/lib/sizes.ts';
 // own PAD came to 4.20mm on every size that was looked at.
 const INK_INSET_MM = 4.2;
 import { DEFAULT_IMPOSE, duplexFlip, planTiles } from '../src/lib/render/impose.ts';
-import { FOLD_PANELS, foldPlan, innerCapMm, ringReachMm } from '../src/lib/fold.ts';
+import { FOLD_PANELS, foldPlan, ringReachMm } from '../src/lib/fold.ts';
 
 let bad = 0;
 const check = (ok: boolean, line: string) => {
@@ -63,10 +63,10 @@ for (const s of Object.values(SIZES)) {
   );
 }
 
-// The fold. Three things make a 蛇腹 work, and none of them can be seen on
-// screen: the inner panels have to clear the rings when the strip is folded,
-// the strip has to fit the paper, and the duplex setting the sheet asks for
-// has to be the one the imposition actually assumes.
+// The fold. None of these can be seen on screen: the inner panels have to
+// clear the rings when the strip is folded, the strip has to fit the paper,
+// and the duplex setting the sheet asks for has to be the one the imposition
+// actually assumes.
 console.log('');
 for (const s of Object.values(SIZES)) {
   const name = s.label.padEnd(10);
@@ -74,19 +74,33 @@ for (const s of Object.values(SIZES)) {
     const plan = foldPlan(s, panels);
     if (!plan) { check(true, `${name} ${panels}面 蛇腹にしない`); continue; }
 
-    // Folded, the inner panels lie behind the punched one. Wider than this and
-    // they run into the ring wire.
+    // Folded, the inner panels lie behind the punched one.
     check(
-      plan.innerMm <= innerCapMm(s) + 1e-9,
-      `${name} ${panels}面 内側${plan.innerMm}mm ≤ リング逃げ${innerCapMm(s).toFixed(2)}mm`
-      + `（逃げ${ringReachMm(s)}mm）`,
+      plan.innerMm <= plan.innerCapMm + 1e-9,
+      `${name} ${panels}面 ${plan.grain} 内側${plan.innerMm}mm ≤ 上限${plan.innerCapMm.toFixed(2)}mm`,
     );
 
-    const tile = planTiles({ widthMm: plan.alongMm, heightMm: plan.acrossMm }, DEFAULT_IMPOSE);
+    // How each grain gets past the rings. Folding away from them, the panel is
+    // short enough to stop before the holes. Folding along them it is the
+    // width that has to stop, so the strip is cut back -- and the cut has to
+    // clear the outer rim of a hole, not just its centre.
+    if (plan.grain === 'along') {
+      check(
+        plan.insetMm >= ringReachMm(s),
+        `${name} ${panels}面 along 削り${plan.insetMm}mm ≥ リング逃げ${ringReachMm(s)}mm`,
+      );
+    } else {
+      check(
+        plan.innerMm + ringReachMm(s) <= plan.headMm + 1e-9,
+        `${name} ${panels}面 out 内側${plan.innerMm} + 逃げ${ringReachMm(s)} ≤ 1面目${plan.headMm}`,
+      );
+    }
+
+    const tile = planTiles({ widthMm: plan.sheetWmm, heightMm: plan.sheetHmm }, DEFAULT_IMPOSE);
     const turned = tile.paper.widthMm > tile.paper.heightMm ? 'A4横' : 'A4縦';
     check(
       tile.sideMm >= 0 && tile.endMm >= 0 && tile.perPage >= 1,
-      `${name} ${panels}面 帯${plan.alongMm}×${plan.acrossMm} が${turned}に`
+      `${name} ${panels}面 外枠${plan.sheetWmm}×${plan.sheetHmm} が${turned}に`
       + `${tile.cols}列×${tile.rows}段 = ${tile.perPage}本`
       + `・両面は${duplexFlip(tile)}`,
     );

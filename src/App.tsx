@@ -520,7 +520,9 @@ function SidesScreen({ size, spread, fold, onPick, onBack, onConfirm }: {
       return [{
         key: `fold${n}`, on: fold === n, pick: { spread: false, fold: n as FoldCount },
         title: `蛇腹${n}面`,
-        note: `広げて${plan.alongMm}×${plan.acrossMm}mm`,
+        // The box you would measure on the table, not the fold's own axis:
+        // folding along the binding stands the strip up.
+        note: `広げて${plan.sheetWmm}×${plan.sheetHmm}mm`,
         plan,
       }];
     }),
@@ -571,6 +573,7 @@ function SidesScreen({ size, spread, fold, onPick, onBack, onConfirm }: {
           the card above just set. */}
       {picked?.plan && (
         <p className="fold-note m-0 text-[11px] leading-snug text-muted">
+          {picked.plan.insetMm > 0 && `折り目がリングと直角なので、内側の面は綴じ側を${picked.plan.insetMm}mm切り落とします（L字）。`}
           穴は先頭の面だけ。内側の面は
           {picked.plan.paperCapped
             ? `${picked.plan.innerMm}mm（紙で決まり。リングの逃げなら${picked.plan.innerCapMm.toFixed(1)}mmまで）`
@@ -596,24 +599,37 @@ function FoldIcon({ size, tint, plan }: {
     Math.max(size.holes.diameterMm / 2, pen(HOLE_MIN_PX)),
     margin * 0.75,
   );
-  const inset = pen(OUTLINE_PX) / 2;
+  const line = pen(OUTLINE_PX) / 2;
+  const W = plan.sheetWmm, H = plan.sheetHmm;
+  const down = plan.grain === 'along';
   const panels = foldPanels(plan);
+  // Folding along the binding cuts a corner off, so the outline is an L and
+  // the picture has to be that L -- it is the whole difference between this
+  // shape and the other one.
+  const cut = plan.insetMm;
+  const outline = `M ${line} ${line} L ${W - line} ${line} L ${W - line} ${H - line}`
+    + ` L ${cut + line} ${H - line} L ${cut + line} ${plan.headMm} L ${line} ${plan.headMm} Z`;
   return (
     <svg
-      width={plan.alongMm * k} height={plan.acrossMm * k}
-      viewBox={`0 0 ${plan.alongMm} ${plan.acrossMm}`}
+      width={W * k} height={H * k}
+      viewBox={`0 0 ${W} ${H}`}
       className="block shrink-0"
       aria-hidden="true"
     >
-      <rect
-        x={inset} y={inset}
-        width={plan.alongMm - inset * 2} height={plan.acrossMm - inset * 2}
-        rx={pen(2)} fill={tint.fill} stroke={tint.line} strokeWidth={pen(OUTLINE_PX)}
-      />
+      {down ? (
+        <path d={outline} fill={tint.fill} stroke={tint.line} strokeWidth={pen(OUTLINE_PX)} strokeLinejoin="round" />
+      ) : (
+        <rect
+          x={line} y={line}
+          width={W - line * 2} height={H - line * 2}
+          rx={pen(2)} fill={tint.fill} stroke={tint.line} strokeWidth={pen(OUTLINE_PX)}
+        />
+      )}
       {panels.slice(1).map(p => (
         <line
           key={p.atMm}
-          x1={p.atMm} y1={0} x2={p.atMm} y2={plan.acrossMm}
+          x1={down ? cut : p.atMm} y1={down ? p.atMm : 0}
+          x2={down ? W : p.atMm} y2={down ? p.atMm : H}
           stroke={tint.line} strokeWidth={pen(OUTLINE_PX * 0.8)} strokeDasharray={`${pen(3)} ${pen(2.4)}`}
         />
       ))}
@@ -1256,6 +1272,17 @@ function CanvasScreen({ layout, setLayout, onBack }: {
               style={{ width: pageW(i), height: pageH(i) }}
             >
               <PageSvg page={pages[i]} scale={scale} showGuides />
+              {/* Paper that is not there. Drawn in the colour behind the sheet
+                  so the corner reads as cut off rather than as blank. */}
+              {pg.notch && (
+                <span
+                  className="notch pointer-events-none absolute z-10 border border-dashed border-line-strong bg-bg"
+                  style={{
+                    left: pg.notch.x * scale, top: pg.notch.y * scale,
+                    width: pg.notch.w * scale, height: pg.notch.h * scale,
+                  }}
+                />
+              )}
               {pg.spanRect && (
                 <button
                   className="hitbox absolute p-0"

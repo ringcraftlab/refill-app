@@ -302,6 +302,24 @@ if (await foldCard.count()) {
   await page.waitForTimeout(200);
   console.log('拡大の紙:', JSON.stringify(await page.locator('.lightbox svg').first().boundingBox()));
   await shot('27-さらに拡大');
+
+  // The other grain. A refill wider than it is tall binds on its short edge,
+  // so folding away from the rings makes a ribbon; this one folds along them
+  // instead and the inner panels are cut back to clear the holes -- an L, not
+  // a rectangle, which is the one shape in the app that is not one.
+  await page.goto(BASE);
+  await page.locator('.sizerow', { hasText: '91×55mm' }).click();
+  await page.locator('.card', { hasText: '蛇腹3面' }).click();
+  await shot('28-横長ミニ3穴の蛇腹');
+  await page.getByRole('button', { name: 'この構成で作る' }).click();
+  await page.locator('.page').first().waitFor();
+  const card = await page.locator('.page').first().boundingBox();
+  await drag(await centerOf(await stamp('マンスリー')),
+    { x: card.x + card.width / 2, y: card.y + card.height * 0.17 });
+  await drag(await centerOf(await stamp('メモ')),
+    { x: card.x + card.width / 2, y: card.y + card.height * 0.5 });
+  console.log('切り落とし:', await page.locator('.notch').count());
+  await shot('29-L字の帯に置く');
 }
 
 await browser.close();
