@@ -573,7 +573,10 @@ function SidesScreen({ size, spread, fold, foldGrain, onPick, onBack, onConfirm 
 
   return (
     <div className={SCREEN_PAD}>
-      <button className="self-start p-0 text-xs text-muted" onClick={onBack}>← サイズを選び直す</button>
+      <Button variant="chip" className="self-start" onClick={onBack}>
+        <span className="text-[13px] leading-none">←</span>
+        サイズを選び直す
+      </Button>
       <div>
         <h1 className="text-[19px] font-bold">ページ構成を選ぶ</h1>
         <p className="m-0 mt-1 text-[12px] text-muted">
@@ -1198,22 +1201,14 @@ function CanvasScreen({ layout, setLayout, onBack }: {
         <span className="min-w-0 truncate">
           {size.label} {size.widthMm}×{size.heightMm}mm ・ {formLabel(layout)}
         </span>
-        <button
-          className="rotate ml-auto flex shrink-0 items-center gap-1 rounded-full border border-line-strong bg-white px-2.5 py-1 text-[11px] font-normal text-label"
-          onClick={turn}
-          aria-label="リフィルを回転"
-        >
+        <Button variant="chip" className="rotate ml-auto" onClick={turn} aria-label="リフィルを回転">
           <span className="text-[13px] leading-none">↻</span>
           {turnLabel}
-        </button>
-        <button
-          className="magnify flex shrink-0 items-center gap-1 rounded-full border border-line-strong bg-white px-2.5 py-1 text-[11px] font-normal text-label"
-          onClick={() => setZoomed(true)}
-          aria-label="大きく見る"
-        >
+        </Button>
+        <Button variant="chip" className="magnify" onClick={() => setZoomed(true)} aria-label="大きく見る">
           <span className="text-[13px] leading-none">⤢</span>
           大きく
-        </button>
+        </Button>
       </header>
 
       {/* The design filling the glass, to check rather than to edit. Editing

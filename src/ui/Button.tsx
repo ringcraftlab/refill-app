@@ -18,7 +18,10 @@ export type ButtonVariant =
   // Takes something away.
   | 'danger'
   // Icon only, no box.
-  | 'icon';
+  | 'icon'
+  // A pill that sits beside something rather than under it: going back, or
+  // the two controls over the drawing. Small, outlined, never the accent.
+  | 'chip';
 
 const VARIANT: Record<ButtonVariant, string> = {
   cta: 'rounded-xl bg-accent p-3.5 text-sm font-bold text-white',
@@ -28,6 +31,7 @@ const VARIANT: Record<ButtonVariant, string> = {
   quiet: 'rounded-[9px] border border-line-strong bg-bg px-3 py-[11px] text-xs text-muted',
   danger: 'rounded-[10px] border border-line-strong bg-white p-3 text-[13px] font-semibold text-danger',
   icon: 'px-1 text-lg leading-none',
+  chip: 'flex shrink-0 items-center gap-1 rounded-full border border-line-strong bg-white px-2.5 py-1 text-[11px] font-normal text-label',
 };
 
 interface Props extends ButtonHTMLAttributes<HTMLButtonElement> {
