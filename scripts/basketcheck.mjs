@@ -63,6 +63,29 @@ async function make(sizeText, form, part, name) {
   return suggested;
 }
 
+// Before anything is saved there is nothing that could go in an empty place,
+// so there is no ＋ on one. A ＋ that answers "there is nothing to add" reads
+// as a broken button, which is exactly what it is.
+await page.goto(BASE);
+await page.locator('.sizerow', { hasText: '62×105mm' }).click();
+await page.locator('.card', { hasText: '片面' }).first().click();
+await page.getByRole('button', { name: 'この構成で作る' }).click();
+await page.locator('.page').first().waitFor();
+await drag(await centerOf(await stamp('マンスリー')), await centerOf(page.locator('.page').first()));
+await page.locator('button.paper').click();
+await page.locator('.sheet').waitFor();
+await page.locator('.sheet').getByRole('button', { name: 'A3', exact: true }).click();
+await page.waitForTimeout(300);
+check(
+  await page.locator('.fillmap .empty').count() === 0
+    && await page.locator('.fillmap .empty-none').count() > 0,
+  `保存が1つも無いときは＋を出さない（空き${await page.locator('.fillmap .empty-none').count()}面・＋${await page.locator('.fillmap .empty').count()}個）`,
+);
+check(
+  (await page.locator('.sheet').textContent()).includes('保存した別のリフィル'),
+  '代わりに、何をすれば入れられるかが書いてある',
+);
+
 const suggested = await make('62×105mm', '片面', 'メモ', 'メモ');
 check(
   suggested.includes('マイクロ5') && suggested.includes('メモ'),
@@ -102,6 +125,18 @@ check(await mine.count() > 0, `このリフィルのぶんは埋まって見え�
 await page.screenshot({ path: `${OUT}/00-用紙の空きを押す.png` });
 
 await empty.first().click();
+// Pressed here, answered here. The first version put the list at the foot of
+// a scrolling sheet, so on a 900px window pressing ＋ looked like nothing
+// happening at all.
+await page.waitForTimeout(500);
+const seen = await page.locator('.picker').evaluate(el => {
+  const r = el.getBoundingClientRect();
+  return { top: Math.round(r.top), bottom: Math.round(r.bottom), win: innerHeight };
+});
+check(
+  seen.top >= 0 && seen.bottom <= seen.win,
+  `＋を押すと、そのすぐ下に丸ごと出る（${seen.top}〜${seen.bottom}px・窓${seen.win}px）`,
+);
 const picks = page.locator('.basket li');
 const names = (await picks.allTextContents()).map(t => t.replace(/\s+/g, ' ').trim());
 check(

@@ -2186,6 +2186,13 @@ type PaperJob = ReturnType<typeof usePaperJob>;
 // button. "Where does it go" and "how do I add one" are the same question
 // about the same picture, so they are the same picture: press the square you
 // want filled and pick what fills it. Nothing here is a number to raise.
+//
+// Two rules about the ＋, both learned the hard way. It is only drawn where
+// pressing it can actually put something in -- a ＋ that answers "there is
+// nothing to add" is worse than no ＋ at all. And what it opens has to arrive
+// where it was pressed: the first version put the list at the bottom of a
+// scrolling sheet, so on a desktop window pressing ＋ looked like nothing
+// happening.
 function PaperFill({ size, print, setPrint, job }: {
   size: SizeSpec;
   print: PrintOptions;
@@ -2193,17 +2200,27 @@ function PaperFill({ size, print, setPrint, job }: {
   job: PaperJob;
 }) {
   const { canShare, used, plan, perPaper, spare, sheets, owners } = job;
-  // Which empty place was pressed. Kept only to say which one asked: what is
-  // picked goes wherever the imposition puts it, and saying otherwise would
-  // be a lie about an order this app does not let anyone choose.
-  const [picking, setPicking] = useState(false);
+  // Which empty place was pressed. Kept to mark that square while choosing:
+  // what is picked goes wherever the imposition puts it, and pretending
+  // otherwise would be a lie about an order this app does not let anyone
+  // choose -- but the square that was pressed is still the one being answered.
+  const [picking, setPicking] = useState<number | null>(null);
+  const pickerRef = useRef<HTMLDivElement>(null);
   const wide = plan.paper.widthMm > plan.paper.heightMm;
   const start = Math.max(0, (sheets - 1) * perPaper);
+  const canAdd = canShare.length > 0;
   const add = (l: Layout, d: number) => setPrint(p => {
     const n = (p.also.find(a => a.id === l.id)?.n ?? 0) + d;
     const rest = p.also.filter(a => a.id !== l.id);
     return { ...p, also: n > 0 ? [...rest, { id: l.id, n: Math.min(24, n) }] : rest };
   });
+
+  // The whole point of pressing the square is that the answer comes to the
+  // square. In a sheet that scrolls, that has to be asked for.
+  useLayoutEffect(() => {
+    if (picking === null) return;
+    pickerRef.current?.scrollIntoView({ block: 'end', behavior: 'smooth' });
+  }, [picking]);
 
   return (
     <div className="flex flex-col gap-2">
@@ -2228,13 +2245,29 @@ function PaperFill({ size, print, setPrint, job }: {
           const owner = filled ? owners[at] : null;
           const ratio = `${plan.paper.widthMm / plan.cols} / ${plan.paper.heightMm / plan.rows}`;
           if (!filled) {
+            // Empty, and nothing saved that could go in it: the place is
+            // drawn as what it is, and the line below says what would make
+            // it fillable. No button, because there is nothing behind it.
+            if (!canAdd) {
+              return (
+                <i
+                  key={i}
+                  className="empty-none block rounded-[3px] border border-dashed border-line-strong"
+                  style={{ aspectRatio: ratio }}
+                />
+              );
+            }
             return (
               <button
                 key={i}
-                className="empty flex items-center justify-center rounded-[3px] border border-dashed border-line-strong text-[15px] text-faint hover:border-accent hover:bg-accent-soft hover:text-accent"
+                className={`empty flex items-center justify-center rounded-[3px] border border-dashed text-[15px] hover:border-accent hover:bg-accent-soft hover:text-accent ${
+                  picking === i
+                    ? 'border-accent bg-accent-soft text-accent'
+                    : 'border-line-strong text-faint'
+                }`}
                 style={{ aspectRatio: ratio }}
                 aria-label="ここに別のリフィルを入れる"
-                onClick={() => setPicking(true)}
+                onClick={() => setPicking(picking === i ? null : i)}
               >＋</button>
             );
           }
@@ -2264,44 +2297,50 @@ function PaperFill({ size, print, setPrint, job }: {
         })}
       </span>
 
-      {picking && (
-        canShare.length === 0
-          ? <p className="m-0 text-[11px] leading-snug text-faint">
-              入れられるものがまだありません。別のリフィルを作って「保存」しておくと、
-              ここに並べて1枚で刷れます
-            </p>
-          : <ul className="basket m-0 flex max-h-56 list-none flex-col gap-1.5 overflow-y-auto p-0">
-              {canShare.map(l => {
-                const n = print.also.find(a => a.id === l.id)?.n ?? 0;
-                const adds = imposeCount(l, size, print);
-                return (
-                  <li key={l.id}>
-                    <button
-                      className={`flex w-full items-center gap-2.5 rounded-[9px] border p-2 text-left ${
-                        n ? 'border-accent bg-accent-soft' : 'border-line-strong bg-white'
-                      }`}
-                      onClick={() => add(l, 1)}
-                    >
-                      {/* The refill itself, small. A list of names is a list
-                          of names; a list of papers is the thing. */}
-                      <Thumb layout={l} size={size} />
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate text-[13px]">{l.name}</span>
-                        <span className="block text-[10px] text-faint">
-                          {adds > 1 ? `1つで${adds}面` : '1面'}{n > 0 ? `・${n}つ入れています` : ''}
-                        </span>
-                      </span>
-                      <span className="shrink-0 text-[13px] text-accent">入れる</span>
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-      )}
-      {!picking && canShare.length === 0 && (
+      {!canAdd && (
         <p className="m-0 text-[11px] leading-snug text-faint">
-          別のリフィルを作って「保存」しておくと、あいているところに入れて1枚で刷れます
+          あいているところに入れられるのは、保存した別のリフィルです。
+          別のリフィルを作って「保存」しておくと、ここに並べて1枚で刷れます
         </p>
+      )}
+
+      {picking !== null && (
+        <div
+          ref={pickerRef}
+          className="picker flex flex-col gap-1.5 rounded-[10px] border border-accent bg-accent-soft/40 p-2"
+        >
+          <span className="flex items-center gap-2">
+            <strong className="flex-1 text-[12px] font-normal text-muted">ここに入れるものを選ぶ</strong>
+            <Button variant="quiet" onClick={() => setPicking(null)}>やめる</Button>
+          </span>
+          <ul className="basket m-0 flex max-h-56 list-none flex-col gap-1.5 overflow-y-auto p-0">
+            {canShare.map(l => {
+              const n = print.also.find(a => a.id === l.id)?.n ?? 0;
+              const adds = imposeCount(l, size, print);
+              return (
+                <li key={l.id}>
+                  <button
+                    className={`flex w-full items-center gap-2.5 rounded-[9px] border p-2 text-left ${
+                      n ? 'border-accent bg-accent-soft' : 'border-line-strong bg-white'
+                    }`}
+                    onClick={() => add(l, 1)}
+                  >
+                    {/* The refill itself, small. A list of names is a list
+                        of names; a list of papers is the thing. */}
+                    <Thumb layout={l} size={size} />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-[13px]">{l.name}</span>
+                      <span className="block text-[10px] text-faint">
+                        {adds > 1 ? `1つで${adds}面` : '1面'}{n > 0 ? `・${n}つ入れています` : ''}
+                      </span>
+                    </span>
+                    <span className="shrink-0 text-[13px] text-accent">入れる</span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
       )}
     </div>
   );
