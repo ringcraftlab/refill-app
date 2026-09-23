@@ -47,7 +47,7 @@ npm run koyomi               # 六曜と祝日を外部実装と照合（暦を�
 | スクリプト | 何を見るか |
 |---|---|
 | `rules.mts` | 穴の合計＝綴じ辺、穴径＜リング幅、A4に何面入るか・外周に何mm残るか（全サイズ）、蛇腹の面幅がリングを逃げるか・帯が紙に入るか・両面のとじ方 |
-| `shoot.mjs` | 配置・境界ドラッグ・横向き・バーチカル・蛇腹など主要30場面 |
+| `shoot.mjs` | 配置・境界ドラッグ・横向き・バーチカル・蛇腹など主要32場面 |
 | `uxcheck.mjs` | ×の数、確認ダイアログ、潰したときに×が消えること |
 | `multidrop.mjs` | まとめてドラッグが拒否されないか |
 | `touchcheck.mjs` | 指でのトレイ操作（横に払えばスクロール・上に引けばパーツ）。他は全部マウス |
@@ -86,6 +86,8 @@ Tailwindに移したときは、これで4つのズレが見つかった。prefl
 | `src/styles.css` | Tailwindの読み込み、`@theme` の色、base のみ |
 | `src/lib/render/svg.tsx` | mmの図形をSVGに（画面用） |
 | `src/lib/fold.ts` | 蛇腹の面幅と帯の寸法。Reactもimposeも知らないので `.mts` から読める |
+| `src/lib/background.ts` | 紙の地（色・方眼・ドット・罫線・画像）。mmの図形を返すだけ |
+| `src/lib/photo.ts` | 取り込んだ写真を刷る寸法まで縮める。**ここだけDOMを知っている** |
 | `src/lib/astro.ts` | 朔の時刻・太陽黄経・ΔT。六曜と春分秋分の土台 |
 | `src/lib/kyureki.ts` | 旧暦と六曜 |
 | `src/lib/holidays.ts` | 祝日（法律の条文どおりに計算する。表ではない） |

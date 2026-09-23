@@ -1,6 +1,8 @@
 import { Fragment, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import type { FoldCount, FoldGrain, Layout, PartKind, RefillSize, SizeSpec } from './types';
+import type {
+  Background, BackgroundKind, FoldCount, FoldGrain, Layout, PartKind, RefillSize, SizeSpec,
+} from './types';
 import { MAX_PARTS, SCHEMA_VERSION } from './types';
 import { holeCentres, SIZES } from './lib/sizes';
 import {
@@ -9,6 +11,8 @@ import {
 } from './lib/layout';
 import type { Divider, DropPoint, Geometry, PageGeometry } from './lib/layout';
 import type { Page } from './lib/draw';
+import { BACKGROUND_COLORS } from './lib/background';
+import { importPhoto, PHOTO_WARN_BYTES, photoBytes } from './lib/photo';
 import { FOLD_PANELS, foldGrainsOf, foldPanels, foldPlan } from './lib/fold';
 import type { FoldPlan } from './lib/fold';
 import { nextMonthCell } from './lib/parts';
@@ -28,7 +32,7 @@ import { Dialog, Sheet, Toast } from './ui/Overlay';
 type Stage = 'size' | 'sides' | 'canvas';
 // A rectangle on screen, in the page area's own pixels.
 type Box = { key: string; left: number; top: number; width: number; height: number };
-type SheetTarget = { slot: number } | 'spanning' | 'load' | 'print' | null;
+type SheetTarget = { slot: number } | 'spanning' | 'load' | 'print' | 'background' | null;
 
 const GAP = 6;
 
@@ -156,6 +160,11 @@ const CLEAR_INSET = 17;
 // is the thing you chose, and the thing the paper has to carry.
 const formLabel = (l: Layout): string =>
   l.fold > 1 ? `蛇腹${l.fold}面` : l.spread ? '見開き' : '片面';
+
+const BACKGROUND_LABEL: Record<BackgroundKind, string> = {
+  none: '背景なし', tint: '背景：色', grid: '背景：方眼',
+  dot: '背景：ドット', lines: '背景：罫線', image: '背景：画像',
+};
 
 const PART_LABEL: Record<PartKind, string> = {
   monthly: 'マンスリー', daylist: '日付リスト',
@@ -1223,11 +1232,13 @@ function CanvasScreen({ layout, setLayout, onBack }: {
         <ZoomView pages={pages} flow={geo.flow} onClose={() => setZoomed(false)} />
       )}
 
+      {/* What the whole refill is, rather than what one part is: the months it
+          covers and the ground it prints on. Above the paper, because both are
+          design decisions and neither belongs inside the export sheet. */}
+      <div className="mb-0.5 ml-3.5 flex shrink-0 items-center gap-1.5 self-start">
       {dated && (
-        // Which months this makes is a design decision, not a printing one,
-        // so it belongs in sight rather than inside the export sheet.
         <button
-          className="range mb-0.5 ml-3.5 flex shrink-0 items-center gap-2 self-start rounded-full border border-line-strong bg-white px-3 py-1.5 text-[11px] text-ink"
+          className="range flex shrink-0 items-center gap-2 rounded-full border border-line-strong bg-white px-3 py-1.5 text-[11px] text-ink"
           onClick={() => setSheet(monthlyTarget)}
         >
           {byDay
@@ -1243,6 +1254,11 @@ function CanvasScreen({ layout, setLayout, onBack }: {
           </em>
         </button>
       )}
+        <Button variant="chip" onClick={() => setSheet('background')}>
+          <span className="text-[13px] leading-none">▦</span>
+          {BACKGROUND_LABEL[layout.background?.kind ?? 'none']}
+        </Button>
+      </div>
 
       <div className="relative flex min-h-0 grow items-center justify-center px-3 py-2" ref={boxRef}>
         <div
@@ -1463,7 +1479,11 @@ function CanvasScreen({ layout, setLayout, onBack }: {
 
       <div className="flex shrink-0 gap-2 bg-paper px-3 pb-3.5 pt-2">
         <Button onClick={() => setSheet('load')}>読み込み</Button>
-        <Button onClick={() => { saveLayout(layout); say('レイアウトを保存しました'); }}>保存</Button>
+        <Button
+          onClick={() => say(saveLayout(layout)
+            ? 'レイアウトを保存しました'
+            : '保存できませんでした。背景の画像が大きいか、保存先がいっぱいです')}
+        >保存</Button>
         <Button variant="actionWide" onClick={() => setSheet('print')}>PDF出力プレビュー</Button>
       </div>
 
@@ -1501,6 +1521,120 @@ function CanvasScreen({ layout, setLayout, onBack }: {
         />
       )}
     </div>
+  );
+}
+
+// The ground the sheet prints on. Not a part -- it is under all of them, so it
+// belongs to the refill rather than to a slot, and it is set from the chip
+// above the paper rather than by dropping something.
+function BackgroundSheet({ layout, setLayout, size }: {
+  layout: Layout; setLayout: (fn: (l: Layout) => Layout) => void; size: SizeSpec;
+}) {
+  const bg = layout.background ?? { kind: 'none' as BackgroundKind };
+  const file = useRef<HTMLInputElement>(null);
+  const [busy, setBusy] = useState('');
+  const set = (next: Partial<Background>) =>
+    setLayout(l => ({ ...l, background: { ...bg, ...next } as Background }));
+
+  const pick = async (f: File | undefined) => {
+    if (!f) return;
+    setBusy('読み込み中…');
+    try {
+      // Sized to the paper it will print on, at print resolution. A phone
+      // photo is twenty times that and would fill the browser's whole store
+      // on its own.
+      const src = await importPhoto(f, { w: size.widthMm, h: size.heightMm });
+      set({ kind: 'image', src });
+      setBusy('');
+    } catch (e) {
+      setBusy(e instanceof Error ? e.message : '読み込めませんでした');
+    }
+  };
+
+  const bytes = bg.src ? photoBytes(bg.src) : 0;
+
+  return (
+    <>
+      {/* Six choices are one choice, not two: they are laid out on two rows
+          because six will not fit across a phone, and exactly one of the six
+          is ever lit. The rows do not each carry their own "none". */}
+      <Field label="敷くもの">
+        <div className="flex flex-col gap-2">
+          <Segmented
+            options={[{ v: 'none', label: 'なし' }, { v: 'tint', label: '色' }, { v: 'image', label: '画像' }]}
+            value={bg.kind}
+            onPick={v => set({ kind: v as BackgroundKind })}
+          />
+          <Segmented
+            options={[{ v: 'grid', label: '方眼' }, { v: 'dot', label: 'ドット' }, { v: 'lines', label: '罫線' }]}
+            value={bg.kind}
+            onPick={v => set({ kind: v as BackgroundKind })}
+          />
+        </div>
+      </Field>
+
+      {bg.kind !== 'none' && bg.kind !== 'image' && (
+        <Field label="色">
+          <div className="flex gap-2">
+            {BACKGROUND_COLORS.map(c => (
+              <button
+                key={c}
+                aria-label={`色 ${c}`}
+                aria-pressed={(bg.color ?? BACKGROUND_COLORS[0]) === c}
+                onClick={() => set({ color: c })}
+                className={`h-9 flex-1 rounded-[9px] border-2 ${
+                  (bg.color ?? BACKGROUND_COLORS[0]) === c ? 'border-ink' : 'border-line-strong'
+                }`}
+                style={{ background: c }}
+              />
+            ))}
+          </div>
+        </Field>
+      )}
+
+      {bg.kind === 'image' && (
+        <Field label="画像">
+          <input
+            ref={file}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={e => { void pick(e.target.files?.[0]); e.target.value = ''; }}
+          />
+          <div className="flex items-center gap-2.5">
+            <Button variant="quiet" onClick={() => file.current?.click()}>
+              {bg.src ? '選び直す' : '写真を選ぶ'}
+            </Button>
+            {bg.src && (
+              <img src={bg.src} alt="" className="h-12 w-12 rounded-[6px] border border-line-strong object-cover" />
+            )}
+            {bg.src && <Button variant="quiet" onClick={() => set({ src: undefined })}>外す</Button>}
+          </div>
+          {busy && <p className="m-0 text-[11px] text-muted">{busy}</p>}
+          {bg.src && (
+            <p className={`photo-size m-0 text-[11px] ${bytes > PHOTO_WARN_BYTES ? 'text-danger' : 'text-faint'}`}>
+              {`${Math.round(bytes / 1024)}KB。刷る大きさに合わせて縮めてあります`}
+              {bytes > PHOTO_WARN_BYTES && '。これより大きいと保存が通らないことがあります'}
+            </p>
+          )}
+        </Field>
+      )}
+
+      {bg.kind !== 'none' && (
+        <Field label="濃さ">
+          <Stepper
+            value={`${Math.round((bg.opacity ?? 1) * 100)}%`}
+            onStep={n => set({ opacity: Math.min(1, Math.max(0.1, +((bg.opacity ?? 1) + n * 0.1).toFixed(2))) })}
+            canDown={(bg.opacity ?? 1) > 0.1}
+            canUp={(bg.opacity ?? 1) < 1}
+          />
+        </Field>
+      )}
+
+      <p className="m-0 text-[11px] leading-snug text-faint">
+        紙の端まで刷ります。プリンタが端まで出せないぶんは欠けます
+      </p>
+    </>
   );
 }
 
@@ -1585,11 +1719,16 @@ function PartSheet({ target, layout, setLayout, onClose, onRemove, onRemoveSpann
 
   const title = target === 'load' ? '保存済みレイアウト'
     : target === 'print' ? 'PDF出力プレビュー'
+    : target === 'background' ? '紙の背景'
     : target === 'spanning' ? '見開きマンスリー'
     : kind ? PART_LABEL[kind] : 'パーツ';
 
   return (
     <Sheet title={title} onClose={onClose}>
+
+        {target === 'background' && (
+          <BackgroundSheet layout={layout} setLayout={setLayout} size={size} />
+        )}
 
         {target === 'load' && (
           saved.length === 0

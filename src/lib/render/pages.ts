@@ -6,6 +6,7 @@ import type { Rect, SurfaceSlice } from '../layout';
 import { foldPanels } from '../fold';
 import type { FoldPlan } from '../fold';
 import { drawGrid, drawLines, drawMemo, drawPart, drawPartAcross, drawSpanningMonthly } from '../parts';
+import { drawBackground } from '../background';
 import { holeCentres } from '../sizes';
 import { addMonths, isoDate, sheetStarts } from '../dates';
 import { DEFAULT_IMPOSE, duplexFlip, impose, planTiles } from './impose';
@@ -18,7 +19,13 @@ export function buildPages(layout: Layout, size: SizeSpec, flipBinding = false):
   const geo = buildGeometry(layout, size, flipBinding);
 
   return geo.pages.map(pg => {
-    const primitives: Primitive[] = [];
+    // The ground the sheet is printed on, under everything including the ring
+    // margin: a background that stopped at the content would read as a panel
+    // laid on the paper rather than as the paper itself. It is not drawn on
+    // the spare faces -- those are filler, and a tint there is ink for nothing.
+    const primitives: Primitive[] = [
+      ...drawBackground(layout.background, { x: 0, y: 0, w: pg.widthMm, h: pg.heightMm }),
+    ];
     if (pg.spanRect) primitives.push(...drawSpanningMonthly(pg.spanRect, pg.key, layout));
 
     const slice = geo.surface.slices.find(s => s.key === pg.key);

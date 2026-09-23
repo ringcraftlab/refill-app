@@ -60,12 +60,17 @@ function load(): Layout[] {
   }
 }
 
-function persist(layouts: Layout[]) {
+// Says whether it stuck. Private browsing, blocked site data and a full store
+// all land in the catch, and since a background photo can fill the store on
+// its own, the difference between "saved" and "did not save" has to reach the
+// screen -- a layout that silently did not save is one the user finds missing
+// later.
+function persist(layouts: Layout[]): boolean {
   try {
     localStorage.setItem(KEY, JSON.stringify({ layouts }));
+    return true;
   } catch {
-    // Private browsing and blocked site data both land here; saving simply
-    // does not stick, which the caller reports through its toast.
+    return false;
   }
 }
 
@@ -73,12 +78,12 @@ export function listLayouts(): Layout[] {
   return load().sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 }
 
-export function saveLayout(layout: Layout) {
+export function saveLayout(layout: Layout): boolean {
   const layouts = load();
   const next = { ...layout, updatedAt: new Date().toISOString(), version: SCHEMA_VERSION };
   const i = layouts.findIndex(l => l.id === layout.id);
   if (i >= 0) layouts[i] = next; else layouts.push(next);
-  persist(layouts);
+  return persist(layouts);
 }
 
 export function deleteLayout(id: string) {

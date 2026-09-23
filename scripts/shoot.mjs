@@ -340,4 +340,23 @@ if (await foldCard.count()) {
   await shot('30-同じサイズを横に伸ばす');
 }
 
+// The ground the sheet prints on. Under everything including the ring margin,
+// because a background that stopped at the content would read as a panel laid
+// on the paper rather than as the paper.
+await page.goto(BASE);
+await page.locator('.sizerow', { hasText: '80×128mm' }).click();
+await page.locator('.card', { hasText: '見開き' }).click();
+await page.getByRole('button', { name: 'この構成で作る' }).click();
+await page.locator('.page').first().waitFor();
+await drag(await centerOf(await stamp('マンスリー')), await centerOf(page.locator('.page').first()));
+const bgChip = page.locator('button', { hasText: '背景なし' });
+if (await bgChip.count()) {
+  await bgChip.click();
+  await shot('31-背景の設定');
+  await page.locator('.sheet').getByRole('button', { name: '方眼', exact: true }).click();
+  await page.locator('.scrim').click({ position: { x: 10, y: 10 } });
+  await page.locator('.scrim').waitFor({ state: 'detached' });
+  await shot('32-方眼の地紋');
+}
+
 await browser.close();
