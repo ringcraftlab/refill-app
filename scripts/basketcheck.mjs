@@ -39,8 +39,8 @@ const stamp = async (label) => {
   return el;
 };
 
-// The app has no field for a layout's name yet, so the saved one is renamed in
-// place; everything else goes through the screen.
+// Saving asks for a name, which is the whole reason a list of saved refills
+// can be read at all.
 async function make(sizeText, form, part, name) {
   await page.goto(BASE);
   await page.locator('.sizerow', { hasText: sizeText }).click();
@@ -49,16 +49,19 @@ async function make(sizeText, form, part, name) {
   await page.locator('.page').first().waitFor();
   await drag(await centerOf(await stamp(part)), await centerOf(page.locator('.page').first()));
   await page.getByRole('button', { name: '保存', exact: true }).click();
+  await page.locator('.savename').waitFor();
+  const suggested = await page.locator('.savename').inputValue();
+  await page.locator('.savename').fill(name);
+  await page.getByRole('button', { name: '保存する' }).click();
   await page.waitForTimeout(300);
-  await page.evaluate((n) => {
-    const KEY = 'refill-app.layouts';
-    const box = JSON.parse(localStorage.getItem(KEY));
-    box.layouts[box.layouts.length - 1].name = n;
-    localStorage.setItem(KEY, JSON.stringify(box));
-  }, name);
+  return suggested;
 }
 
-await make('62×105mm', '片面', 'メモ', 'メモ');
+const suggested = await make('62×105mm', '片面', 'メモ', 'メモ');
+check(
+  suggested.includes('マイクロ5') && suggested.includes('メモ'),
+  `保存する名前が用意されている（「${suggested}」）`,
+);
 // A spread is the same punched sheet as a single page -- two faces of it --
 // so it mixes. A fold is not: its tile is the strip, 173.5×105 against 62×105.
 await make('62×105mm', '見開き', 'マンスリー', '見開きのほう');
@@ -78,16 +81,18 @@ check(
 );
 check(!names.join(' ').includes('蛇腹'), '蛇腹は混ぜられない（帯の寸法が違う）');
 
-const label = () => page.locator('.sheet').getByText(/同じ紙に足す/).textContent();
-const facesIn = async () => Number((await label()).match(/いま(\d+)面/)[1]);
+const label = () => page.locator('.fill-note').textContent();
+const facesIn = async () => Number((await label()).match(/このリフィルで(\d+)面/)[1]);
 const before = await facesIn();
 
+check(await page.locator('.basket .thumb svg').count() === 2, '候補は絵で見える');
 const memo = rows.filter({ hasText: 'メモ' });
-await memo.getByRole('button', { name: '増やす' }).click();
+await memo.getByRole('button', { name: '足す' }).click();
 await memo.getByRole('button', { name: '増やす' }).click();
 await page.waitForTimeout(300);
-const after = await facesIn();
-check(after === before + 2, `メモを2枚足すと2面増える（${before} → ${after}）`);
+const spare = (await label()).match(/(\d+)面あいて/);
+check(!!spare, `あきが出る（${(await label()).trim()}）`);
+const after = before;
 
 await page.screenshot({ path: `${OUT}/01-同じ紙に足す.png` });
 

@@ -37,7 +37,7 @@ import { Dialog, Sheet, Toast } from './ui/Overlay';
 type Stage = 'size' | 'sides' | 'canvas';
 // A rectangle on screen, in the page area's own pixels.
 type Box = { key: string; left: number; top: number; width: number; height: number };
-type SheetTarget = { slot: number } | 'spanning' | 'load' | 'print' | 'background' | 'look' | null;
+type SheetTarget = { slot: number } | 'spanning' | 'load' | 'save' | 'print' | 'background' | 'look' | null;
 
 const GAP = 6;
 
@@ -1324,6 +1324,14 @@ function CanvasScreen({ layout, setLayout, onBack }: {
       onRemove={slot => askRemove(PART_LABEL[layout.surface.placed[slot]], () => removePart(slot))}
       onRemoveSpanning={() => askRemove('マンスリー', () => setLayout(l => ({ ...l, spanning: null })))}
       onLoad={l => { setLayout(() => l); setSheet(null); say('読み込みました'); }}
+      onSave={name => {
+        const named = { ...layout, name };
+        setLayout(() => named);
+        setSheet(null);
+        say(saveLayout(named)
+          ? `「${name}」を保存しました`
+          : '保存できませんでした。背景の画像が大きいか、保存先がいっぱいです');
+      }}
       size={size}
       onExport={onExport}
     />
@@ -1665,11 +1673,11 @@ function CanvasScreen({ layout, setLayout, onBack }: {
 
       <div className="flex shrink-0 gap-2 bg-paper px-3 pb-3.5 pt-2 lg:mt-auto lg:border-t lg:border-line lg:px-4 lg:pt-3">
         <Button onClick={() => setSheet('load')}>読み込み</Button>
-        <Button
-          onClick={() => say(saveLayout(layout)
-            ? 'レイアウトを保存しました'
-            : '保存できませんでした。背景の画像が大きいか、保存先がいっぱいです')}
-        >保存</Button>
+        {/* Named on the way in. Everything saved used to be called 新しい
+            リフィル, which is no name at all once there are three of them --
+            and putting several on one sheet of paper means reading that list
+            and picking. */}
+        <Button onClick={() => setSheet('save')}>保存</Button>
         <Button variant="actionWide" onClick={() => setSheet('print')}>PDF出力プレビュー</Button>
       </div>
       </aside>
@@ -2055,6 +2063,62 @@ function DividerHandle({ box, teach, onDown, onMove, onUp }: {
   );
 }
 
+// A name someone would recognise a week later, made of what the refill is:
+// its size, its form, and what is on it. Better than 新しいリフィル and better
+// than making someone think of one before they can save.
+function suggestName(layout: Layout, size: SizeSpec, grain?: FoldGrain): string {
+  const parts = [
+    ...(layout.spanning ? ['マンスリー'] : []),
+    ...layout.surface.placed.map(k => PART_LABEL[k]),
+  ];
+  const what = parts.length ? parts.slice(0, 3).join('＋') : '白紙';
+  return `${size.label} ${formLabel(layout, grain)}・${what}`;
+}
+
+// Naming what is being saved. A sheet rather than a dialog, because it is the
+// same shape of question as everything else here and it has to work beside the
+// paper on a desktop.
+function SaveSheet({ layout, size, grain, onSave }: {
+  layout: Layout; size: SizeSpec; grain?: FoldGrain; onSave: (name: string) => void;
+}) {
+  const [name, setName] = useState(() => (
+    layout.name && layout.name !== '新しいリフィル' ? layout.name : suggestName(layout, size, grain)
+  ));
+  return (
+    <>
+      <Field label="名前">
+        <input
+          className="savename w-full rounded-[9px] border border-line-strong bg-white px-3 py-[11px] text-[13px]"
+          value={name}
+          autoFocus
+          onChange={e => setName(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter') onSave(name.trim() || suggestName(layout, size, grain)); }}
+        />
+      </Field>
+      <p className="m-0 text-[11px] leading-snug text-faint">
+        保存したリフィルは、読み込みで開けるほか、
+        <strong className="font-semibold text-label">PDF出力で同じ紙に並べて刷れます</strong>
+      </p>
+      <Button variant="cta" onClick={() => onSave(name.trim() || suggestName(layout, size, grain))}>
+        保存する
+      </Button>
+    </>
+  );
+}
+
+// One saved refill, small enough to sit in a list and big enough to tell a
+// calendar from a memo.
+function Thumb({ layout, size }: { layout: Layout; size: SizeSpec }) {
+  const page = useMemo(() => buildPages(layout, size)[0], [layout, size]);
+  if (!page) return null;
+  const scale = Math.min(34 / page.widthMm, 46 / page.heightMm);
+  return (
+    <span className="thumb block shrink-0 overflow-hidden rounded-[3px] border border-line-strong bg-white">
+      <PageSvg page={page} scale={scale} />
+    </span>
+  );
+}
+
 // The saved designs that could share this paper: the same punched sheet, and
 // not this one. Read at the moment the export screen opens, because saving
 // another design is exactly what someone does just before coming here.
@@ -2062,7 +2126,10 @@ function basketOf(layout: Layout, size: SizeSpec): Layout[] {
   return listLayouts().filter(l => l.id !== layout.id && sameSheet(l, layout, size));
 }
 
-function PartSheet({ target, layout, setLayout, inline, onClose, onRemove, onRemoveSpanning, onLoad, size, onExport }: {
+function PartSheet({
+  target, layout, setLayout, inline, onClose, onRemove, onRemoveSpanning, onLoad, onSave, size,
+  onExport,
+}: {
   target: Exclude<SheetTarget, null>;
   layout: Layout;
   setLayout: (fn: (l: Layout) => Layout) => void;
@@ -2072,6 +2139,7 @@ function PartSheet({ target, layout, setLayout, inline, onClose, onRemove, onRem
   onRemove: (slot: number) => void;
   onRemoveSpanning: () => void;
   onLoad: (l: Layout) => void;
+  onSave: (name: string) => void;
   size: SizeSpec;
   onExport: (opts: PrintOptions) => void;
 }) {
@@ -2095,6 +2163,10 @@ function PartSheet({ target, layout, setLayout, inline, onClose, onRemove, onRem
   const perPaper = paperPlan(
     size, imposeCount(layout, size, print, also), sheetSizeOf(layout, size), print.paper,
   ).perPage;
+  // What the last sheet has left over. Zero when it comes out even, which is
+  // worth saying too: it stops the reader looking for room that is not there.
+  const used = imposeCount(layout, size, print, also);
+  const spare = perPaper > 0 ? (perPaper - (used % perPaper)) % perPaper : 0;
   const kind = typeof target === 'string' ? null : layout.surface.placed[target.slot];
   // What the months actually come to, for the run this sheet is setting.
   const [firstDay, lastDay] = runDates(layout);
@@ -2106,6 +2178,7 @@ function PartSheet({ target, layout, setLayout, inline, onClose, onRemove, onRem
     : null;
 
   const title = target === 'load' ? '保存済みレイアウト'
+    : target === 'save' ? '保存'
     : target === 'print' ? 'PDF出力プレビュー'
     : target === 'background' ? '紙の背景'
     : target === 'look' ? '体裁'
@@ -2120,6 +2193,10 @@ function PartSheet({ target, layout, setLayout, inline, onClose, onRemove, onRem
         )}
 
         {target === 'look' && <LookSheet layout={layout} setLayout={setLayout} />}
+
+        {target === 'save' && (
+          <SaveSheet layout={layout} size={size} grain={foldOf(layout, size)?.grain} onSave={onSave} />
+        )}
 
         {target === 'load' && (
           saved.length === 0
@@ -2164,37 +2241,59 @@ function PartSheet({ target, layout, setLayout, inline, onClose, onRemove, onRem
                 can be put there is anything already saved that is the same
                 punched sheet -- same size, same form, same way up -- because
                 the tiling lays out one tile, not a jigsaw. */}
-            {print.impose && canShare.length > 0 && (
-              <Field label={`同じ紙に足す（${PAPERS[print.paper].label} 1枚に${perPaper}面・いま${imposeCount(layout, size, print, also)}面）`}>
-                <ul className="basket m-0 flex max-h-40 list-none flex-col gap-1.5 overflow-y-auto p-0">
-                  {canShare.map(l => {
-                    const n = print.also.find(a => a.id === l.id)?.n ?? 0;
-                    const adds = imposeCount(l, size, print);
-                    const step = (d: number) => setPrint(p => {
-                      const next = Math.max(0, Math.min(24, n + d));
-                      const rest = p.also.filter(a => a.id !== l.id);
-                      return { ...p, also: next ? [...rest, { id: l.id, n: next }] : rest };
-                    });
-                    return (
-                      <li
-                        key={l.id}
-                        className={`flex items-center gap-2 rounded-[9px] border bg-white px-3 py-1.5 ${
-                          n ? 'border-accent bg-accent-soft' : 'border-line-strong'
-                        }`}
-                      >
-                        <span className="min-w-0 flex-1 truncate text-[13px]">{l.name}</span>
-                        <em className="shrink-0 not-italic text-[11px] text-faint">
-                          {adds > 1 ? `1つ${adds}面` : ''}
-                        </em>
-                        <Stepper
-                          value={n ? `${n}` : '－'}
-                          onStep={step}
-                          canDown={n > 0}
-                        />
-                      </li>
-                    );
-                  })}
-                </ul>
+            {print.impose && (
+              <Field label="同じ紙に並べて刷る">
+                {/* The numbers first, because the question this answers is
+                    "how much room is left", and the answer is what makes
+                    someone press anything here at all. */}
+                <p className="fill-note m-0 text-[12px] text-muted">
+                  {PAPERS[print.paper].label} 1枚に{perPaper}面・このリフィルで
+                  {imposeCount(layout, size, print)}面
+                  {spare > 0
+                    ? `・最後の1枚に${spare}面あいています`
+                    : '・あきはありません'}
+                </p>
+                {canShare.length === 0 ? (
+                  <p className="m-0 text-[11px] leading-snug text-faint">
+                    保存したリフィルをここに並べられます。別のリフィルを作って
+                    「保存」しておくと、あいているところに入れて1枚で刷れます
+                  </p>
+                ) : (
+                  <ul className="basket m-0 flex max-h-56 list-none flex-col gap-1.5 overflow-y-auto p-0">
+                    {canShare.map(l => {
+                      const n = print.also.find(a => a.id === l.id)?.n ?? 0;
+                      const adds = imposeCount(l, size, print);
+                      const step = (d: number) => setPrint(p => {
+                        const next = Math.max(0, Math.min(24, n + d));
+                        const rest = p.also.filter(a => a.id !== l.id);
+                        return { ...p, also: next ? [...rest, { id: l.id, n: next }] : rest };
+                      });
+                      return (
+                        <li
+                          key={l.id}
+                          className={`flex items-center gap-2.5 rounded-[9px] border bg-white p-2 ${
+                            n ? 'border-accent bg-accent-soft' : 'border-line-strong'
+                          }`}
+                        >
+                          {/* The refill itself, small. A list of names is a
+                              list of names; a list of papers is the thing. */}
+                          <Thumb layout={l} size={size} />
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-[13px]">{l.name}</span>
+                            <span className="block text-[10px] text-faint">
+                              {adds > 1 ? `1つで${adds}面` : '1面'}
+                            </span>
+                          </span>
+                          {n === 0 ? (
+                            <Button variant="quiet" className="shrink-0" onClick={() => step(1)}>足す</Button>
+                          ) : (
+                            <Stepper value={`${n}`} onStep={step} />
+                          )}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
               </Field>
             )}
             {/* The browser's own paragraph margin, kept deliberately: it is the
