@@ -21,7 +21,8 @@ import { nextMonthCell } from './lib/parts';
 import { addDays, addMonths, isoDate, runDates } from './lib/dates';
 import {
   buildPages, buildPrintSheets, datedSlotOf, DEFAULT_PRINT, hasDatedPart, INK_INSET_MM, isDayPaced,
-  duplexFlipOf, imposeCount, MONTH_PACED, paperPlan, punchInset, runEnd, sheetCount, sheetSizeOf,
+  duplexFlipOf, imposeCount, MONTH_PACED, paperPlan, punchInset, runEnd, sameSheet, sheetCount,
+  sheetSizeOf,
 } from './lib/render/pages';
 import type { BackFill, PrintOptions } from './lib/render/pages';
 import { PAPER_ORDER, PAPERS } from './lib/render/impose';
@@ -1151,7 +1152,14 @@ function CanvasScreen({ layout, setLayout, onBack }: {
   const endDivider = () => { dividerRef.current = null; };
 
   const onExport = async (opts: PrintOptions) => {
-    const sheets = buildPrintSheets(layout, size, opts);
+    // Resolved here rather than carried in the options: the ids are what the
+    // screen holds, and a design deleted in the meantime simply drops out.
+    const saved = listLayouts();
+    const also = opts.also.flatMap(({ id, n }) => {
+      const l = saved.find(s => s.id === id && sameSheet(s, layout, size));
+      return l ? Array.from({ length: Math.max(0, n) }, () => l) : [];
+    });
+    const sheets = buildPrintSheets(layout, size, opts, also);
     downloadPdf(await sheetsToPdf(sheets, layout.name), `${layout.name || 'refill'}.pdf`);
     setSheet(null);
     say(opts.impose
@@ -2047,6 +2055,13 @@ function DividerHandle({ box, teach, onDown, onMove, onUp }: {
   );
 }
 
+// The saved designs that could share this paper: the same punched sheet, and
+// not this one. Read at the moment the export screen opens, because saving
+// another design is exactly what someone does just before coming here.
+function basketOf(layout: Layout, size: SizeSpec): Layout[] {
+  return listLayouts().filter(l => l.id !== layout.id && sameSheet(l, layout, size));
+}
+
 function PartSheet({ target, layout, setLayout, inline, onClose, onRemove, onRemoveSpanning, onLoad, size, onExport }: {
   target: Exclude<SheetTarget, null>;
   layout: Layout;
@@ -2063,6 +2078,23 @@ function PartSheet({ target, layout, setLayout, inline, onClose, onRemove, onRem
   const [print, setPrint] = useState<PrintOptions>(DEFAULT_PRINT);
   const lastMonth = addMonths(layout.year, layout.month, Math.max(1, layout.monthCount) - 1);
   const saved = useMemo(() => target === 'load' ? listLayouts() : [], [target]);
+  // Everything that could share the paper, and the ones actually asked for.
+  const canShare = useMemo(
+    () => (target === 'print' ? basketOf(layout, size) : []),
+    [target, layout, size],
+  );
+  // Expanded to one entry per copy: the engine lays out designs, and two of
+  // the same design are two of them.
+  const also = useMemo(
+    () => print.also.flatMap(({ id, n }) => {
+      const l = canShare.find(c => c.id === id);
+      return l ? Array.from({ length: Math.max(0, n) }, () => l) : [];
+    }),
+    [canShare, print.also],
+  );
+  const perPaper = paperPlan(
+    size, imposeCount(layout, size, print, also), sheetSizeOf(layout, size), print.paper,
+  ).perPage;
   const kind = typeof target === 'string' ? null : layout.surface.placed[target.slot];
   // What the months actually come to, for the run this sheet is setting.
   const [firstDay, lastDay] = runDates(layout);
@@ -2107,7 +2139,7 @@ function PartSheet({ target, layout, setLayout, inline, onClose, onRemove, onRem
 
         {target === 'print' && (
           <>
-            <PrintPreview layout={layout} size={size} print={print} />
+            <PrintPreview layout={layout} size={size} print={print} also={also} />
             <Choice
               label="刷り方"
               options={[{ v: 'tile', label: '用紙にまとめる' }, { v: 'exact', label: '原寸のまま' }]}
@@ -2126,17 +2158,56 @@ function PartSheet({ target, layout, setLayout, inline, onClose, onRemove, onRem
                 onPick={v => setPrint(p => ({ ...p, paper: v as PaperId }))}
               />
             )}
+
+            {/* A year of monthlies is twelve refills and an A3 holds sixteen,
+                so the last four places print as filler and go in the bin. What
+                can be put there is anything already saved that is the same
+                punched sheet -- same size, same form, same way up -- because
+                the tiling lays out one tile, not a jigsaw. */}
+            {print.impose && canShare.length > 0 && (
+              <Field label={`同じ紙に足す（${PAPERS[print.paper].label} 1枚に${perPaper}面・いま${imposeCount(layout, size, print, also)}面）`}>
+                <ul className="basket m-0 flex max-h-40 list-none flex-col gap-1.5 overflow-y-auto p-0">
+                  {canShare.map(l => {
+                    const n = print.also.find(a => a.id === l.id)?.n ?? 0;
+                    const adds = imposeCount(l, size, print);
+                    const step = (d: number) => setPrint(p => {
+                      const next = Math.max(0, Math.min(24, n + d));
+                      const rest = p.also.filter(a => a.id !== l.id);
+                      return { ...p, also: next ? [...rest, { id: l.id, n: next }] : rest };
+                    });
+                    return (
+                      <li
+                        key={l.id}
+                        className={`flex items-center gap-2 rounded-[9px] border bg-white px-3 py-1.5 ${
+                          n ? 'border-accent bg-accent-soft' : 'border-line-strong'
+                        }`}
+                      >
+                        <span className="min-w-0 flex-1 truncate text-[13px]">{l.name}</span>
+                        <em className="shrink-0 not-italic text-[11px] text-faint">
+                          {adds > 1 ? `1つ${adds}面` : ''}
+                        </em>
+                        <Stepper
+                          value={n ? `${n}` : '－'}
+                          onStep={step}
+                          canDown={n > 0}
+                        />
+                      </li>
+                    );
+                  })}
+                </ul>
+              </Field>
+            )}
             {/* The browser's own paragraph margin, kept deliberately: it is the
                 breathing room between the paper choice and the print options. */}
             <p className="print-summary my-[13px] text-[13px] text-faint">
               {hasDatedPart(layout) && `${layout.year}年${layout.month}月から${layout.monthCount}ヶ月分・`}
               {isDayPaced(layout) && `${sheetCount(layout)}枚・`}
-              {print.impose && `${PAPERS[print.paper].label} 1枚に ${paperPlan(size, imposeCount(layout, size, print), sheetSizeOf(layout, size), print.paper).perPage} ${layout.fold > 1 ? '本' : '面'}`}
+              {print.impose && `${PAPERS[print.paper].label} 1枚に ${perPaper} ${layout.fold > 1 ? '本' : '面'}`}
             </p>
             {print.impose && (
               <EdgeNote
                 size={size}
-                count={imposeCount(layout, size, print)}
+                count={imposeCount(layout, size, print, also)}
                 sheet={sheetSizeOf(layout, size)}
                 paper={print.paper}
               />
@@ -2157,7 +2228,7 @@ function PartSheet({ target, layout, setLayout, inline, onClose, onRemove, onRem
               <p className="duplex-note m-0 mb-[13px] text-[12px] text-faint">
                 プリンタの両面設定は
                 <strong className="font-semibold text-label">
-                  {duplexFlipOf(layout, size, imposeCount(layout, size, print), print.paper)}
+                  {duplexFlipOf(layout, size, imposeCount(layout, size, print, also), print.paper)}
                 </strong>
                 。紙の隅にも刷ってあります
               </p>
@@ -2416,8 +2487,13 @@ const PREVIEW_PAGES = 4;
 // Imposed, duplexed sheets look like nonsense until you see them laid out and
 // numbered. Showing them here means the options can be judged before anyone
 // spends ink on them.
-function PrintPreview({ layout, size, print }: { layout: Layout; size: SizeSpec; print: PrintOptions }) {
-  const sheets = useMemo(() => buildPrintSheets(layout, size, print), [layout, size, print]);
+function PrintPreview({ layout, size, print, also }: {
+  layout: Layout; size: SizeSpec; print: PrintOptions; also: Layout[];
+}) {
+  const sheets = useMemo(
+    () => buildPrintSheets(layout, size, print, also),
+    [layout, size, print, also],
+  );
   // A thumbnail is enough to see how the paper is laid out, not enough to read
   // a date, so any of them opens full size.
   const [open, setOpen] = useState<number | null>(null);

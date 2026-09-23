@@ -34,7 +34,7 @@
 **コードを読んで「直った」と結論しない。実際に動かして見る。**
 
 ```bash
-npm run check                # ビルド→preview→7つの確認を並列。28秒
+npm run check                # ビルド→preview→8つの確認を並列。56秒
 npm run check -- shoot pdf   # 一部だけ
 npm run check -- --keep      # 自分で見に行くので preview を残す
 npm run check -- --no-build  # 直前のビルドのまま
@@ -51,6 +51,7 @@ npm run koyomi               # 六曜と祝日を外部実装と照合（暦を�
 |---|---|
 | `rules.mts` | 穴の合計＝綴じ辺、穴径＜リング幅、A4に何面入るか・外周に何mm残るか（全サイズ）、蛇腹の面幅がリングを逃げるか・帯が紙に入るか・両面のとじ方 |
 | `shoot.mjs` | 配置・境界ドラッグ・横向き・バーチカル・蛇腹・写真・体裁など主要39場面 |
+| `basketcheck.mjs` | 同じ紙に別のリフィルを足す（混ぜられる紙・枚数・A3で出るか） |
 | `pccheck.mjs` | PCの2カラム（紙の横に設定・折り返すトレイ）とホバー、狭い窓に戻ること |
 | `uxcheck.mjs` | ×の数、確認ダイアログ、潰したときに×が消えること |
 | `multidrop.mjs` | まとめてドラッグが拒否されないか |

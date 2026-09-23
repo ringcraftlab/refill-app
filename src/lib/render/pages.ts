@@ -148,11 +148,18 @@ export interface PrintOptions {
   punchGuides: boolean;
   // What the refills are laid out on. Only the tiling depends on it.
   paper: PaperId;
+  // Saved designs to fill the rest of the paper with: an id and how many of
+  // it. A count rather than a tick, because "two memo pages" is the whole
+  // point of filling a sheet -- a design's own run is only ever one of the
+  // things going on the paper. They have to be the same punched sheet;
+  // anything else is dropped rather than printed somewhere it does not fit.
+  also: { id: string; n: number }[];
 }
 
 export const DEFAULT_PRINT: PrintOptions = {
   impose: true,
   paper: 'a4',
+  also: [],
   copies: 1,
   cutLines: true,
   scalePercent: 100,
@@ -427,14 +434,12 @@ function facesInOrder(layout: Layout, size: SizeSpec, duplex: boolean): Face[] {
   return faces;
 }
 
-// The refills as they will print: every month in the range, flattened onto
-// their punched sheets, chained front to back, then laid out on paper.
-export function buildPrintSheets(layout: Layout, size: SizeSpec, opts: PrintOptions): SheetContent[] {
+// One design's punched sheets, front and back, in binder order. Pulled out of
+// the imposition so that several designs can be laid out on one paper: the
+// paper does not care whose refill a sheet is, only that they are the same
+// size.
+function sheetsOfLayout(layout: Layout, size: SizeSpec, opts: PrintOptions): Duplexed[] {
   const faces = facesInOrder(layout, size, opts.duplex);
-  const spec = {
-    ...DEFAULT_IMPOSE,
-    paper: PAPERS[opts.paper], cutLines: opts.cutLines, scalePercent: opts.scalePercent,
-  };
   const fold = foldOf(layout, size);
   const sheetSize = sheetSizeOf(layout, size);
   // On a fold the far edge is the turned-over strip, which is what decides
@@ -470,6 +475,39 @@ export function buildPrintSheets(layout: Layout, size: SizeSpec, opts: PrintOpti
   } else {
     faces.forEach(f => sheets.push({ front: asSheet(f), back: spare(mirror(f.side)) }));
   }
+  return sheets;
+}
+
+// Whether two designs can share one sheet of paper. The tiling lays out one
+// tile size, so what has to match is the punched sheet -- and that is a
+// narrower thing than the refill size: a Bible page and a Bible three-panel
+// strip are both "Bible" and are 95×170 and 268.5×170.
+//
+// A spread and a single page are the same punched sheet, and do mix: a spread
+// is two faces of the ordinary sheet, and each design brings its own chain of
+// physical sheets, so the pairing inside it survives being laid out next to
+// something else. Turning a refill does not change its paper either.
+export const sameSheet = (a: Layout, b: Layout, size: SizeSpec): boolean => {
+  const x = sheetSizeOf(a, size), y = sheetSizeOf(b, size);
+  return a.size === b.size && x.widthMm === y.widthMm && x.heightMm === y.heightMm;
+};
+
+// The refills as they will print: every month in the range, flattened onto
+// their punched sheets, chained front to back, then laid out on paper.
+//
+// `also` are other designs of the same sheet to fill the paper with. A year of
+// monthlies is twelve refills and an A3 holds sixteen, so the last four places
+// would otherwise print as filler and go in the bin.
+export function buildPrintSheets(
+  layout: Layout, size: SizeSpec, opts: PrintOptions, also: Layout[] = [],
+): SheetContent[] {
+  const spec = {
+    ...DEFAULT_IMPOSE,
+    paper: PAPERS[opts.paper], cutLines: opts.cutLines, scalePercent: opts.scalePercent,
+  };
+  const sheetSize = sheetSizeOf(layout, size);
+  const sheets = [layout, ...also.filter(l => sameSheet(l, layout, size))]
+    .flatMap(l => sheetsOfLayout(l, size, opts));
 
   const all = Array.from({ length: Math.max(1, opts.copies) }, () => sheets).flat();
 
@@ -521,10 +559,12 @@ export const duplexFlipOf = (
 // How many physical refill sheets a run comes to, which is what a single
 // imposition run has to place. A spread is two faces on one sheet's back and
 // the next one's front, so it is not simply the sheet count.
-export const imposeCount = (layout: Layout, size: SizeSpec, opts: PrintOptions): number => {
-  const faces = facesInOrder(layout, size, opts.duplex).length * Math.max(1, opts.copies);
-  return opts.duplex ? Math.ceil(faces / 2) + (layout.spread ? 1 : 0) : faces;
-};
+export const imposeCount = (
+  layout: Layout, size: SizeSpec, opts: PrintOptions, also: Layout[] = [],
+): number => [layout, ...also.filter(l => sameSheet(l, layout, size))].reduce((n, l) => {
+  const faces = facesInOrder(l, size, opts.duplex).length * Math.max(1, opts.copies);
+  return n + (opts.duplex ? Math.ceil(faces / 2) + (l.spread ? 1 : 0) : faces);
+}, 0);
 
 // The nearest ink gets to the edge of a refill, which is what decides whether
 // a printer's unprintable border eats any of it. Measured, not assumed: the

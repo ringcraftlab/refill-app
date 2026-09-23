@@ -1,6 +1,6 @@
 // Builds the app, serves it, and runs every check at once.
 //
-//   npm run check              # rules + 7 screen checks, shots in shots/
+//   npm run check              # rules + 8 screen checks, shots in shots/
 //   npm run check -- --keep    # leave the preview server up afterwards
 //   npm run check -- --no-build
 //   npm run check -- shoot pdf # only these
@@ -27,6 +27,7 @@ const CHECKS = [
   { id: 'pdf', script: 'pdfcheck.mjs', out: 'shots/pdf', what: '用紙サイズと面付け' },
   { id: 'shoot', script: 'shoot.mjs', out: 'shots/shoot', what: '主要35場面' },
   { id: 'pc', script: 'pccheck.mjs', out: 'shots/pc', what: 'PCの2カラムとホバー' },
+  { id: 'basket', script: 'basketcheck.mjs', out: 'shots/basket', what: '同じ紙に別のリフィルを足す' },
   { id: 'ux', script: 'uxcheck.mjs', out: 'shots/ux', what: '×と確認ダイアログ' },
   { id: 'print', script: 'printpreview.mjs', out: 'shots/print', what: '刷り上がりプレビュー' },
   { id: 'multidrop', script: 'multidrop.mjs', out: null, what: 'まとめてドラッグ' },
