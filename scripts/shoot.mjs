@@ -311,7 +311,7 @@ if (await foldCard.count()) {
   await page.locator('.sizerow', { hasText: '91×55mm' }).click();
   // This size alone offers both directions, so the card has to be picked by
   // the one it is.
-  await page.locator('.card').filter({ hasText: '蛇腹3面' }).filter({ hasText: '下に伸ばす' }).click();
+  await page.locator('.card', { hasText: 'L字3面' }).click();
   await shot('28-横長ミニ3穴の蛇腹');
   await page.getByRole('button', { name: 'この構成で作る' }).click();
   await page.locator('.page').first().waitFor();
@@ -328,7 +328,7 @@ if (await foldCard.count()) {
   // neither is plainly right, which is true of this size alone.
   await page.goto(BASE);
   await page.locator('.sizerow', { hasText: '91×55mm' }).click();
-  await page.locator('.card').filter({ hasText: '蛇腹3面' }).filter({ hasText: '横に伸ばす' }).click();
+  await page.locator('.card', { hasText: '蛇腹3面' }).click();
   await page.getByRole('button', { name: 'この構成で作る' }).click();
   await page.locator('.page').first().waitFor();
   const ribbon = await page.locator('.page').first().boundingBox();

@@ -90,17 +90,19 @@ function maxAlongMm(acrossMm: number, paper = FOLD_PAPER): number {
   );
 }
 
-// そのサイズで選べる折る向き。先頭が既定。
+// そのサイズで選べる折る向き。先頭が既定で、'out'——帯が長方形になる
+// ふつうの折り方——は常に先頭。
 //
 // 高さのあるリフィル（9サイズ中8つ）は 'out' だけ。'along' でも紙には
 // 入るが、M5の2面なら 62×209.5mm の細長い帯に切り込みつきで、117.75×105mm
 // の長方形に勝つところがない。選択肢が増えるだけになる。
 //
-// 幅が高さを上回るリフィル——横長ミニ3穴だけ——は逆に、どちらが良いか
-// 決まらない。'along' は91×164mmとまとまるが切り込みが要り、'out' は
-// 260.5×55mmと細長いかわり長方形のまま。だからここだけ両方出す。
+// 幅が高さを上回るリフィル——横長ミニ3穴だけ——では 'along' が効く。
+// 'out' だと3面で260.5×55mmの細長い帯になるところ、91×164mmにまとまる。
+// かわりに紙をL字に切ることになるので、ふつうの折り方の代わりではなく、
+// その下に別で置く特殊な形として出す。
 export const foldGrainsOf = (size: SizeSpec): FoldGrain[] =>
-  foldSpanMm(size) > bindSpanMm(size) ? ['along', 'out'] : ['out'];
+  foldSpanMm(size) > bindSpanMm(size) ? ['out', 'along'] : ['out'];
 
 export const foldGrainOf = (size: SizeSpec): FoldGrain => foldGrainsOf(size)[0];
 

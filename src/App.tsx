@@ -510,10 +510,25 @@ function SidesScreen({ size, spread, fold, foldGrain, onPick, onBack, onConfirm 
   // A size whose panels would come out unusably narrow simply has no card --
   // A5 at three panels is the one, where the paper runs out before the rings
   // do and each inner panel comes to half a page.
-  const choices: {
+  type Choice = {
     key: string; on: boolean; pick: { spread: boolean; fold: FoldCount; foldGrain?: FoldGrain };
     title: string; note: string; sheets?: boolean[]; plan?: FoldPlan;
-  }[] = [
+  };
+  const foldCards = (g: FoldGrain): Choice[] => FOLD_PANELS.flatMap(n => {
+    const plan = foldPlan(spec, n, g);
+    if (!plan) return [];
+    return [{
+      key: `fold${n}${g}`,
+      on: fold === n && grain === g,
+      pick: { spread: false, fold: n as FoldCount, foldGrain: g },
+      title: `${g === 'along' ? 'L字' : '蛇腹'}${n}面`,
+      // The box you would measure on the table, not the fold's own axis:
+      // folding along the binding stands the strip up.
+      note: `広げて${plan.sheetWmm}×${plan.sheetHmm}mm`,
+      plan,
+    }];
+  });
+  const choices: Choice[] = [
     {
       key: 'spread', on: flat && spread, pick: { spread: true, fold: 1 },
       title: '見開き（2ページ）', note: '左右セットで1ヶ月分',
@@ -525,28 +540,36 @@ function SidesScreen({ size, spread, fold, foldGrain, onPick, onBack, onConfirm 
       key: 'single', on: flat && !spread, pick: { spread: false, fold: 1 },
       title: '片面（1ページ）', note: '1ページで完結', sheets: [false],
     },
-    // Grouped by panel count, so the two shapes of the same count sit beside
-    // each other -- that pair is the comparison. Only one size has a pair;
-    // everywhere else this is one card per count, as before.
-    ...FOLD_PANELS.flatMap(n => grains.flatMap(g => {
-      const plan = foldPlan(spec, n, g);
-      if (!plan) return [];
-      return [{
-        key: `fold${n}${g}`,
-        on: fold === n && grain === g,
-        pick: { spread: false, fold: n as FoldCount, foldGrain: g },
-        title: `蛇腹${n}面`,
-        // The box you would measure on the table, not the fold's own axis:
-        // folding along the binding stands the strip up. The direction comes
-        // first because with two of them that is what tells them apart.
-        note: grains.length > 1
-          ? `${g === 'along' ? '下' : '横'}に伸ばす・${plan.sheetWmm}×${plan.sheetHmm}mm`
-          : `広げて${plan.sheetWmm}×${plan.sheetHmm}mm`,
-        plan,
-      }];
-    })),
+    ...foldCards('out'),
   ];
-  const picked = choices.find(c => c.on);
+  // The L goes below, under a heading of its own. It is not a fourth way of
+  // arranging pages: it is the same fold with the paper cut into an L, which
+  // one size can do and the rest cannot. Mixed into the run above it read as
+  // an ordinary alternative, and the extra cut went unsaid.
+  const special = grains.includes('along') ? foldCards('along') : [];
+  const picked = [...choices, ...special].find(c => c.on);
+
+  const card = (choice: Choice) => (
+    <button
+      key={choice.key}
+      className="card flex flex-col items-center gap-2 rounded-[18px] border-[1.5px] px-2 py-3 text-center"
+      style={cardSkin(choice.on, tint.line)}
+      aria-pressed={choice.on}
+      onClick={() => onPick(choice.pick)}
+    >
+      <span className="flex items-center justify-center gap-[3px]" style={{ height: SHEET_SLOT.height }}>
+        {choice.plan
+          ? <FoldIcon size={spec} tint={tint} plan={choice.plan} />
+          : choice.sheets!.map((flip, i) => (
+            <SizeIcon key={i} size={spec} tint={tint} flip={flip} />
+          ))}
+      </span>
+      <span className="flex flex-col gap-0.5">
+        <strong className="text-[13px] font-semibold leading-tight">{choice.title}</strong>
+        <span className="text-[10px] leading-tight text-faint">{choice.note}</span>
+      </span>
+    </button>
+  );
 
   return (
     <div className={SCREEN_PAD}>
@@ -565,34 +588,27 @@ function SidesScreen({ size, spread, fold, foldGrain, onPick, onBack, onConfirm 
           Every card keeps one box the height of the largest sheet, so a folded
           strip and a pair of pages are drawn to the same scale. */}
       <div className="grid grid-cols-2 gap-1.5">
-        {choices.map(choice => (
-          <button
-            key={choice.key}
-            className="card flex flex-col items-center gap-2 rounded-[18px] border-[1.5px] px-2 py-3 text-center"
-            style={cardSkin(choice.on, tint.line)}
-            aria-pressed={choice.on}
-            onClick={() => onPick(choice.pick)}
-          >
-            <span className="flex items-center justify-center gap-[3px]" style={{ height: SHEET_SLOT.height }}>
-              {choice.plan
-                ? <FoldIcon size={spec} tint={tint} plan={choice.plan} />
-                : choice.sheets!.map((flip, i) => (
-                  <SizeIcon key={i} size={spec} tint={tint} flip={flip} />
-                ))}
-            </span>
-            <span className="flex flex-col gap-0.5">
-              <strong className="text-[13px] font-semibold leading-tight">{choice.title}</strong>
-              <span className="text-[10px] leading-tight text-faint">{choice.note}</span>
-            </span>
-          </button>
-        ))}
+        {choices.map(choice => card(choice))}
       </div>
+      {special.length > 0 && (
+        <div className="flex flex-col gap-1.5">
+          <div>
+            <h2 className="m-0 text-[13px] font-semibold">特殊蛇腹（L字）</h2>
+            <p className="m-0 mt-0.5 text-[10px] leading-snug text-faint">
+              {`${SIZE_NAME[size]}だけの形。折り目がリングと直角なので、`
+                + `内側の面は綴じ側を${special[0].plan!.insetMm}mm切り落とします`}
+            </p>
+          </div>
+          <div className="grid grid-cols-2 gap-1.5">
+            {special.map(choice => card(choice))}
+          </div>
+        </div>
+      )}
       {/* What the fold costs, under the cards rather than inside one: it is the
           number you check before printing, and it changes with the panel count
           the card above just set. */}
       {picked?.plan && (
         <p className="fold-note m-0 text-[11px] leading-snug text-muted">
-          {picked.plan.insetMm > 0 && `折り目がリングと直角なので、内側の面は綴じ側を${picked.plan.insetMm}mm切り落とします（L字）。`}
           穴は先頭の面だけ。内側の面は
           {picked.plan.paperCapped
             ? `${picked.plan.innerMm}mm（紙で決まり。リングの逃げなら${picked.plan.innerCapMm.toFixed(1)}mmまで）`
