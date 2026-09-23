@@ -161,8 +161,12 @@ function StampIcon({ kind }: { kind: PartKind }) {
   }
 
   return (
+    // Sized in CSS rather than in attributes, so the same drawing can be bigger
+    // where there is room for it. The strokes are in viewBox units and grow
+    // with it, which is what keeps the set looking like one set.
     <svg
-      width={ICON_W} height={ICON_H} viewBox={`0 0 ${ICON_W} ${ICON_H}`}
+      viewBox={`0 0 ${ICON_W} ${ICON_H}`}
+      className="h-[18px] w-[26px] lg:h-[26px] lg:w-[38px]"
       fill="none" stroke="currentColor" strokeWidth={0.9} strokeLinecap="round"
       aria-hidden="true"
     >
@@ -1496,7 +1500,7 @@ function CanvasScreen({ layout, setLayout, onBack }: {
         <div
           ref={el => { trayRef.current = el; readTrayEdges(); }}
           onScroll={readTrayEdges}
-          className="flex gap-2.5 overflow-x-auto px-3 pb-2.5 pt-2 lg:flex-wrap lg:overflow-x-visible lg:px-4 lg:pt-4"
+          className="flex gap-2.5 overflow-x-auto px-3 pb-2.5 pt-2 lg:grid lg:grid-cols-3 lg:overflow-x-visible lg:px-4 lg:pt-4"
         >
         {TRAY.map(t => {
           const idx = traySelected.indexOf(t.kind);
@@ -1505,7 +1509,7 @@ function CanvasScreen({ layout, setLayout, onBack }: {
               key={t.kind}
               // `pan-x`, not `none`: sideways belongs to the tray, every other
               // direction belongs to the part being lifted out of it.
-              className={`stamp relative flex w-[60px] shrink-0 cursor-grab touch-pan-x flex-col items-center gap-[3px] rounded-xl border-[1.5px] py-[8px] text-[9px] font-semibold active:cursor-grabbing ${
+              className={`stamp relative flex w-[60px] shrink-0 cursor-grab touch-pan-x flex-col items-center gap-[3px] rounded-xl border-[1.5px] py-[8px] text-[9px] font-semibold active:cursor-grabbing lg:w-full lg:gap-1 lg:py-3 lg:text-[11px] ${
                 idx >= 0
                   ? 'border-accent bg-accent-soft'
                   : 'border-line bg-white hover:border-line-strong hover:shadow-[0_2px_8px_rgba(58,54,46,0.12)]'

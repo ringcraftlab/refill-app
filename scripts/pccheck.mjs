@@ -72,6 +72,8 @@ const tray = page.locator('.stamp').first().locator('xpath=..');
 const [content, frame] = await tray.evaluate(el => [el.scrollWidth, el.clientWidth]);
 check(content <= frame + 1, `トレイは折り返して収まる（${content}px / ${frame}px）`);
 check(await page.locator('.tray-more').count() === 0, '横スクロールの矢印は出ない');
+const stampBox = await page.locator('.stamp').first().boundingBox();
+check(stampBox.width > 90, `スタンプも広がる（${Math.round(stampBox.width)}px・スマホは60px）`);
 
 // The settings open in the column. Nothing is dimmed and the paper does not
 // move -- which is the whole reason they are not a bottom sheet here.
