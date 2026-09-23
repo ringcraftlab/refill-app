@@ -320,7 +320,7 @@ if (await foldCard.count()) {
     { x: card.x + card.width / 2, y: card.y + card.height * 0.17 });
   await drag(await centerOf(await stamp('メモ')),
     { x: card.x + card.width / 2, y: card.y + card.height * 0.5 });
-  console.log('切り落とし:', await page.locator('.notch').count());
+  console.log('切り落とした紙:', await page.locator('.page.notched').count());
   await shot('29-L字の帯に置く');
 
   // The same size the other way: folding away from the rings keeps the strip
@@ -336,7 +336,7 @@ if (await foldCard.count()) {
     { x: ribbon.x + ribbon.width * 0.17, y: ribbon.y + ribbon.height / 2 });
   await drag(await centerOf(await stamp('メモ')),
     { x: ribbon.x + ribbon.width * 0.5, y: ribbon.y + ribbon.height / 2 });
-  console.log('長方形の帯の切り落とし:', await page.locator('.notch').count());
+  console.log('長方形の帯の切り落とし:', await page.locator('.page.notched').count());
   await shot('30-同じサイズを横に伸ばす');
 }
 

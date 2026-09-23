@@ -1,8 +1,8 @@
 import type { Layout, PartKind, SizeSpec } from '../../types';
 import type { Color, Page, Primitive } from '../draw';
-import { clipToBand, flattenToSheet, RING_BAND, RING_HOLE } from '../draw';
+import { clipToBand, flattenToSheet, RING_BAND, RING_HOLE, TRIM } from '../draw';
 import { buildGeometry, foldOf } from '../layout';
-import type { Rect, SurfaceSlice } from '../layout';
+import type { PageGeometry, Rect, SurfaceSlice } from '../layout';
 import { foldPanels } from '../fold';
 import type { FoldPlan } from '../fold';
 import { drawGrid, drawLines, drawMemo, drawPart, drawPartAcross, drawSpanningMonthly } from '../parts';
@@ -51,9 +51,37 @@ export function buildPages(layout: Layout, size: SizeSpec, flipBinding = false):
       guides: [
         { type: 'rect', ...pg.ringBand, fill: RING_BAND },
         ...pg.holes.map(h => ({ type: 'circle' as const, cx: h.cx, cy: h.cy, r: h.r, fill: RING_HOLE })),
+        ...trimEdge(pg),
       ],
       sheet: pg.sheet,
     };
+  });
+}
+
+// Where the paper ends, drawn on screen only (these are guides, not ink).
+//
+// The sheet is white on a warm background, and the ring band is warm too, so
+// wherever the band runs along an edge the edge itself disappears -- on a fold
+// that is cut back, where the band stops at the cut, that reads as the sheet
+// being out of register with itself rather than as a corner that was cut off.
+// A hairline says where the paper is, whatever colour happens to be either
+// side of it, and it follows the cut.
+function trimEdge(pg: PageGeometry): Primitive[] {
+  const i = 0.1;
+  const W = pg.widthMm - i, H = pg.heightMm - i;
+  const n = pg.notch;
+  const pts: [number, number][] = !n
+    ? [[i, i], [W, i], [W, H], [i, H]]
+    : n.x < 0.01 && n.y < 0.01
+      ? [[n.x + n.w, i], [W, i], [W, H], [i, H], [i, n.y + n.h], [n.x + n.w, n.y + n.h]]
+      : n.x < 0.01
+        ? [[i, i], [W, i], [W, H], [n.x + n.w, H], [n.x + n.w, n.y], [i, n.y]]
+        : n.y < 0.01
+          ? [[i, i], [n.x, i], [n.x, n.y + n.h], [W, n.y + n.h], [W, H], [i, H]]
+          : [[i, i], [W, i], [W, n.y], [n.x, n.y], [n.x, H], [i, H]];
+  return pts.map((p, k): Primitive => {
+    const q = pts[(k + 1) % pts.length];
+    return { type: 'line', x1: p[0], y1: p[1], x2: q[0], y2: q[1], stroke: TRIM, strokeMm: 0.2 };
   });
 }
 

@@ -170,4 +170,8 @@ export const RULE_LIGHT: Color = [0.941, 0.918, 0.851];
 // every page edge, since the sheet sits on a white box.
 export const PAPER: Color = [1, 1, 1];
 export const RING_BAND: Color = [0.965, 0.957, 0.933];
+// Where the paper ends, on screen. The sheet is white on a warm background and
+// the ring band is warm too, so an edge with the band along it had nothing to
+// show for itself. Screen only -- it is a guide, not ink.
+export const TRIM: Color = [0.831, 0.816, 0.784];
 export const RING_HOLE: Color = [0.847, 0.824, 0.769];

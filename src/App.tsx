@@ -201,6 +201,26 @@ const CLEAR_INSET = 17;
 
 // What the design is, in the header. A fold says how many panels because that
 // is the thing you chose, and the thing the paper has to carry.
+// The outline of a fold that was cut back, as a clip path. The cut is always
+// a corner: it runs the whole way along one edge and out to the end of the
+// strip, so the paper is an L and six points describe it.
+function notchClip(pg: PageGeometry): string | undefined {
+  const n = pg.notch;
+  if (!n) return undefined;
+  const W = pg.widthMm, H = pg.heightMm;
+  const at = (x: number, y: number) => `${(x / W * 100).toFixed(3)}% ${(y / H * 100).toFixed(3)}%`;
+  const x0 = n.x, x1 = n.x + n.w, y0 = n.y, y1 = n.y + n.h;
+  const left = n.x < 0.01, top = n.y < 0.01;
+  const pts: [number, number][] = left && top
+    ? [[x1, 0], [W, 0], [W, H], [0, H], [0, y1], [x1, y1]]
+    : left
+      ? [[0, 0], [W, 0], [W, H], [x1, H], [x1, y0], [0, y0]]
+      : top
+        ? [[0, 0], [x0, 0], [x0, y1], [W, y1], [W, H], [0, H]]
+        : [[0, 0], [W, 0], [W, y0], [x0, y0], [x0, H], [0, H]];
+  return `polygon(${pts.map(([x, y]) => at(x, y)).join(', ')})`;
+}
+
 const formLabel = (l: Layout): string =>
   l.fold > 1 ? `蛇腹${l.fold}面` : l.spread ? '見開き' : '片面';
 
@@ -1418,25 +1438,25 @@ function CanvasScreen({ layout, setLayout, onBack }: {
           {geo.pages.map((pg, i) => (
             <div
               key={pg.key}
+              // A cut-back fold is cut out of the paper itself rather than
+              // covered by a patch painted the colour of what is behind it.
+              // The patch was a hair off the background -- two creams two
+              // values apart, meeting in a straight line under the ring band,
+              // which reads as a misprint rather than as a cut edge. The
+              // shadow has to be a filter to follow the shape: a box-shadow
+              // is the shadow of the box, which is not what the paper is.
               className={`page relative shrink-0 touch-none overflow-hidden bg-white ${
-                folded
+                pg.notch ? 'notched' : folded
                   ? 'shadow-[0_10px_30px_rgba(58,54,46,0.10)]'
                   : 'rounded-sm shadow-[0_10px_30px_rgba(58,54,46,0.16)]'
               }`}
-              style={{ width: pageW(i), height: pageH(i) }}
+              style={{
+                width: pageW(i), height: pageH(i),
+                clipPath: notchClip(pg),
+                filter: pg.notch ? 'drop-shadow(0 6px 14px rgba(58,54,46,0.14))' : undefined,
+              }}
             >
               <PageSvg page={pages[i]} scale={scale} showGuides />
-              {/* Paper that is not there. Drawn in the colour behind the sheet
-                  so the corner reads as cut off rather than as blank. */}
-              {pg.notch && (
-                <span
-                  className="notch pointer-events-none absolute z-10 border border-dashed border-line-strong bg-bg"
-                  style={{
-                    left: pg.notch.x * scale, top: pg.notch.y * scale,
-                    width: pg.notch.w * scale, height: pg.notch.h * scale,
-                  }}
-                />
-              )}
               {pg.spanRect && (
                 <button
                   className="hitbox absolute cursor-pointer p-0 hover:bg-[rgba(193,115,74,0.05)]"
