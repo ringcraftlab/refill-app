@@ -34,6 +34,20 @@ function Primitives({ items }: { items: Primitive[] }) {
             />
           );
         }
+        if (p.type === 'image') {
+          return (
+            <image
+              key={i}
+              href={p.src}
+              x={p.x} y={p.y} width={p.w} height={p.h}
+              opacity={p.opacity ?? 1}
+              // The frame is the area; the picture keeps its own shape inside
+              // it, cropped rather than squashed -- which is what the PDF does
+              // too, so the two agree.
+              preserveAspectRatio={p.fit === 'contain' ? 'xMidYMid meet' : 'xMidYMid slice'}
+            />
+          );
+        }
         if (p.type === 'line') {
           return (
             <line

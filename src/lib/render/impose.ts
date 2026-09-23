@@ -132,6 +132,9 @@ function scaleAbout(items: Primitive[], cx: number, cy: number, k: number): Prim
     if (p.type === 'rect') {
       return { ...p, x: sx(p.x), y: sy(p.y), w: p.w * k, h: p.h * k, strokeMm: p.strokeMm ? p.strokeMm * k : p.strokeMm };
     }
+    if (p.type === 'image') {
+      return { ...p, x: sx(p.x), y: sy(p.y), w: p.w * k, h: p.h * k };
+    }
     return { ...p, x: sx(p.x), y: sy(p.y), sizePt: p.sizePt * k };
   });
 }

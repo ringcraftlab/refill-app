@@ -44,7 +44,20 @@ export interface DrawCircle {
   strokeMm?: number;
 }
 
-export type Primitive = DrawRect | DrawLine | DrawText | DrawCircle;
+export interface DrawImage {
+  type: 'image';
+  x: number; y: number; w: number; h: number;
+  // A data URL. The bytes travel with the layout, because a refill has to
+  // keep printing after the file it came from has moved.
+  src: string;
+  // 0-1. A photo under a calendar has to give way to it.
+  opacity?: number;
+  // The box is the area the image fills; the picture keeps its own shape and
+  // is cropped to fit, the way a photo in a frame is.
+  fit?: 'cover' | 'contain';
+}
+
+export type Primitive = DrawRect | DrawLine | DrawText | DrawCircle | DrawImage;
 
 // A landscape refill is the same punched sheet held sideways, so its content
 // is rotated a quarter turn onto a portrait sheet whose holes stay on the long
@@ -72,7 +85,7 @@ export function flattenToSheet(page: Page): Primitive[] {
 
   // The sheet's x is the page's y; the sheet's y runs back down the page's x.
   return page.primitives.map((p): Primitive => {
-    if (p.type === 'rect') {
+    if (p.type === 'rect' || p.type === 'image') {
       return { ...p, x: p.y, y: H - p.x - p.w, w: p.h, h: p.w };
     }
     if (p.type === 'line') {
@@ -94,7 +107,7 @@ export function clipToBand(
 ): Primitive[] {
   const out: Primitive[] = [];
   for (const p of items) {
-    if (p.type === 'rect') {
+    if (p.type === 'rect' || p.type === 'image') {
       const x = Math.max(p.x, xMin), right = Math.min(p.x + p.w, xMax);
       if (right <= x) continue;
       out.push({ ...p, x: x + dx, y: p.y + dy, w: right - x });

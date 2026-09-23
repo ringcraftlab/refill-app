@@ -33,6 +33,20 @@ export interface SizeSpec {
   holes: HoleSpec;
 }
 
+// 紙の地。パーツの下に敷かれ、刷られる。
+export type BackgroundKind = 'none' | 'tint' | 'grid' | 'dot' | 'lines' | 'image';
+
+export interface Background {
+  kind: BackgroundKind;
+  // 'tint' と地紋の色。16進。
+  color?: string;
+  // 'image' のときのデータURL。レイアウトと一緒に保存されるので、元の
+  // ファイルが無くなっても刷り続けられる。
+  src?: string;
+  // 0-1。下にあるものは上のものに道を譲る。
+  opacity?: number;
+}
+
 export type WeekStart = 0 | 1;
 
 export type PartKind =
@@ -186,6 +200,8 @@ export interface Layout {
   // four is what printed one-page weeklies do.
   weekTiers: number;
   orientation: Orientation;
+  // 紙の地。省略は「なし」——これまで保存したものが全部そう。
+  background?: Background;
   // Printed refills usually tuck next month's dates into the spread's index
   // column, so it is on unless the user clears it.
   showNextMonth: boolean;

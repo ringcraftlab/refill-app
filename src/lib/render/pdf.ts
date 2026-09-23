@@ -1,4 +1,4 @@
-import { PDFDocument, rgb, PDFFont, PDFPage, degrees } from 'pdf-lib';
+import { PDFDocument, rgb, PDFFont, PDFImage, PDFPage, degrees } from 'pdf-lib';
 import fontkit from '@pdf-lib/fontkit';
 import type { Primitive } from '../draw';
 import { mmToPt } from '../sizes';
@@ -23,19 +23,44 @@ async function printFont(doc: PDFDocument): Promise<PrintFont> {
   return { font, chars: PRINT_FONT_CHARS };
 }
 
+// Every picture in the job, embedded once. A photo on a monthly is the same
+// photo on all twelve sheets, and embedding it twelve times would carry the
+// same megabyte twelve times over.
+async function embedImages(doc: PDFDocument, sheets: SheetContent[]): Promise<Map<string, PDFImage>> {
+  const out = new Map<string, PDFImage>();
+  const srcs = new Set<string>();
+  for (const sheet of sheets) {
+    for (const p of sheet.primitives) if (p.type === 'image') srcs.add(p.src);
+  }
+  for (const src of srcs) {
+    try {
+      out.set(src, src.startsWith('data:image/jpeg') || src.startsWith('data:image/jpg')
+        ? await doc.embedJpg(src)
+        : await doc.embedPng(src));
+    } catch {
+      // A picture that cannot be read is left out rather than losing the
+      // whole export; the sheet prints without it.
+    }
+  }
+  return out;
+}
+
 export async function sheetsToPdf(sheets: SheetContent[], title: string): Promise<Uint8Array> {
   const doc = await PDFDocument.create();
   doc.setTitle(title);
   const font = await printFont(doc);
+  const images = await embedImages(doc, sheets);
 
   for (const sheet of sheets) {
     const page = doc.addPage([mmToPt(sheet.widthMm), mmToPt(sheet.heightMm)]);
-    for (const prim of sheet.primitives) drawPrimitive(page, prim, sheet.heightMm, font);
+    for (const prim of sheet.primitives) drawPrimitive(page, prim, sheet.heightMm, font, images);
   }
   return doc.save();
 }
 
-function drawPrimitive(page: PDFPage, prim: Primitive, sheetH: number, pf: PrintFont) {
+function drawPrimitive(
+  page: PDFPage, prim: Primitive, sheetH: number, pf: PrintFont, images?: Map<string, PDFImage>,
+) {
   // Millimetres run down the sheet; PDF points run up it.
   const pt = (x: number, y: number) => ({ x: mmToPt(x), y: mmToPt(sheetH - y) });
 
@@ -64,6 +89,26 @@ function drawPrimitive(page: PDFPage, prim: Primitive, sheetH: number, pf: Print
       color: prim.fill ? rgb(...prim.fill) : undefined,
       borderColor: prim.stroke ? rgb(...prim.stroke) : undefined,
       borderWidth: prim.strokeMm ? mmToPt(prim.strokeMm) : 0,
+    });
+  } else if (prim.type === 'image') {
+    const img = images?.get(prim.src);
+    if (!img) return;
+    // The frame is the area; the picture keeps its own shape and is cropped to
+    // it, which is what the preview's `slice` does. pdf-lib cannot clip, so
+    // the crop is done by working out the covering box and drawing only the
+    // part of it that lands inside -- scaled so the frame is filled.
+    const box = { w: mmToPt(prim.w), h: mmToPt(prim.h) };
+    const k = prim.fit === 'contain'
+      ? Math.min(box.w / img.width, box.h / img.height)
+      : Math.max(box.w / img.width, box.h / img.height);
+    const w = img.width * k, h = img.height * k;
+    const origin = pt(prim.x, prim.y + prim.h);
+    page.drawImage(img, {
+      x: origin.x + (box.w - w) / 2,
+      y: origin.y + (box.h - h) / 2,
+      width: w,
+      height: h,
+      opacity: prim.opacity,
     });
   } else {
     // A character the subset does not carry has no glyph to draw, so it is
