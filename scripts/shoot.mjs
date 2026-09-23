@@ -309,7 +309,9 @@ if (await foldCard.count()) {
   // a rectangle, which is the one shape in the app that is not one.
   await page.goto(BASE);
   await page.locator('.sizerow', { hasText: '91×55mm' }).click();
-  await page.locator('.card', { hasText: '蛇腹3面' }).click();
+  // This size alone offers both directions, so the card has to be picked by
+  // the one it is.
+  await page.locator('.card').filter({ hasText: '蛇腹3面' }).filter({ hasText: '下に伸ばす' }).click();
   await shot('28-横長ミニ3穴の蛇腹');
   await page.getByRole('button', { name: 'この構成で作る' }).click();
   await page.locator('.page').first().waitFor();
@@ -320,6 +322,22 @@ if (await foldCard.count()) {
     { x: card.x + card.width / 2, y: card.y + card.height * 0.5 });
   console.log('切り落とし:', await page.locator('.notch').count());
   await shot('29-L字の帯に置く');
+
+  // The same size the other way: folding away from the rings keeps the strip
+  // a rectangle, at the cost of a 260mm ribbon. Both are offered because
+  // neither is plainly right, which is true of this size alone.
+  await page.goto(BASE);
+  await page.locator('.sizerow', { hasText: '91×55mm' }).click();
+  await page.locator('.card').filter({ hasText: '蛇腹3面' }).filter({ hasText: '横に伸ばす' }).click();
+  await page.getByRole('button', { name: 'この構成で作る' }).click();
+  await page.locator('.page').first().waitFor();
+  const ribbon = await page.locator('.page').first().boundingBox();
+  await drag(await centerOf(await stamp('マンスリー')),
+    { x: ribbon.x + ribbon.width * 0.17, y: ribbon.y + ribbon.height / 2 });
+  await drag(await centerOf(await stamp('メモ')),
+    { x: ribbon.x + ribbon.width * 0.5, y: ribbon.y + ribbon.height / 2 });
+  console.log('長方形の帯の切り落とし:', await page.locator('.notch').count());
+  await shot('30-同じサイズを横に伸ばす');
 }
 
 await browser.close();

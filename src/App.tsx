@@ -1,6 +1,6 @@
 import { Fragment, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import type { FoldCount, Layout, PartKind, RefillSize, SizeSpec } from './types';
+import type { FoldCount, FoldGrain, Layout, PartKind, RefillSize, SizeSpec } from './types';
 import { MAX_PARTS, SCHEMA_VERSION } from './types';
 import { holeCentres, SIZES } from './lib/sizes';
 import {
@@ -9,8 +9,8 @@ import {
 } from './lib/layout';
 import type { Divider, DropPoint, Geometry, PageGeometry } from './lib/layout';
 import type { Page } from './lib/draw';
-import { FOLD_PANELS, foldPanels, foldPlan } from './lib/fold';
-import type { FoldPanels, FoldPlan } from './lib/fold';
+import { FOLD_PANELS, foldGrainsOf, foldPanels, foldPlan } from './lib/fold';
+import type { FoldPlan } from './lib/fold';
 import { nextMonthCell } from './lib/parts';
 import { addDays, addMonths, isoDate, runDates } from './lib/dates';
 import {
@@ -208,6 +208,7 @@ export function App() {
         size={layout.size}
         spread={layout.spread}
         fold={layout.fold}
+        foldGrain={layout.foldGrain}
         onPick={(v) => setLayout(l => ({
           ...l,
           ...v,
@@ -216,7 +217,14 @@ export function App() {
           // layout as a part with nowhere to be drawn.
           spanning: v.fold > 1 ? null : l.spanning,
           surface: v.fold > 1
-            ? { ...l.surface, placed: l.surface.placed.slice(0, v.fold), page: undefined, ratios: {} }
+            ? {
+                ...l.surface,
+                placed: l.surface.placed.slice(0, v.fold),
+                page: undefined, ratios: {},
+                // The panels are a different shape now, so how they were
+                // shared out says nothing about this strip.
+                fold: undefined,
+              }
             : l.surface,
         }))}
         onBack={() => setStage('size')}
@@ -482,16 +490,19 @@ function SizeScreen({ selected, onPick }: { selected: RefillSize; onPick: (s: Re
 // finger just touched is the same paper, the same size, on the screen that
 // follows. Drawing it larger here because there was room made the two
 // screens look like two different apps.
-function SidesScreen({ size, spread, fold, onPick, onBack, onConfirm }: {
+function SidesScreen({ size, spread, fold, foldGrain, onPick, onBack, onConfirm }: {
   size: RefillSize;
   spread: boolean;
   fold: FoldCount;
-  onPick: (v: { spread: boolean; fold: FoldCount }) => void;
+  foldGrain?: FoldGrain;
+  onPick: (v: { spread: boolean; fold: FoldCount; foldGrain?: FoldGrain }) => void;
   onBack: () => void; onConfirm: () => void;
 }) {
   const spec = SIZES[size];
   const tint = SIZE_TINT[size];
   const flat = fold <= 1;
+  const grains = foldGrainsOf(spec);
+  const grain = foldGrain && grains.includes(foldGrain) ? foldGrain : grains[0];
 
   // Every choice is its own card with its own drawing, because the drawing is
   // the choice: a control that redraws one card makes the fold a setting of
@@ -500,7 +511,7 @@ function SidesScreen({ size, spread, fold, onPick, onBack, onConfirm }: {
   // A5 at three panels is the one, where the paper runs out before the rings
   // do and each inner panel comes to half a page.
   const choices: {
-    key: string; on: boolean; pick: { spread: boolean; fold: FoldCount };
+    key: string; on: boolean; pick: { spread: boolean; fold: FoldCount; foldGrain?: FoldGrain };
     title: string; note: string; sheets?: boolean[]; plan?: FoldPlan;
   }[] = [
     {
@@ -514,18 +525,26 @@ function SidesScreen({ size, spread, fold, onPick, onBack, onConfirm }: {
       key: 'single', on: flat && !spread, pick: { spread: false, fold: 1 },
       title: '片面（1ページ）', note: '1ページで完結', sheets: [false],
     },
-    ...FOLD_PANELS.flatMap(n => {
-      const plan = foldPlan(spec, n);
+    // Grouped by panel count, so the two shapes of the same count sit beside
+    // each other -- that pair is the comparison. Only one size has a pair;
+    // everywhere else this is one card per count, as before.
+    ...FOLD_PANELS.flatMap(n => grains.flatMap(g => {
+      const plan = foldPlan(spec, n, g);
       if (!plan) return [];
       return [{
-        key: `fold${n}`, on: fold === n, pick: { spread: false, fold: n as FoldCount },
+        key: `fold${n}${g}`,
+        on: fold === n && grain === g,
+        pick: { spread: false, fold: n as FoldCount, foldGrain: g },
         title: `蛇腹${n}面`,
         // The box you would measure on the table, not the fold's own axis:
-        // folding along the binding stands the strip up.
-        note: `広げて${plan.sheetWmm}×${plan.sheetHmm}mm`,
+        // folding along the binding stands the strip up. The direction comes
+        // first because with two of them that is what tells them apart.
+        note: grains.length > 1
+          ? `${g === 'along' ? '下' : '横'}に伸ばす・${plan.sheetWmm}×${plan.sheetHmm}mm`
+          : `広げて${plan.sheetWmm}×${plan.sheetHmm}mm`,
         plan,
       }];
-    }),
+    })),
   ];
   const picked = choices.find(c => c.on);
 

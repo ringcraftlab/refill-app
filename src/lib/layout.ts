@@ -134,7 +134,9 @@ export function weekSplit(totalRows: number): [number, number] {
 // layout falls back to one page rather than drawing something that cannot be
 // folded.
 export const foldOf = (layout: Layout, size: SizeSpec): FoldPlan | null =>
-  foldCountOf(layout) > 1 ? foldPlan(size, foldCountOf(layout) as FoldPanels) : null;
+  foldCountOf(layout) > 1
+    ? foldPlan(size, foldCountOf(layout) as FoldPanels, layout.foldGrain)
+    : null;
 
 // Defaulted rather than read straight off the layout: a layout that reached
 // here without going through the migration has no say in whether it folds,

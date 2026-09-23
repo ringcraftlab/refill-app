@@ -1,4 +1,5 @@
-import type { SizeSpec } from '../types';
+import type { FoldGrain, SizeSpec } from '../types';
+export type { FoldGrain };
 
 // 蛇腹（アコーディオン）の面の寸法。折った状態がバインダーの1ページで、
 // そこから紙が伸びる。面は座標ではなく「何面か」で決まるので、ここは
@@ -51,10 +52,9 @@ export const FOLD_MIN_SHARE = 0.75;
 //   'along' 折り目が綴じ辺と直角。面は綴じ辺に沿って伸び、内側の面は
 //           綴じ側をリングぶん削る。帯はL字になる。
 //
-// 'along' は綴じ辺が短辺のサイズ（＝幅より高さのないリフィル）のための
+// 'along' は綴じ辺が短辺のサイズ（＝幅が高さを上回るリフィル）のための
 // 向き。横長ミニ3穴は91×55で綴じ辺が55mm側なので、'out' だと3面で
 // 260.5×55mmの細長い帯になる。'along' なら91×164mmで、紙として扱える。
-export type FoldGrain = 'out' | 'along';
 
 export interface FoldPlan {
   panels: FoldPanels;
@@ -90,18 +90,28 @@ function maxAlongMm(acrossMm: number, paper = FOLD_PAPER): number {
   );
 }
 
-// 折る向きは選ばせない。綴じ辺が短辺のサイズだけ 'along' で、それ以外は
-// 'out'。9サイズのうち幅が高さを上回るのは横長ミニ3穴だけなので、実質は
-// そのためのもの。選択肢にしないのは、どちらが良いかが紙の形で決まって
-// しまっていて、ユーザーに選ばせるところがないため。
-export const foldGrainOf = (size: SizeSpec): FoldGrain =>
-  foldSpanMm(size) > bindSpanMm(size) ? 'along' : 'out';
+// そのサイズで選べる折る向き。先頭が既定。
+//
+// 高さのあるリフィル（9サイズ中8つ）は 'out' だけ。'along' でも紙には
+// 入るが、M5の2面なら 62×209.5mm の細長い帯に切り込みつきで、117.75×105mm
+// の長方形に勝つところがない。選択肢が増えるだけになる。
+//
+// 幅が高さを上回るリフィル——横長ミニ3穴だけ——は逆に、どちらが良いか
+// 決まらない。'along' は91×164mmとまとまるが切り込みが要り、'out' は
+// 260.5×55mmと細長いかわり長方形のまま。だからここだけ両方出す。
+export const foldGrainsOf = (size: SizeSpec): FoldGrain[] =>
+  foldSpanMm(size) > bindSpanMm(size) ? ['along', 'out'] : ['out'];
+
+export const foldGrainOf = (size: SizeSpec): FoldGrain => foldGrainsOf(size)[0];
 
 // 面は「リングに当たらない最大」を狙い、紙に入らなければそこで頭を打つ。
 // 幅を広くとるほど書ける面積は増えるが、面数と紙は動かせないので、
 // 削るのは内側の面の寸法だけ。
-export function foldPlan(size: SizeSpec, panels: FoldPanels, paper = FOLD_PAPER): FoldPlan | null {
-  const grain = foldGrainOf(size);
+export function foldPlan(
+  size: SizeSpec, panels: FoldPanels, want?: FoldGrain, paper = FOLD_PAPER,
+): FoldPlan | null {
+  const grains = foldGrainsOf(size);
+  const grain = want && grains.includes(want) ? want : grains[0];
   const along = grain === 'along';
   // 折る向きに1面目がどれだけあるか。'out' は綴じ辺と直角の寸法、
   // 'along' は綴じ辺そのものの長さ。

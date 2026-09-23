@@ -13,7 +13,7 @@ import { holeCentres, SIZES } from '../src/lib/sizes.ts';
 // own PAD came to 4.20mm on every size that was looked at.
 const INK_INSET_MM = 4.2;
 import { DEFAULT_IMPOSE, duplexFlip, planTiles } from '../src/lib/render/impose.ts';
-import { FOLD_PANELS, foldPlan, ringReachMm } from '../src/lib/fold.ts';
+import { FOLD_PANELS, foldGrainsOf, foldPlan, ringReachMm } from '../src/lib/fold.ts';
 
 let bad = 0;
 const check = (ok: boolean, line: string) => {
@@ -70,9 +70,9 @@ for (const s of Object.values(SIZES)) {
 console.log('');
 for (const s of Object.values(SIZES)) {
   const name = s.label.padEnd(10);
-  for (const panels of FOLD_PANELS) {
-    const plan = foldPlan(s, panels);
-    if (!plan) { check(true, `${name} ${panels}面 蛇腹にしない`); continue; }
+  for (const panels of FOLD_PANELS) for (const want of foldGrainsOf(s)) {
+    const plan = foldPlan(s, panels, want);
+    if (!plan) { check(true, `${name} ${panels}面 ${want} 蛇腹にしない`); continue; }
 
     // Folded, the inner panels lie behind the punched one.
     check(

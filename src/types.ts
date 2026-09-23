@@ -99,6 +99,11 @@ export type PageKey = 'single' | 'left' | 'right' | 'f1' | 'f2' | 'f3';
 // deliberately absent: see lib/fold.ts.
 export type FoldCount = 1 | 2 | 3;
 
+// Which way a 蛇腹 folds. 'out' folds away from the rings and the strip stays
+// a rectangle; 'along' folds across them and the panels after the punched one
+// are cut back to clear the holes. See lib/fold.ts.
+export type FoldGrain = 'out' | 'along';
+
 // How a 蛇腹's panels are shared out. The creases cannot be dragged -- the
 // paper bends where it bends -- so the structure is which panels go together,
 // not where a border sits. Within one of these the ordinary division applies:
@@ -148,6 +153,9 @@ export interface Layout {
   // only the first is punched, and the paper it prints on decides how wide
   // they can be. A fold and a spread are alternatives, never both.
   fold: FoldCount;
+  // Which way it folds. Only one size has both to choose from, and a layout
+  // that does not say takes that size's usual one.
+  foldGrain?: FoldGrain;
   spanning: Spanning | null;
   surface: Surface;
   // The first month generated. Dated parts repeat for `monthCount` months, so
