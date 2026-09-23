@@ -188,6 +188,18 @@ function ringEdgeFor(spread: boolean, onTop: boolean, key: PageKey, flip: boolea
 // spread calendar the other way would leave two bands too shallow to write in.
 export const splitFor = (w: number, h: number): 'h' | 'v' => (w >= h ? 'v' : 'h');
 
+// `photos` runs alongside `placed`, one entry per part. Nothing arrives with a
+// picture already in it, so every insertion puts a null in -- but it has to
+// go in at the same index, or a photo ends up under someone else's part.
+export const photosOf = (s: Surface): (string | null)[] =>
+  s.placed.map((_, i) => s.photos?.[i] ?? null);
+
+const withNulls = (s: Surface, at: number, count: number): (string | null)[] => {
+  const out = photosOf(s);
+  out.splice(at, 0, ...Array.from({ length: count }, () => null));
+  return out;
+};
+
 const cut = (r: Rect, ratio: number, vertical: boolean): [Rect, Rect] => vertical
   ? [{ ...r, w: r.w * ratio }, { ...r, x: r.x + r.w * ratio, w: r.w * (1 - ratio) }]
   : [{ ...r, h: r.h * ratio }, { ...r, y: r.y + r.h * ratio, h: r.h * (1 - ratio) }];
@@ -693,6 +705,7 @@ function addToFold(
 export function removeFromFold(surface: Surface, panels: number, slot: number): Surface {
   const groups = foldLayoutOf(surface, panels);
   const placed = surface.placed.filter((_, i) => i !== slot);
+  const photos = photosOf(surface).filter((_, i) => i !== slot);
   let seen = 0;
   const next: FoldGroup[] = [];
   for (const g of groups) {
@@ -707,7 +720,7 @@ export function removeFromFold(surface: Surface, panels: number, slot: number): 
     }
     next.push({ ...g, parts, ratios: mine ? {} : g.ratios });
   }
-  return { ...surface, placed, fold: placed.length ? next : undefined };
+  return { ...surface, placed, photos, fold: placed.length ? next : undefined };
 }
 
 // A fold fills panels, so placing is a question of which panel rather than of
@@ -732,20 +745,27 @@ function placeOnFold(
   let groups = foldLayoutOf(prev.surface, fold.panels);
   let placed = prev.surface.placed;
   let landed: number | null = null;
+  const added: number[] = [];
   for (const kind of toAdd) {
     const step = addToFold(groups, fold.panels, placed, kind, panel, stack, geo.foldDown);
     if (!step) return null;
     groups = step.groups;
     placed = step.placed;
+    added.push(step.at);
     if (landed === null) landed = step.at;
   }
+
+  const photos = photosOf(prev.surface);
+  // Every added part went in at a known index, so the pictures move with the
+  // parts they belong to rather than sliding along behind them.
+  for (const at of added) photos.splice(at, 0, null);
 
   const layout: Layout = {
     ...prev,
     // The band is a spread's way of holding one calendar across two pages. A
     // fold has no seam to cross, so the calendar is an ordinary part.
     spanning: null,
-    surface: { ...prev.surface, placed, fold: groups, page: undefined },
+    surface: { ...prev.surface, placed, photos, fold: groups, page: undefined },
   };
   if (!everyPartFits(layout, size)) return null;
   return { layout, overflow: kinds.length - toAdd.length, landed };
@@ -788,7 +808,12 @@ export function placeParts(
       ...prev,
       spanning: null,
       // First, so an even split hands it the left page.
-      surface: { ...prev.surface, placed: ['monthly', ...prev.surface.placed], ratios: {} },
+      surface: {
+        ...prev.surface,
+        placed: ['monthly', ...prev.surface.placed],
+        photos: withNulls(prev.surface, 0, 1),
+        ratios: {},
+      },
     };
     const sideways = onOnePage.surface.placed.length <= MAX_PARTS
       ? attempt(onOnePage, size, kinds, at && remapDrop(at, prev, onOnePage, size), true)
@@ -868,6 +893,7 @@ function attempt(
       candidates.push({
         ...cur,
         placed: first ? [incoming, ...cur.placed] : [...cur.placed, incoming],
+        photos: withNulls(cur, first ? 0 : cur.placed.length, 1),
         ratios: {},
         split,
       });
@@ -880,7 +906,12 @@ function attempt(
     const keep = cur.placed.length > 0 ? cur.split : splitFor(widthMm, heightMm);
     for (const split of [keep, keep === 'h' ? 'v' : 'h'] as const) {
       for (const order of orderings(toAdd)) {
-        candidates.push({ ...cur, placed: [...cur.placed, ...order], ratios: {}, split });
+        candidates.push({
+          ...cur,
+          placed: [...cur.placed, ...order],
+          photos: withNulls(cur, cur.placed.length, order.length),
+          ratios: {}, split,
+        });
       }
     }
   }

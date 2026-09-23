@@ -272,6 +272,19 @@ function ruled(area: Rect, title: string | null, pitch: number): Primitive[] {
   return out;
 }
 
+// A picture fills its area, cropped rather than squashed -- a photo in a
+// frame. With nothing in it yet, a hairline says where it will go; it is
+// faint enough to be no worse than a ruling if it ever reaches paper.
+export function drawPhoto(area: Rect, layout: Layout): Primitive[] {
+  if (layout.slotPhoto) {
+    return [{ type: 'image', ...area, src: layout.slotPhoto, fit: 'cover' }];
+  }
+  return [{
+    type: 'rect', ...area,
+    stroke: RULE, strokeMm: 0.15, dashMm: [1.6, 1.6],
+  }];
+}
+
 export const drawMemo = (area: Rect): Primitive[] => ruled(area, 'MEMO', 5);
 export const drawLines = (area: Rect): Primitive[] => ruled(area, null, 6);
 
@@ -658,6 +671,7 @@ export function drawPart(kind: PartKind, area: Rect, layout: Layout): Primitive[
     case 'todo': return drawTodo(area);
     case 'goal': return drawGoal(area);
     case 'budget': return drawBudget(area);
+    case 'photo': return drawPhoto(area, layout);
     case 'grid': return drawGrid(area);
     case 'lines': return drawLines(area);
     case 'memo': return drawMemo(area);

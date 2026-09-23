@@ -7,7 +7,7 @@ import { MAX_PARTS, SCHEMA_VERSION } from './types';
 import { holeCentres, SIZES } from './lib/sizes';
 import {
   buildGeometry, foldMaxParts, foldOf, isLandscape, MAX_RATIO, MIN_RATIO,
-  placeParts as planPlacement, regionAt, removeFromFold, ringsOnTop,
+  photosOf, placeParts as planPlacement, regionAt, removeFromFold, ringsOnTop,
 } from './lib/layout';
 import type { Divider, DropPoint, Geometry, PageGeometry } from './lib/layout';
 import type { Page } from './lib/draw';
@@ -123,6 +123,13 @@ function StampIcon({ kind }: { kind: PartKind }) {
   // Fewer lines than the ruled sheet, and not to the edges: somewhere to put
   // a few words rather than a page to fill.
   if (kind === 'memo') { cells.push(line(3.5, 6.5, ICON_W - 3.5, 6.5, 0), line(3.5, 11.5, ICON_W - 3.5, 11.5, 1)); }
+  // The shape a picture makes in a frame: a horizon and a sun. Drawn rather
+  // than ruled, because this is the one stamp that holds something that is
+  // not lines.
+  if (kind === 'photo') {
+    cells.push(<circle key="sun" cx={8} cy={6} r={1.8} />);
+    cells.push(<path key="hill" d={`M 2 ${ICON_H - 3.5} L 9 8 L 14 13 L 17 10 L ${ICON_W - 2} ${ICON_H - 3.5} Z`} />);
+  }
 
   return (
     <svg
@@ -149,6 +156,7 @@ const TRAY: { kind: PartKind; label: string }[] = [
   { kind: 'grid', label: '方眼' },
   { kind: 'lines', label: '罫線' },
   { kind: 'memo', label: 'メモ' },
+  { kind: 'photo', label: '写真' },
 ];
 
 const TAUGHT_KEY = 'ringcraft.dividerTaught';
@@ -171,6 +179,7 @@ const PART_LABEL: Record<PartKind, string> = {
   weekvert: '週間バーチカル', weekhoriz: '週間ホリゾンタル', gantt: 'ガントチャート',
   habit: 'ハビットトラッカー', todo: 'TODOリスト',
   goal: '今月の目標', budget: '家計', grid: '方眼', lines: '罫線', memo: 'メモ',
+  photo: '写真',
 };
 
 function createLayout(): Layout {
@@ -906,7 +915,11 @@ function CanvasScreen({ layout, setLayout, onBack }: {
     setLayout(prev => {
       const placed = [...prev.surface.placed];
       [placed[a], placed[b]] = [placed[b], placed[a]];
-      return { ...prev, surface: { ...prev.surface, placed } };
+      // The picture belongs to the stamp, not to the slot: swapping the two
+      // has to carry it along or the photo stays behind on the other part.
+      const photos = photosOf(prev.surface);
+      [photos[a], photos[b]] = [photos[b], photos[a]];
+      return { ...prev, surface: { ...prev.surface, placed, photos } };
     });
   };
 
@@ -917,6 +930,7 @@ function CanvasScreen({ layout, setLayout, onBack }: {
         return { ...prev, surface: removeFromFold(prev.surface, folded.panels, slot) };
       }
       const placed = prev.surface.placed.filter((_, i) => i !== slot);
+      const photos = photosOf(prev.surface).filter((_, i) => i !== slot);
       return {
         ...prev,
         // With nothing left beside it the calendar takes the page back, rather
@@ -928,7 +942,7 @@ function CanvasScreen({ layout, setLayout, onBack }: {
         // to goes with the part, or the next thing dropped in the middle
         // would still come out on one side.
         surface: {
-          ...prev.surface, placed, ratios: {},
+          ...prev.surface, placed, photos, ratios: {},
           page: placed.length === 0 ? undefined : prev.surface.page,
         },
       };
@@ -1524,6 +1538,74 @@ function CanvasScreen({ layout, setLayout, onBack }: {
   );
 }
 
+// The picture for one photo stamp. The bytes are kept on the surface next to
+// the part they belong to, so moving the part moves its picture and taking it
+// off takes the picture with it.
+function PhotoField({ layout, setLayout, size, slot }: {
+  layout: Layout; setLayout: (fn: (l: Layout) => Layout) => void; size: SizeSpec; slot: number;
+}) {
+  const file = useRef<HTMLInputElement>(null);
+  const [busy, setBusy] = useState('');
+  const src = layout.surface.photos?.[slot] ?? null;
+  // The area this stamp actually occupies on the paper, which is what the
+  // picture has to be big enough for -- a stamp on a quarter of a Micro5 does
+  // not need the pixels a full A5 does.
+  const box = useMemo(() => {
+    const region = buildGeometry(layout, size).surface.regions[slot];
+    return region ? { w: region.w, h: region.h } : { w: size.widthMm, h: size.heightMm };
+  }, [layout, size, slot]);
+
+  const set = (next: string | null) => setLayout(l => {
+    const photos = photosOf(l.surface);
+    photos[slot] = next;
+    return { ...l, surface: { ...l.surface, photos } };
+  });
+
+  const pick = async (f: File | undefined) => {
+    if (!f) return;
+    setBusy('読み込み中…');
+    try {
+      set(await importPhoto(f, box));
+      setBusy('');
+    } catch (e) {
+      setBusy(e instanceof Error ? e.message : '読み込めませんでした');
+    }
+  };
+
+  const bytes = src ? photoBytes(src) : 0;
+
+  return (
+    <Field label="写真">
+      <input
+        ref={file}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={e => { void pick(e.target.files?.[0]); e.target.value = ''; }}
+      />
+      <div className="flex items-center gap-2.5">
+        <Button variant="quiet" onClick={() => file.current?.click()}>
+          {src ? '選び直す' : '写真を選ぶ'}
+        </Button>
+        {src && <img src={src} alt="" className="h-12 w-12 rounded-[6px] border border-line-strong object-cover" />}
+        {src && <Button variant="quiet" onClick={() => set(null)}>外す</Button>}
+      </div>
+      {busy && <p className="m-0 text-[11px] text-muted">{busy}</p>}
+      {src ? (
+        <p className={`photo-size m-0 text-[11px] ${bytes > PHOTO_WARN_BYTES ? 'text-danger' : 'text-faint'}`}>
+          {`${Math.round(bytes / 1024)}KB。刷る大きさ（${Math.round(box.w)}×${Math.round(box.h)}mm）に合わせて縮めてあります`}
+          {bytes > PHOTO_WARN_BYTES && '。これより大きいと保存が通らないことがあります'}
+        </p>
+      ) : (
+        <p className="m-0 text-[11px] leading-snug text-faint">
+          枠いっぱいに入ります。縦横の比が違うぶんは切り取られるので、
+          見せたいところが端にある写真は先に切っておいてください
+        </p>
+      )}
+    </Field>
+  );
+}
+
 // The ground the sheet prints on. Not a part -- it is under all of them, so it
 // belongs to the refill rather than to a slot, and it is set from the chip
 // above the paper rather than by dropping something.
@@ -1912,6 +1994,10 @@ function PartSheet({ target, layout, setLayout, onClose, onRemove, onRemoveSpann
             value={layout.showNextMonth ? 'on' : 'off'}
             onPick={v => setLayout(l => ({ ...l, showNextMonth: v === 'on' }))}
           />
+        )}
+
+        {kind === 'photo' && typeof target !== 'string' && (
+          <PhotoField layout={layout} setLayout={setLayout} size={size} slot={target.slot} />
         )}
 
         {kind && layout.surface.placed.length >= 2 && (

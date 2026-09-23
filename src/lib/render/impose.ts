@@ -112,6 +112,12 @@ export function translate(items: Primitive[], dx: number, dy: number): Primitive
   return items.map((p): Primitive => {
     if (p.type === 'line') return { ...p, x1: p.x1 + dx, y1: p.y1 + dy, x2: p.x2 + dx, y2: p.y2 + dy };
     if (p.type === 'circle') return { ...p, cx: p.cx + dx, cy: p.cy + dy };
+    // An image may carry a clip -- the part of its box that the gutter left --
+    // and a clip left behind while the box moves would show the picture
+    // through a window somewhere else on the sheet.
+    if (p.type === 'image' && p.clip) {
+      return { ...p, x: p.x + dx, y: p.y + dy, clip: { ...p.clip, x: p.clip.x + dx, y: p.clip.y + dy } };
+    }
     return { ...p, x: p.x + dx, y: p.y + dy };
   });
 }
@@ -133,7 +139,10 @@ function scaleAbout(items: Primitive[], cx: number, cy: number, k: number): Prim
       return { ...p, x: sx(p.x), y: sy(p.y), w: p.w * k, h: p.h * k, strokeMm: p.strokeMm ? p.strokeMm * k : p.strokeMm };
     }
     if (p.type === 'image') {
-      return { ...p, x: sx(p.x), y: sy(p.y), w: p.w * k, h: p.h * k };
+      const clip = p.clip && {
+        x: sx(p.clip.x), y: sy(p.clip.y), w: p.clip.w * k, h: p.clip.h * k,
+      };
+      return { ...p, x: sx(p.x), y: sy(p.y), w: p.w * k, h: p.h * k, clip };
     }
     return { ...p, x: sx(p.x), y: sy(p.y), sizePt: p.sizePt * k };
   });

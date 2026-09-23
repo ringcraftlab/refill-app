@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { Fragment } from 'react';
 import type { Page, Primitive, Color } from '../draw';
 import { PAPER } from '../draw';
 import type { SheetContent } from './impose';
@@ -35,9 +35,8 @@ function Primitives({ items }: { items: Primitive[] }) {
           );
         }
         if (p.type === 'image') {
-          return (
+          const img = (
             <image
-              key={i}
               href={p.src}
               x={p.x} y={p.y} width={p.w} height={p.h}
               opacity={p.opacity ?? 1}
@@ -46,6 +45,18 @@ function Primitives({ items }: { items: Primitive[] }) {
               // too, so the two agree.
               preserveAspectRatio={p.fit === 'contain' ? 'xMidYMid meet' : 'xMidYMid slice'}
             />
+          );
+          if (!p.clip) return <Fragment key={i}>{img}</Fragment>;
+          // A nested svg is a viewport, and a viewport clips. Its viewBox is
+          // the same millimetres it occupies, so the picture inside keeps the
+          // page's coordinates and no clip-path id has to be made unique
+          // across the several svgs on screen at once.
+          const c = p.clip;
+          return (
+            <svg key={i} x={c.x} y={c.y} width={c.w} height={c.h}
+              viewBox={`${c.x} ${c.y} ${c.w} ${c.h}`}>
+              {img}
+            </svg>
           );
         }
         if (p.type === 'line') {

@@ -35,7 +35,7 @@ export function buildPages(layout: Layout, size: SizeSpec, flipBinding = false):
         if (!region) return;
         // Draw across the part's whole region, then keep this page's piece.
         primitives.push(...clipToBand(
-          drawnPart(kind, region, monthFor(layout, i), geo.surface.slices),
+          drawnPart(kind, region, slotLayout(layout, i), geo.surface.slices),
           slice.fromMm, slice.toMm,
           slice.ox - slice.fromMm, slice.oy,
         ));
@@ -65,6 +65,15 @@ const monthOrdinal = (placed: PartKind[], i: number): number =>
 const monthFor = (layout: Layout, i: number): Layout => {
   const n = monthOrdinal(layout.surface.placed, i);
   return n === 0 ? layout : { ...layout, ...addMonths(layout.year, layout.month, n) };
+};
+
+// What the part at this slot draws with: its own month, and its own picture.
+// The picture is handed over per slot rather than read from the surface,
+// because a part only ever knows the area it was given.
+const slotLayout = (layout: Layout, i: number): Layout => {
+  const base = monthFor(layout, i);
+  const photo = layout.surface.photos?.[i];
+  return photo ? { ...base, slotPhoto: photo } : base;
 };
 
 // How many months one sheet gets through, so the run can step by that much:

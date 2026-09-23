@@ -51,7 +51,7 @@ export type WeekStart = 0 | 1;
 
 export type PartKind =
   | 'monthly' | 'daylist' | 'weekvert' | 'weekhoriz' | 'gantt'
-  | 'habit' | 'todo' | 'goal' | 'budget' | 'grid' | 'lines' | 'memo';
+  | 'habit' | 'todo' | 'goal' | 'budget' | 'grid' | 'lines' | 'memo' | 'photo';
 
 // What a part needs to stay usable, and which way it wants to be shaped. The
 // habit tracker carries 31 day columns, so it needs width or its ticks become
@@ -91,6 +91,9 @@ export const PART_FIT: Record<PartKind, PartFit> = {
   grid:    { minWMm: 14, minHMm: 8,  prefer: 'any' },
   lines:   { minWMm: 16, minHMm: 8,  prefer: 'any' },
   memo:    { minWMm: 16, minHMm: 10, prefer: 'any' },
+  // A picture is whatever shape its area is; below this it is a stamp rather
+  // than something you can see.
+  photo:   { minWMm: 15, minHMm: 15, prefer: 'any' },
 };
 
 // Whether the refill is used upright or turned a quarter turn. This belongs
@@ -138,6 +141,12 @@ export interface FoldGroup {
 // the spread, one that fits in a half sits on that page alone.
 export interface Surface {
   placed: PartKind[];
+  // One entry per placed part, in the same order: the picture a photo slot
+  // holds, or null. Kept beside `placed` rather than inside it because every
+  // other part has nothing to carry, and a parallel list is the smaller change
+  // -- but it does mean every place that adds, removes or swaps a part has to
+  // do the same here.
+  photos?: (string | null)[];
   // Which page of a spread the parts live on. Omitted -- which is what every
   // layout saved before this said -- means both, the surface running across
   // the gutter as one. Set by dropping against a spread's outer edge, which
@@ -211,6 +220,11 @@ export interface Layout {
   // never saved: a layout in the editor has none and shows the first sheet of
   // its period.
   sheetStart?: string;
+  // The picture the slot being drawn holds. Set while a page is being drawn,
+  // like `sheetStart`, and never saved: parts are drawn from a kind and a
+  // layout, and this is how the one kind that carries something of its own
+  // gets it.
+  slotPhoto?: string;
 }
 
 export const MAX_PARTS = 4;

@@ -55,6 +55,10 @@ export interface DrawImage {
   // The box is the area the image fills; the picture keeps its own shape and
   // is cropped to fit, the way a photo in a frame is.
   fit?: 'cover' | 'contain';
+  // The part of the box that is actually inked. The picture is still laid out
+  // in the whole box, so a photo cut by the gutter carries on across it at the
+  // same scale instead of each sheet cropping its half on its own.
+  clip?: { x: number; y: number; w: number; h: number };
 }
 
 export type Primitive = DrawRect | DrawLine | DrawText | DrawCircle | DrawImage;
@@ -85,8 +89,13 @@ export function flattenToSheet(page: Page): Primitive[] {
 
   // The sheet's x is the page's y; the sheet's y runs back down the page's x.
   return page.primitives.map((p): Primitive => {
-    if (p.type === 'rect' || p.type === 'image') {
+    if (p.type === 'rect') {
       return { ...p, x: p.y, y: H - p.x - p.w, w: p.h, h: p.w };
+    }
+    if (p.type === 'image') {
+      const turn = (r: { x: number; y: number; w: number; h: number }) =>
+        ({ x: r.y, y: H - r.x - r.w, w: r.h, h: r.w });
+      return { ...p, ...turn(p), clip: p.clip && turn(p.clip) };
     }
     if (p.type === 'line') {
       return { ...p, x1: p.y1, y1: H - p.x1, x2: p.y2, y2: H - p.x2 };
@@ -107,10 +116,21 @@ export function clipToBand(
 ): Primitive[] {
   const out: Primitive[] = [];
   for (const p of items) {
-    if (p.type === 'rect' || p.type === 'image') {
+    if (p.type === 'rect') {
       const x = Math.max(p.x, xMin), right = Math.min(p.x + p.w, xMax);
       if (right <= x) continue;
       out.push({ ...p, x: x + dx, y: p.y + dy, w: right - x });
+    } else if (p.type === 'image') {
+      // The box is kept whole and only what shows is narrowed: cutting the box
+      // itself would make each sheet re-fit the picture to its own half and
+      // the two would not line up at the gutter.
+      const cur = p.clip ?? { x: p.x, y: p.y, w: p.w, h: p.h };
+      const x = Math.max(cur.x, xMin), right = Math.min(cur.x + cur.w, xMax);
+      if (right <= x) continue;
+      out.push({
+        ...p, x: p.x + dx, y: p.y + dy,
+        clip: { x: x + dx, y: cur.y + dy, w: right - x, h: cur.h },
+      });
     } else if (p.type === 'line') {
       if (p.x1 === p.x2) {
         if (p.x1 < xMin || p.x1 > xMax) continue;

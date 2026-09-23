@@ -359,4 +359,58 @@ if (await bgChip.count()) {
   await shot('32-方眼の地紋');
 }
 
+// A picture placed as a stamp. The file is made in the page rather than kept
+// as a fixture: what matters is that a photo lands in the slot it was dropped
+// in and stays inside it, not which photo it was.
+async function feedPhoto() {
+  await page.evaluate(async () => {
+    const c = document.createElement('canvas');
+    c.width = 900; c.height = 600;
+    const x = c.getContext('2d');
+    x.fillStyle = '#2f6f8f'; x.fillRect(0, 0, 900, 600);
+    x.fillStyle = '#e8b14a'; x.fillRect(0, 0, 450, 300);
+    x.fillStyle = '#b5495b'; x.fillRect(450, 300, 450, 300);
+    x.fillStyle = '#fff'; x.font = 'bold 120px sans-serif';
+    x.fillText('PHOTO', 120, 340);
+    const blob = await new Promise(r => c.toBlob(r, 'image/png'));
+    const dt = new DataTransfer();
+    dt.items.add(new File([blob], 'test.png', { type: 'image/png' }));
+    const input = document.querySelector('.sheet input[type=file]');
+    input.files = dt.files;
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  await page.locator('.photo-size').waitFor();
+}
+
+await page.goto(BASE);
+await page.locator('.sizerow', { hasText: '80×128mm' }).click();
+await page.locator('.card', { hasText: '見開き' }).click();
+await page.getByRole('button', { name: 'この構成で作る' }).click();
+await page.locator('.page').first().waitFor();
+const photoStamp = page.locator('.stamp', { hasText: '写真' });
+if (await photoStamp.count()) {
+  await drag(await centerOf(await stamp('マンスリー')), await centerOf(page.locator('.page').first()));
+  await drag(await centerOf(await stamp('写真')), await centerOf(page.locator('.page').nth(1)));
+  await shot('33-写真の枠を置く');
+  await page.locator('.hitbox.part[title="写真"]').click();
+  await feedPhoto();
+  await page.locator('.scrim').click({ position: { x: 10, y: 10 } });
+  await page.locator('.scrim').waitFor({ state: 'detached' });
+  await shot('34-写真が入る');
+
+  // The same picture across the gutter: one box cut by the fold of the
+  // spread, which each sheet has to carry its half of at the same scale.
+  await page.goto(BASE);
+  await page.locator('.sizerow', { hasText: '80×128mm' }).click();
+  await page.locator('.card', { hasText: '見開き' }).click();
+  await page.getByRole('button', { name: 'この構成で作る' }).click();
+  await page.locator('.page').first().waitFor();
+  await drag(await centerOf(await stamp('写真')), await centerOf(page.locator('.page').first()));
+  await page.locator('.hitbox.part[title="写真"]').first().click();
+  await feedPhoto();
+  await page.locator('.scrim').click({ position: { x: 10, y: 10 } });
+  await page.locator('.scrim').waitFor({ state: 'detached' });
+  await shot('35-見開き全面の写真');
+}
+
 await browser.close();

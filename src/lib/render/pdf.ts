@@ -1,4 +1,7 @@
-import { PDFDocument, rgb, PDFFont, PDFImage, PDFPage, degrees } from 'pdf-lib';
+import {
+  PDFDocument, rgb, PDFFont, PDFImage, PDFPage, degrees,
+  clip, closePath, endPath, lineTo, moveTo, popGraphicsState, pushGraphicsState,
+} from 'pdf-lib';
 import fontkit from '@pdf-lib/fontkit';
 import type { Primitive } from '../draw';
 import { mmToPt } from '../sizes';
@@ -94,15 +97,23 @@ function drawPrimitive(
     const img = images?.get(prim.src);
     if (!img) return;
     // The frame is the area; the picture keeps its own shape and is cropped to
-    // it, which is what the preview's `slice` does. pdf-lib cannot clip, so
-    // the crop is done by working out the covering box and drawing only the
-    // part of it that lands inside -- scaled so the frame is filled.
+    // it, which is what the preview's `slice` does. A covering picture is
+    // bigger than its frame, so the frame (or the narrower `clip`, where the
+    // gutter cut one) is pushed as a clipping path first -- otherwise the
+    // overflow would print over whatever sits beside it.
     const box = { w: mmToPt(prim.w), h: mmToPt(prim.h) };
     const k = prim.fit === 'contain'
       ? Math.min(box.w / img.width, box.h / img.height)
       : Math.max(box.w / img.width, box.h / img.height);
     const w = img.width * k, h = img.height * k;
     const origin = pt(prim.x, prim.y + prim.h);
+    const c = prim.clip ?? { x: prim.x, y: prim.y, w: prim.w, h: prim.h };
+    const lo = pt(c.x, c.y + c.h), hi = pt(c.x + c.w, c.y);
+    page.pushOperators(
+      pushGraphicsState(),
+      moveTo(lo.x, lo.y), lineTo(hi.x, lo.y), lineTo(hi.x, hi.y), lineTo(lo.x, hi.y),
+      closePath(), clip(), endPath(),
+    );
     page.drawImage(img, {
       x: origin.x + (box.w - w) / 2,
       y: origin.y + (box.h - h) / 2,
@@ -110,6 +121,7 @@ function drawPrimitive(
       height: h,
       opacity: prim.opacity,
     });
+    page.pushOperators(popGraphicsState());
   } else {
     // A character the subset does not carry has no glyph to draw, so it is
     // dropped rather than left to come out as a blank box.
