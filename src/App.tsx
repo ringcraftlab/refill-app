@@ -221,8 +221,13 @@ function notchClip(pg: PageGeometry): string | undefined {
   return `polygon(${pts.map(([x, y]) => at(x, y)).join(', ')})`;
 }
 
-const formLabel = (l: Layout): string =>
-  l.fold > 1 ? `蛇腹${l.fold}面` : l.spread ? '見開き' : '片面';
+// The L-shaped fold is a different sheet from the rectangular one -- it is cut
+// back on the binding side -- so it says so. The picker calls them 蛇腹N面 and
+// L字N面; the editor used to call both 蛇腹N面, which left no way to tell from
+// inside what you had picked.
+const formLabel = (l: Layout, grain?: FoldGrain): string =>
+  l.fold > 1 ? `${grain === 'along' ? 'L字' : '蛇腹'}${l.fold}面`
+    : l.spread ? '見開き' : '片面';
 
 // Not "ja / mix / en" but what each one prints. The name of a parameter tells
 // you nothing about what comes out of the printer; the sample is the answer.
@@ -889,7 +894,8 @@ function CanvasScreen({ layout, setLayout, onBack }: {
   // A spread's gap is the binder between two sheets. A fold has no gap to
   // draw: it is one sheet that bends, so the panels butt up and the creases
   // are marked on top of them.
-  const folded = !!foldOf(layout, size);
+  const foldNow = foldOf(layout, size);
+  const folded = !!foldNow;
   const gap = folded ? 0 : GAP;
   const gapPx = (n - 1) * gap;
   // A fold's panels are not all the same width -- only the punched one is a
@@ -1324,15 +1330,26 @@ function CanvasScreen({ layout, setLayout, onBack }: {
         {/* The two buttons keep their room; the name gives way. A long size
             name pushing them off the edge is worse than a name cut short. */}
         <span className="min-w-0 truncate">
-          {size.label} {size.widthMm}×{size.heightMm}mm ・ {formLabel(layout)}
+          {size.label}
+          {/* What gives way, in order, as the screen narrows: the millimetres
+              first, then the words on the two chips. The form the refill is
+              folded into never does -- on a phone it is what the title is
+              for, and the picker cannot be consulted afterwards. The chips
+              hold on to their words the longest they can, because a button
+              nobody recognises is a feature nobody finds. */}
+          <span className="hidden min-[400px]:inline"> {size.widthMm}×{size.heightMm}mm</span>
+          {' ・ '}{formLabel(layout, foldNow?.grain)}
         </span>
+        {/* Below 360px even these give up their words: what they were pushing
+            out of the title is worth more. The icons stay, and so do the
+            labels a screen reader reads. */}
         <Button variant="chip" className="rotate ml-auto" onClick={turn} aria-label="リフィルを回転">
           <span className="text-[13px] leading-none">↻</span>
-          {turnLabel}
+          <span className="hidden min-[360px]:inline">{turnLabel}</span>
         </Button>
         <Button variant="chip" className="magnify" onClick={() => setZoomed(true)} aria-label="大きく見る">
           <span className="text-[13px] leading-none">⤢</span>
-          大きく
+          <span className="hidden min-[360px]:inline">大きく</span>
         </Button>
       </header>
 
