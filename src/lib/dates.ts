@@ -1,11 +1,22 @@
-import type { Layout, WeekStart } from '../types';
+import type { DateWords, Layout, WeekStart } from '../types';
 import { rokuyo } from './kyureki';
 import { holidayName } from './holidays';
 
 const EN_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const JA_SHORT = ['日', '月', '火', '水', '木', '金', '土'];
+const EN_MONTH = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-// Jan 7 2024 was a Sunday, so +dow lands on the wanted weekday.
-export const weekdayLabel = (dow: number): string => EN_SHORT[dow];
+// 体裁で変わるのは「言葉」だけ——月の名前と曜日の名前。数字は数字のまま
+// なので、ここを通らない。省略時は今までどおり（9月・Mon）。
+export const weekdayLabel = (dow: number, words: DateWords = 'mix'): string =>
+  (words === 'ja' ? JA_SHORT : EN_SHORT)[dow];
+
+export const monthLabelText = (month: number, words: DateWords = 'mix'): string =>
+  (words === 'en' ? EN_MONTH[month - 1] : `${month}月`);
+
+// 見出しの数字に添える小さいほう。和文なら「月」、それ以外は英字の月名。
+export const monthSubText = (month: number, words: DateWords = 'mix'): string =>
+  (words === 'ja' ? '月' : EN_MONTH[month - 1]);
 
 export function addMonths(year: number, month: number, n: number): { year: number; month: number } {
   const zeroBased = year * 12 + (month - 1) + n;

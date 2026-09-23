@@ -6,6 +6,8 @@ import type { Rect, SurfaceSlice } from '../layout';
 import { foldPanels } from '../fold';
 import type { FoldPlan } from '../fold';
 import { drawGrid, drawLines, drawMemo, drawPart, drawPartAcross, drawSpanningMonthly } from '../parts';
+import type { Palette } from '../palette';
+import { paletteOf } from '../palette';
 import { drawBackground } from '../background';
 import { holeCentres } from '../sizes';
 import { addMonths, isoDate, sheetStarts } from '../dates';
@@ -218,7 +220,9 @@ function notchCut(plan: FoldPlan, flip: boolean): Primitive[] {
 
 // The spare side of a folded strip, panel by panel: only the punched one keeps
 // a ring strip clear.
-function foldFiller(size: SizeSpec, plan: FoldPlan, fill: BackFill, flip: boolean): Primitive[] {
+function foldFiller(
+  size: SizeSpec, plan: FoldPlan, fill: BackFill, flip: boolean, pal: Palette,
+): Primitive[] {
   if (fill === 'blank') return [];
   const m = 4;
   const down = plan.grain === 'along';
@@ -242,7 +246,9 @@ function foldFiller(size: SizeSpec, plan: FoldPlan, fill: BackFill, flip: boolea
       const right = at + span - (head && flip ? size.ringMarginMm : m);
       area = { x: left, y: m, w: right - left, h: plan.sheetHmm - m * 2 };
     }
-    out.push(...(fill === 'grid' ? drawGrid(area) : fill === 'lines' ? drawLines(area) : drawMemo(area)));
+    out.push(...(fill === 'grid' ? drawGrid(area, pal)
+      : fill === 'lines' ? drawLines(area, pal)
+      : drawMemo(area, pal)));
     at += span;
   });
   return out;
@@ -277,7 +283,7 @@ function punchGuide(size: SizeSpec, side: Side): Primitive[] {
   }));
 }
 
-function fillerFace(size: SizeSpec, fill: BackFill, side: Side): Primitive[] {
+function fillerFace(size: SizeSpec, fill: BackFill, side: Side, pal: Palette): Primitive[] {
   if (fill === 'blank') return [];
   const m = 4;
   const ring = size.ringMarginMm;
@@ -286,9 +292,9 @@ function fillerFace(size: SizeSpec, fill: BackFill, side: Side): Primitive[] {
   const right = size.widthMm - (side === 'right' ? ring : m);
   const bottom = size.heightMm - (side === 'bottom' ? ring : m);
   const area = { x: left, y: top, w: right - left, h: bottom - top };
-  if (fill === 'grid') return drawGrid(area);
-  if (fill === 'lines') return drawLines(area);
-  return drawMemo(area);
+  if (fill === 'grid') return drawGrid(area, pal);
+  if (fill === 'lines') return drawLines(area, pal);
+  return drawMemo(area, pal);
 }
 
 interface Duplexed { front: SheetContent; back: SheetContent }
@@ -411,8 +417,8 @@ export function buildPrintSheets(layout: Layout, size: SizeSpec, opts: PrintOpti
   });
   const spare = (side: Side) => asSheet({
     primitives: fold
-      ? foldFiller(size, fold, opts.backFill, flipped(side))
-      : fillerFace(size, opts.backFill, side),
+      ? foldFiller(size, fold, opts.backFill, flipped(side), paletteOf(layout))
+      : fillerFace(size, opts.backFill, side, paletteOf(layout)),
     side,
   });
 

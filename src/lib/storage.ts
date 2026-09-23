@@ -44,6 +44,11 @@ function migrate(raw: Record<string, unknown>): Layout | null {
     // Nothing saved before this folded.
     out = { ...out, version: 12, fold: 1 };
   }
+  if (out.version === 12) {
+    // 体裁は省略が既定（セピア・ふつう・9月 Mon）なので、足すのは番号だけ。
+    // 古い紙が黙って別の色で刷られないように、既定は今までの色そのもの。
+    out = { ...out, version: 13 };
+  }
   return out.version === SCHEMA_VERSION ? (out as unknown as Layout) : null;
 }
 

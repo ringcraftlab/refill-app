@@ -1,7 +1,8 @@
 import { Fragment, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import type {
-  Background, BackgroundKind, FoldCount, FoldGrain, Layout, PartKind, RefillSize, SizeSpec,
+  Background, BackgroundKind, DateWords, FoldCount, FoldGrain, InkTone, Layout, PartKind,
+  RefillSize, RuleWeight, SizeSpec,
 } from './types';
 import { MAX_PARTS, SCHEMA_VERSION } from './types';
 import { holeCentres, SIZES } from './lib/sizes';
@@ -12,6 +13,7 @@ import {
 import type { Divider, DropPoint, Geometry, PageGeometry } from './lib/layout';
 import type { Page } from './lib/draw';
 import { BACKGROUND_COLORS } from './lib/background';
+import { paletteOf, RULE_WEIGHT_ORDER, RULE_WEIGHTS, TONE_ORDER, TONES } from './lib/palette';
 import { importPhoto, PHOTO_WARN_BYTES, photoBytes } from './lib/photo';
 import { FOLD_PANELS, foldGrainsOf, foldPanels, foldPlan } from './lib/fold';
 import type { FoldPlan } from './lib/fold';
@@ -32,7 +34,7 @@ import { Dialog, Sheet, Toast } from './ui/Overlay';
 type Stage = 'size' | 'sides' | 'canvas';
 // A rectangle on screen, in the page area's own pixels.
 type Box = { key: string; left: number; top: number; width: number; height: number };
-type SheetTarget = { slot: number } | 'spanning' | 'load' | 'print' | 'background' | null;
+type SheetTarget = { slot: number } | 'spanning' | 'load' | 'print' | 'background' | 'look' | null;
 
 const GAP = 6;
 
@@ -201,6 +203,15 @@ const CLEAR_INSET = 17;
 // is the thing you chose, and the thing the paper has to carry.
 const formLabel = (l: Layout): string =>
   l.fold > 1 ? `蛇腹${l.fold}面` : l.spread ? '見開き' : '片面';
+
+// Not "ja / mix / en" but what each one prints. The name of a parameter tells
+// you nothing about what comes out of the printer; the sample is the answer.
+const WORD_SAMPLE: Record<DateWords, string> = {
+  ja: '9月 月', mix: '9月 Mon', en: 'Sep Mon',
+};
+
+const cssColor = (c: [number, number, number]) =>
+  `rgb(${c.map(v => Math.round(v * 255)).join(',')})`;
 
 const BACKGROUND_LABEL: Record<BackgroundKind, string> = {
   none: '背景なし', tint: '背景：色', grid: '背景：方眼',
@@ -1305,7 +1316,7 @@ function CanvasScreen({ layout, setLayout, onBack }: {
       {/* What the whole refill is, rather than what one part is: the months it
           covers and the ground it prints on. Above the paper, because both are
           design decisions and neither belongs inside the export sheet. */}
-      <div className="mb-0.5 ml-3.5 flex shrink-0 items-center gap-1.5 self-start">
+      <div className="mb-0.5 ml-3.5 mr-3 flex shrink-0 flex-wrap items-center gap-1.5 self-start">
       {dated && (
         <button
           className="range flex shrink-0 items-center gap-2 rounded-full border border-line-strong bg-white px-3 py-1.5 text-[11px] text-ink"
@@ -1327,6 +1338,18 @@ function CanvasScreen({ layout, setLayout, onBack }: {
         <Button variant="chip" onClick={() => setSheet('background')}>
           <span className="text-[13px] leading-none">▦</span>
           {BACKGROUND_LABEL[layout.background?.kind ?? 'none']}
+        </Button>
+        {/* The chip is the sample. It says the words it is set to, in the ink
+            it is set to, so what the体裁 is can be read without opening it --
+            which is the whole reason this is not a gear icon. */}
+        <Button
+          variant="chip"
+          className="look"
+          onClick={() => setSheet('look')}
+          style={{ color: cssColor(paletteOf(layout).ink) }}
+        >
+          <span className="text-[13px] font-semibold leading-none">Aa</span>
+          {WORD_SAMPLE[layout.words ?? 'mix']}
         </Button>
       </div>
 
@@ -1660,6 +1683,96 @@ function PhotoField({ layout, setLayout, size, slot }: {
   );
 }
 
+// How the refill is set: the words it prints, and the ink it prints them in.
+// One thing decided once for the whole refill, like the background -- if this
+// lived in the part sheets, every one of the twelve parts would grow the same
+// three rows, which is what makes a settings screen unreadable.
+//
+// It is deliberately NOT a gear: a gear says "the settings are somewhere in
+// here", and everything added later ends up inside it. The chip that opens
+// this says what it is set to.
+function LookSheet({ layout, setLayout }: {
+  layout: Layout; setLayout: (fn: (l: Layout) => Layout) => void;
+}) {
+  const words = layout.words ?? 'mix';
+  const tone = layout.tone ?? 'sepia';
+  const weight = layout.ruleWeight ?? 'normal';
+  const pal = paletteOf(layout);
+  const plain = words === 'mix' && tone === 'sepia' && weight === 'normal';
+
+  return (
+    <>
+      <Field label="日付の言葉">
+        <Segmented
+          options={(['ja', 'mix', 'en'] as DateWords[]).map(v => ({ v, label: WORD_SAMPLE[v] }))}
+          value={words}
+          onPick={v => setLayout(l => ({ ...l, words: v as DateWords }))}
+        />
+      </Field>
+
+      {/* Swatches rather than names: the colour is the thing being chosen, and
+          a word for a colour is a worse description of it than the colour. */}
+      <Field label="線と文字">
+        <div className="tones flex gap-2">
+          {TONE_ORDER.map(t => {
+            const on = tone === t;
+            return (
+              <button
+                key={t}
+                aria-label={TONES[t].label}
+                aria-pressed={on}
+                onClick={() => setLayout(l => ({ ...l, tone: t as InkTone }))}
+                className={`flex flex-1 flex-col items-center gap-1 rounded-[9px] border-2 bg-white py-2 text-[10px] ${
+                  on ? 'border-ink' : 'border-line-strong'
+                }`}
+              >
+                <span className="flex items-end gap-[3px]">
+                  <i className="block size-3.5 rounded-full" style={{ background: cssColor(TONES[t].ink) }} />
+                  <i className="block h-3.5 w-1.5 rounded-sm" style={{ background: cssColor(TONES[t].rule) }} />
+                </span>
+                <span style={{ color: cssColor(TONES[t].ink) }}>{TONES[t].label}</span>
+              </button>
+            );
+          })}
+        </div>
+      </Field>
+
+      <Field label="罫線の濃さ">
+        <Segmented
+          options={RULE_WEIGHT_ORDER.map(v => ({ v, label: RULE_WEIGHTS[v].label }))}
+          value={weight}
+          onPick={v => setLayout(l => ({ ...l, ruleWeight: v as RuleWeight }))}
+        />
+      </Field>
+
+      {/* Drawn, not described: a frame rule and three writing rules at the
+          weight that is actually set. The difference between うすい and ふつう
+          is a fraction of a percent of ink, and no word carries that. */}
+      <div className="rules flex flex-col gap-[7px] rounded-[9px] border border-line-strong bg-white px-3 py-3">
+        <i className="block h-[2px] rounded-sm" style={{ background: cssColor(pal.rule) }} />
+        {[0, 1, 2].map(i => (
+          <i key={i} className="block h-px" style={{ background: cssColor(pal.ruleLight) }} />
+        ))}
+      </div>
+
+      <p className="m-0 text-[11px] leading-snug text-faint">
+        日曜と土曜の色は体裁では変わりません。日曜が赤いのは好みではなく決まりごとなので、
+        色みに合わせて変えると意味がなくなります
+      </p>
+
+      {!plain && (
+        <Button
+          variant="quiet"
+          className="self-start"
+          onClick={() => setLayout(l => ({ ...l, words: undefined, tone: undefined, ruleWeight: undefined }))}
+        >
+          体裁を元に戻す
+        </Button>
+      )}
+    </>
+  );
+}
+
 // The ground the sheet prints on. Not a part -- it is under all of them, so it
 // belongs to the refill rather than to a slot, and it is set from the chip
 // above the paper rather than by dropping something.
@@ -1858,6 +1971,7 @@ function PartSheet({ target, layout, setLayout, inline, onClose, onRemove, onRem
   const title = target === 'load' ? '保存済みレイアウト'
     : target === 'print' ? 'PDF出力プレビュー'
     : target === 'background' ? '紙の背景'
+    : target === 'look' ? '体裁'
     : target === 'spanning' ? '見開きマンスリー'
     : kind ? PART_LABEL[kind] : 'パーツ';
 
@@ -1867,6 +1981,8 @@ function PartSheet({ target, layout, setLayout, inline, onClose, onRemove, onRem
         {target === 'background' && (
           <BackgroundSheet layout={layout} setLayout={setLayout} size={size} />
         )}
+
+        {target === 'look' && <LookSheet layout={layout} setLayout={setLayout} />}
 
         {target === 'load' && (
           saved.length === 0

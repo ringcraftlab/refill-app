@@ -413,4 +413,26 @@ if (await photoStamp.count()) {
   await shot('35-見開き全面の写真');
 }
 
+// The refill's own get-up: the words it prints and the ink it prints them in.
+// One decision for the whole refill, so it sits in a chip above the paper
+// rather than in every part's settings.
+await page.goto(BASE);
+await page.locator('.sizerow', { hasText: '80×128mm' }).click();
+await page.locator('.card', { hasText: '見開き' }).click();
+await page.getByRole('button', { name: 'この構成で作る' }).click();
+await page.locator('.page').first().waitFor();
+await drag(await centerOf(await stamp('マンスリー')), await centerOf(page.locator('.page').first()));
+await drag(await centerOf(await stamp('メモ')), await centerOf(page.locator('.page').nth(1)));
+const lookChip = page.locator('.look');
+if (await lookChip.count()) {
+  await lookChip.click();
+  await shot('36-体裁');
+  await page.locator('.sheet').getByRole('button', { name: '9月 月', exact: true }).click();
+  await page.locator('.tones').getByRole('button', { name: '藍' }).click();
+  await page.locator('.sheet').getByRole('button', { name: 'こい', exact: true }).click();
+  await page.locator('.scrim').click({ position: { x: 10, y: 10 } });
+  await page.locator('.scrim').waitFor({ state: 'detached' });
+  await shot('37-和文の藍で刷る');
+}
+
 await browser.close();

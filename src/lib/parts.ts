@@ -1,8 +1,10 @@
 import type { Layout, PageKey, PartKind } from '../types';
 import type { Color, Primitive } from './draw';
-import { INK, INK_FAINT, INK_SOFT, RULE, RULE_LIGHT, SATURDAY, SUNDAY } from './draw';
+import type { Palette } from './palette';
+import { paletteOf } from './palette';
 import {
-  daysInMonth, holidayOf, monthGrid, orderedWeekdays, rokuyoLabel, sheetDays, weekdayLabel,
+  daysInMonth, holidayOf, monthGrid, monthLabelText, monthSubText, orderedWeekdays, rokuyoLabel,
+  sheetDays, weekdayLabel,
 } from './dates';
 import { MONTHLY_HEADER_MM, ringsOnTop, weekSplit } from './layout';
 import type { Rect } from './layout';
@@ -29,12 +31,13 @@ const textWidthMm = (text: string, sizePt: number): number =>
 // so the year has to be on the sheet -- but it is not what anyone reads when
 // they pick one up, so it sits at half the size on the same baseline.
 function monthLabel(x: number, y: number, layout: Layout, sizePt: number): Primitive[] {
-  const month = `${layout.month}月`;
+  const pal = paletteOf(layout);
+  const month = monthLabelText(layout.month, layout.words);
   return [
-    { type: 'text', x, y, text: month, sizePt, color: INK, align: 'left' },
+    { type: 'text', x, y, text: month, sizePt, color: pal.ink, align: 'left' },
     {
       type: 'text', x: x + textWidthMm(month, sizePt) + sizePt * PT_MM * 0.3, y,
-      text: String(layout.year), sizePt: sizePt * 0.55, color: INK_SOFT, align: 'left',
+      text: String(layout.year), sizePt: sizePt * 0.55, color: pal.inkSoft, align: 'left',
     },
   ];
 }
@@ -42,11 +45,13 @@ function monthLabel(x: number, y: number, layout: Layout, sizePt: number): Primi
 // pages so the week rows come out the same height.
 const DOW_HEADER_H = MONTHLY_HEADER_MM;
 
-const dowColor = (dow: number): Color => (dow === 0 ? SUNDAY : dow === 6 ? SATURDAY : INK);
+const dowColor = (dow: number, pal: Palette): Color =>
+  (dow === 0 ? pal.sunday : dow === 6 ? pal.saturday : pal.ink);
 
 // A public holiday reads as a Sunday whatever weekday it falls on, which is
 // what every printed calendar does.
-const dateColor = (date: Date): Color => (holidayOf(date) ? SUNDAY : dowColor(date.getDay()));
+const dateColor = (date: Date, pal: Palette): Color =>
+  (holidayOf(date) ? pal.sunday : dowColor(date.getDay(), pal));
 
 function inset(area: Rect) {
   return {
@@ -60,7 +65,6 @@ function inset(area: Rect) {
 export const weekCount = (layout: Layout): number =>
   monthGrid(layout.year, layout.month, layout.weekStart).length;
 
-const EN_MONTH = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 interface MonthlySlice {
   // Slice of the seven weekday columns. The grid is always seven columns; a
@@ -87,6 +91,7 @@ export function drawMonthly(area: Rect, layout: Layout, slice: MonthlySlice): Pr
   const nCols = lead + dayCols;
   if (dayCols <= 0 || weeks.length === 0) return [];
 
+  const pal = paletteOf(layout);
   const { left, right, top, bottom } = inset(area);
   const width = right - left;
   const gridTop = top + (slice.monthLabel === 'none' ? 0 : MONTH_LABEL_H);
@@ -107,14 +112,14 @@ export function drawMonthly(area: Rect, layout: Layout, slice: MonthlySlice): Pr
   if (lead) {
     out.push({
       type: 'text', x: left + colW * 0.5, y: gridTop + DOW_HEADER_H - 1.1,
-      text: String(layout.year), sizePt: 5, color: INK_SOFT, align: 'center',
+      text: String(layout.year), sizePt: 5, color: pal.inkSoft, align: 'center',
     });
   }
   for (let c = 0; c < dayCols; c++) {
     const dow = dows[colStart + c];
     out.push({
       type: 'text', x: left + colW * (lead + c + 0.5), y: gridTop + DOW_HEADER_H - 1.1,
-      text: weekdayLabel(dow), sizePt: 5, color: dowColor(dow), align: 'center',
+      text: weekdayLabel(dow, layout.words), sizePt: 5, color: dowColor(dow, pal), align: 'center',
     });
   }
 
@@ -124,28 +129,28 @@ export function drawMonthly(area: Rect, layout: Layout, slice: MonthlySlice): Pr
     const cx = left + colW * 0.5;
     out.push({
       type: 'text', x: cx, y: bodyTop + Math.min(rowH * 0.55, 9),
-      text: String(layout.month), sizePt: Math.min(20, rowH * 1.4), color: INK, align: 'center',
+      text: String(layout.month), sizePt: Math.min(20, rowH * 1.4), color: pal.ink, align: 'center',
     });
     out.push({
       type: 'text', x: cx, y: bodyTop + Math.min(rowH * 0.8, 13),
-      text: EN_MONTH[layout.month - 1], sizePt: 6, color: INK_SOFT, align: 'center',
+      text: monthSubText(layout.month, layout.words), sizePt: 6, color: pal.inkSoft, align: 'center',
     });
     if (slice.miniMonth !== false && layout.showNextMonth && weeks.length >= 2) {
       out.push(...drawMiniMonth({ x: left, y: bodyTop + rowH, w: colW, h: rowH }, layout));
     }
   }
 
-  out.push({ type: 'rect', x: left, y: gridTop, w: width, h: bottom - gridTop, stroke: RULE, strokeMm: 0.25 });
-  out.push({ type: 'line', x1: left, y1: bodyTop, x2: right, y2: bodyTop, stroke: RULE, strokeMm: 0.2 });
+  out.push({ type: 'rect', x: left, y: gridTop, w: width, h: bottom - gridTop, stroke: pal.rule, strokeMm: 0.25 });
+  out.push({ type: 'line', x1: left, y1: bodyTop, x2: right, y2: bodyTop, stroke: pal.rule, strokeMm: 0.2 });
   // Columns divide this page's width among the columns it got, so a 3/4 spread
   // has wider cells on the four-column page — same as a printed refill.
   for (let c = 1; c < nCols; c++) {
     const x = left + colW * c;
-    out.push({ type: 'line', x1: x, y1: gridTop, x2: x, y2: bottom, stroke: RULE_LIGHT, strokeMm: 0.15 });
+    out.push({ type: 'line', x1: x, y1: gridTop, x2: x, y2: bottom, stroke: pal.ruleLight, strokeMm: 0.15 });
   }
   for (let r = 1; r < weeks.length; r++) {
     const y = bodyTop + rowH * r;
-    out.push({ type: 'line', x1: left, y1: y, x2: right, y2: y, stroke: RULE_LIGHT, strokeMm: 0.15 });
+    out.push({ type: 'line', x1: left, y1: y, x2: right, y2: y, stroke: pal.ruleLight, strokeMm: 0.15 });
   }
 
   // The printed refills set the six-day label beside the date on the same
@@ -161,12 +166,12 @@ export function drawMonthly(area: Rect, layout: Layout, slice: MonthlySlice): Pr
       const y = bodyTop + rowH * r;
       out.push({
         type: 'text', x, y: y + 3.2, text: String(cell.getDate()),
-        sizePt: 8, color: dateColor(cell), align: 'left',
+        sizePt: 8, color: dateColor(cell, pal), align: 'left',
       });
       if (roomForRokuyo) {
         out.push({
           type: 'text', x: left + colW * (lead + c + 1) - 0.9, y: y + 3.1,
-          text: rokuyoLabel(cell), sizePt: 4, color: SUNDAY, align: 'right',
+          text: rokuyoLabel(cell), sizePt: 4, color: pal.sunday, align: 'right',
         });
       }
       const holiday = roomForHoliday ? holidayOf(cell) : null;
@@ -176,7 +181,7 @@ export function drawMonthly(area: Rect, layout: Layout, slice: MonthlySlice): Pr
         const fit = Math.min(3.8, (colW - 1.8) / holiday.length * 2.6);
         out.push({
           type: 'text', x, y: y + 6.4, text: holiday,
-          sizePt: fit, color: SUNDAY, align: 'left',
+          sizePt: fit, color: pal.sunday, align: 'left',
         });
       }
     }
@@ -190,6 +195,7 @@ const MINI_MIN = 11;
 
 // Next month tucked into a free index cell, the way printed refills do it.
 function drawMiniMonth(cell: Rect, layout: Layout): Primitive[] {
+  const pal = paletteOf(layout);
   const year = layout.month === 12 ? layout.year + 1 : layout.year;
   const month = layout.month === 12 ? 1 : layout.month + 1;
   const weeks = monthGrid(year, month, layout.weekStart);
@@ -199,7 +205,10 @@ function drawMiniMonth(cell: Rect, layout: Layout): Primitive[] {
   if (w < MINI_MIN || h < MINI_MIN) return [];
 
   const out: Primitive[] = [
-    { type: 'text', x: left, y: top + 2.2, text: `${month}月`, sizePt: 4.5, color: INK_SOFT, align: 'left' },
+    {
+      type: 'text', x: left, y: top + 2.2, text: monthLabelText(month, layout.words),
+      sizePt: 4.5, color: pal.inkSoft, align: 'left',
+    },
   ];
   const gridTop = top + 3.2;
   const colW = w / 7;
@@ -212,7 +221,7 @@ function drawMiniMonth(cell: Rect, layout: Layout): Primitive[] {
       type: 'text',
       x: left + colW * (c + 0.5), y: gridTop + rowH * (r + 0.8),
       text: String(d.getDate()), sizePt: 3.2,
-      color: dateColor(d), align: 'center',
+      color: dateColor(d, pal), align: 'center',
     });
   }));
   return out;
@@ -258,16 +267,16 @@ export function drawSpanningMonthly(area: Rect, page: PageKey, layout: Layout): 
   });
 }
 
-function ruled(area: Rect, title: string | null, pitch: number): Primitive[] {
+function ruled(area: Rect, title: string | null, pitch: number, pal: Palette): Primitive[] {
   const { left, right, top, bottom } = inset(area);
   const out: Primitive[] = [];
   let y = top;
   if (title) {
-    out.push({ type: 'text', x: left, y: top + 2.8, text: title, sizePt: 5.5, color: INK_SOFT, align: 'left' });
+    out.push({ type: 'text', x: left, y: top + 2.8, text: title, sizePt: 5.5, color: pal.inkSoft, align: 'left' });
     y = top + 4.6;
   }
   for (; y <= bottom; y += pitch) {
-    out.push({ type: 'line', x1: left, y1: y, x2: right, y2: y, stroke: RULE_LIGHT, strokeMm: 0.15 });
+    out.push({ type: 'line', x1: left, y1: y, x2: right, y2: y, stroke: pal.ruleLight, strokeMm: 0.15 });
   }
   return out;
 }
@@ -276,17 +285,18 @@ function ruled(area: Rect, title: string | null, pitch: number): Primitive[] {
 // frame. With nothing in it yet, a hairline says where it will go; it is
 // faint enough to be no worse than a ruling if it ever reaches paper.
 export function drawPhoto(area: Rect, layout: Layout): Primitive[] {
+  const pal = paletteOf(layout);
   if (layout.slotPhoto) {
     return [{ type: 'image', ...area, src: layout.slotPhoto, fit: 'cover' }];
   }
   return [{
     type: 'rect', ...area,
-    stroke: RULE, strokeMm: 0.15, dashMm: [1.6, 1.6],
+    stroke: pal.rule, strokeMm: 0.15, dashMm: [1.6, 1.6],
   }];
 }
 
-export const drawMemo = (area: Rect): Primitive[] => ruled(area, 'MEMO', 5);
-export const drawLines = (area: Rect): Primitive[] => ruled(area, null, 6);
+export const drawMemo = (area: Rect, pal: Palette): Primitive[] => ruled(area, 'MEMO', 5, pal);
+export const drawLines = (area: Rect, pal: Palette): Primitive[] => ruled(area, null, 6, pal);
 
 // A row this short is a line you cannot write on. It is what a 31-row list
 // in the 90mm column the fit rule asks for comes out at, so it is the floor
@@ -316,6 +326,7 @@ export function dayListColumns(area: Rect, days: number): number {
 // spread hands each page half the month rather than cutting every row down
 // the middle.
 export function drawDayList(area: Rect, layout: Layout, range?: [number, number]): Primitive[] {
+  const pal = paletteOf(layout);
   const { left, right, top, bottom } = inset(area);
   const [first, last] = range ?? [1, daysInMonth(layout.year, layout.month)];
   const days = last - first + 1;
@@ -329,14 +340,14 @@ export function drawDayList(area: Rect, layout: Layout, range?: [number, number]
 
   const out: Primitive[] = monthLabel(left, top + MONTH_LABEL_H - 1.3, layout, 7);
 
-  out.push({ type: 'rect', x: left, y: gridTop, w: width, h: bottom - gridTop, stroke: RULE, strokeMm: 0.25 });
+  out.push({ type: 'rect', x: left, y: gridTop, w: width, h: bottom - gridTop, stroke: pal.rule, strokeMm: 0.25 });
 
   // A narrow column for the date and its weekday, the rest to write in.
   const gutter = Math.min(9, colW * 0.34);
   for (let c = 0; c < cols; c++) {
     const x = left + colW * c;
-    if (c > 0) out.push({ type: 'line', x1: x, y1: gridTop, x2: x, y2: bottom, stroke: RULE, strokeMm: 0.2 });
-    out.push({ type: 'line', x1: x + gutter, y1: gridTop, x2: x + gutter, y2: bottom, stroke: RULE_LIGHT, strokeMm: 0.15 });
+    if (c > 0) out.push({ type: 'line', x1: x, y1: gridTop, x2: x, y2: bottom, stroke: pal.rule, strokeMm: 0.2 });
+    out.push({ type: 'line', x1: x + gutter, y1: gridTop, x2: x + gutter, y2: bottom, stroke: pal.ruleLight, strokeMm: 0.15 });
   }
 
   for (let i = 0; i < days; i++) {
@@ -346,81 +357,82 @@ export function drawDayList(area: Rect, layout: Layout, range?: [number, number]
     const x = left + colW * col;
     const y = gridTop + rowH * (i % rows);
     if (i % rows > 0) {
-      out.push({ type: 'line', x1: x, y1: y, x2: x + colW, y2: y, stroke: RULE_LIGHT, strokeMm: 0.12 });
+      out.push({ type: 'line', x1: x, y1: y, x2: x + colW, y2: y, stroke: pal.ruleLight, strokeMm: 0.12 });
     }
-    const colour = dateColor(date);
+    const colour = dateColor(date, pal);
     const base = y + rowH * 0.74;
     out.push({
       type: 'text', x: x + 0.8, y: base, text: String(d),
       sizePt: Math.min(6.5, rowH * 1.7), color: colour, align: 'left',
     });
     out.push({
-      type: 'text', x: x + gutter - 0.8, y: base, text: weekdayLabel(date.getDay())[0],
+      type: 'text', x: x + gutter - 0.8, y: base, text: weekdayLabel(date.getDay(), layout.words)[0],
       sizePt: Math.min(4.5, rowH * 1.2), color: colour, align: 'right',
     });
   }
   return out;
 }
 
-export function drawTodo(area: Rect): Primitive[] {
+export function drawTodo(area: Rect, pal: Palette): Primitive[] {
   const { left, right, top, bottom } = inset(area);
   const out: Primitive[] = [
-    { type: 'text', x: left, y: top + 2.8, text: 'TO DO', sizePt: 5.5, color: INK_SOFT, align: 'left' },
+    { type: 'text', x: left, y: top + 2.8, text: 'TO DO', sizePt: 5.5, color: pal.inkSoft, align: 'left' },
   ];
   const pitch = 6, box = 2.4;
   for (let y = top + 7; y <= bottom; y += pitch) {
-    out.push({ type: 'rect', x: left, y: y - box, w: box, h: box, stroke: RULE, strokeMm: 0.2 });
-    out.push({ type: 'line', x1: left + box + 1.2, y1: y, x2: right, y2: y, stroke: RULE_LIGHT, strokeMm: 0.15 });
+    out.push({ type: 'rect', x: left, y: y - box, w: box, h: box, stroke: pal.rule, strokeMm: 0.2 });
+    out.push({ type: 'line', x1: left + box + 1.2, y1: y, x2: right, y2: y, stroke: pal.ruleLight, strokeMm: 0.15 });
   }
   return out;
 }
 
-export function drawGoal(area: Rect): Primitive[] {
+export function drawGoal(area: Rect, pal: Palette): Primitive[] {
   const { left, right, top, bottom } = inset(area);
   const out: Primitive[] = [
-    { type: 'rect', x: left, y: top, w: right - left, h: bottom - top, stroke: RULE, strokeMm: 0.25 },
-    { type: 'text', x: left + 1.5, y: top + 3.6, text: 'GOAL', sizePt: 5.5, color: INK, align: 'left' },
-    { type: 'line', x1: left, y1: top + 5, x2: right, y2: top + 5, stroke: RULE, strokeMm: 0.2 },
+    { type: 'rect', x: left, y: top, w: right - left, h: bottom - top, stroke: pal.rule, strokeMm: 0.25 },
+    { type: 'text', x: left + 1.5, y: top + 3.6, text: 'GOAL', sizePt: 5.5, color: pal.ink, align: 'left' },
+    { type: 'line', x1: left, y1: top + 5, x2: right, y2: top + 5, stroke: pal.rule, strokeMm: 0.2 },
   ];
   for (let y = top + 10; y <= bottom - 1.5; y += 5) {
-    out.push({ type: 'line', x1: left + 1.5, y1: y, x2: right - 1.5, y2: y, stroke: RULE_LIGHT, strokeMm: 0.15 });
+    out.push({ type: 'line', x1: left + 1.5, y1: y, x2: right - 1.5, y2: y, stroke: pal.ruleLight, strokeMm: 0.15 });
   }
   return out;
 }
 
-export function drawBudget(area: Rect): Primitive[] {
+export function drawBudget(area: Rect, pal: Palette): Primitive[] {
   const { left, right, top, bottom } = inset(area);
   const gridTop = top + 4.4;
   // A ruled column on the right for amounts, which is what makes this a
   // ledger rather than plain lines.
   const amountX = right - Math.min(18, (right - left) * 0.32);
   const out: Primitive[] = [
-    { type: 'text', x: left, y: top + 2.8, text: 'BUDGET', sizePt: 5.5, color: INK_SOFT, align: 'left' },
-    { type: 'rect', x: left, y: gridTop, w: right - left, h: bottom - gridTop, stroke: RULE, strokeMm: 0.2 },
-    { type: 'line', x1: amountX, y1: gridTop, x2: amountX, y2: bottom, stroke: RULE, strokeMm: 0.2 },
+    { type: 'text', x: left, y: top + 2.8, text: 'BUDGET', sizePt: 5.5, color: pal.inkSoft, align: 'left' },
+    { type: 'rect', x: left, y: gridTop, w: right - left, h: bottom - gridTop, stroke: pal.rule, strokeMm: 0.2 },
+    { type: 'line', x1: amountX, y1: gridTop, x2: amountX, y2: bottom, stroke: pal.rule, strokeMm: 0.2 },
   ];
   for (let y = gridTop + 5; y < bottom; y += 5) {
-    out.push({ type: 'line', x1: left, y1: y, x2: right, y2: y, stroke: RULE_LIGHT, strokeMm: 0.15 });
+    out.push({ type: 'line', x1: left, y1: y, x2: right, y2: y, stroke: pal.ruleLight, strokeMm: 0.15 });
   }
   return out;
 }
 
-export function drawGrid(area: Rect, pitch = 5): Primitive[] {
+export function drawGrid(area: Rect, pal: Palette, pitch = 5): Primitive[] {
   const { left, right, top, bottom } = inset(area);
   const out: Primitive[] = [];
   for (let y = top; y <= bottom; y += pitch) {
-    out.push({ type: 'line', x1: left, y1: y, x2: right, y2: y, stroke: RULE_LIGHT, strokeMm: 0.15 });
+    out.push({ type: 'line', x1: left, y1: y, x2: right, y2: y, stroke: pal.ruleLight, strokeMm: 0.15 });
   }
   for (let x = left; x <= right; x += pitch) {
-    out.push({ type: 'line', x1: x, y1: top, x2: x, y2: bottom, stroke: RULE_LIGHT, strokeMm: 0.15 });
+    out.push({ type: 'line', x1: x, y1: top, x2: x, y2: bottom, stroke: pal.ruleLight, strokeMm: 0.15 });
   }
   return out;
 }
 
 export function drawHabit(area: Rect, layout: Layout): Primitive[] {
+  const pal = paletteOf(layout);
   const { left, right, top, bottom } = inset(area);
   const out: Primitive[] = [];
-  out.push({ type: 'text', x: left, y: top + 2.8, text: 'HABIT', sizePt: 5.5, color: INK_SOFT, align: 'left' });
+  out.push({ type: 'text', x: left, y: top + 2.8, text: 'HABIT', sizePt: 5.5, color: pal.inkSoft, align: 'left' });
 
   const gridTop = top + 4.4;
   const nameW = Math.min(14, (right - left) * 0.3);
@@ -431,16 +443,16 @@ export function drawHabit(area: Rect, layout: Layout): Primitive[] {
   const days = monthGrid(layout.year, layout.month, layout.weekStart).flat().filter(Boolean).length;
   const colW = (right - left - nameW) / days;
 
-  out.push({ type: 'rect', x: left, y: gridTop, w: right - left, h: bottom - gridTop, stroke: RULE, strokeMm: 0.2 });
-  out.push({ type: 'line', x1: left + nameW, y1: gridTop, x2: left + nameW, y2: bottom, stroke: RULE, strokeMm: 0.2 });
+  out.push({ type: 'rect', x: left, y: gridTop, w: right - left, h: bottom - gridTop, stroke: pal.rule, strokeMm: 0.2 });
+  out.push({ type: 'line', x1: left + nameW, y1: gridTop, x2: left + nameW, y2: bottom, stroke: pal.rule, strokeMm: 0.2 });
   for (let r = 1; r < rows; r++) {
     const y = gridTop + rowH * r;
-    out.push({ type: 'line', x1: left, y1: y, x2: right, y2: y, stroke: RULE_LIGHT, strokeMm: 0.15 });
+    out.push({ type: 'line', x1: left, y1: y, x2: right, y2: y, stroke: pal.ruleLight, strokeMm: 0.15 });
   }
   if (colW >= 1.2) {
     for (let d = 1; d < days; d++) {
       const x = left + nameW + colW * d;
-      out.push({ type: 'line', x1: x, y1: gridTop, x2: x, y2: bottom, stroke: RULE_LIGHT, strokeMm: 0.1 });
+      out.push({ type: 'line', x1: x, y1: gridTop, x2: x, y2: bottom, stroke: pal.ruleLight, strokeMm: 0.1 });
     }
   }
   return out;
@@ -511,11 +523,12 @@ export function drawDateGrid(area: Rect, layout: Layout, spec: DateGridSpec): Pr
     return out;
   }
 
+  const pal = paletteOf(layout);
   const { left, right, top, bottom } = inset(area);
   const width = right - left;
   const out: Primitive[] = [];
   if (spec.title) {
-    out.push({ type: 'text', x: left, y: top + 2.8, text: spec.title, sizePt: 5.5, color: INK_SOFT, align: 'left' });
+    out.push({ type: 'text', x: left, y: top + 2.8, text: spec.title, sizePt: 5.5, color: pal.inkSoft, align: 'left' });
   }
 
   const dateCount = to - from;
@@ -526,9 +539,9 @@ export function drawDateGrid(area: Rect, layout: Layout, spec: DateGridSpec): Pr
     const d = dayAt(i);
     return spec.span === 'month'
       ? String(d.getDate())
-      : `${d.getDate()} ${weekdayLabel(d.getDay())}`;
+      : `${d.getDate()} ${weekdayLabel(d.getDay(), layout.words)}`;
   };
-  const dateTone = (i: number) => dateColor(dayAt(i));
+  const dateTone = (i: number) => dateColor(dayAt(i), pal);
 
   // Bound once so the kind narrows; reading spec.cross each time does not.
   const cross = spec.cross;
@@ -559,21 +572,21 @@ export function drawDateGrid(area: Rect, layout: Layout, spec: DateGridSpec): Pr
   const colW = bodyW / cols;
   const rowH = bodyH / rows;
 
-  out.push({ type: 'rect', x: left, y: gridTop, w: width, h: bottom - gridTop, stroke: RULE, strokeMm: 0.2 });
-  if (gutter > 0) out.push({ type: 'line', x1: bodyL, y1: gridTop, x2: bodyL, y2: bottom, stroke: RULE, strokeMm: 0.2 });
-  if (header > 0) out.push({ type: 'line', x1: left, y1: bodyT, x2: right, y2: bodyT, stroke: RULE, strokeMm: 0.2 });
+  out.push({ type: 'rect', x: left, y: gridTop, w: width, h: bottom - gridTop, stroke: pal.rule, strokeMm: 0.2 });
+  if (gutter > 0) out.push({ type: 'line', x1: bodyL, y1: gridTop, x2: bodyL, y2: bottom, stroke: pal.rule, strokeMm: 0.2 });
+  if (header > 0) out.push({ type: 'line', x1: left, y1: bodyT, x2: right, y2: bodyT, stroke: pal.rule, strokeMm: 0.2 });
 
   // Rules only where they can still be told apart.
   if (colW >= 1.2) {
     for (let c = 1; c < cols; c++) {
       const x = bodyL + colW * c;
-      out.push({ type: 'line', x1: x, y1: gridTop, x2: x, y2: bottom, stroke: RULE_LIGHT, strokeMm: 0.1 });
+      out.push({ type: 'line', x1: x, y1: gridTop, x2: x, y2: bottom, stroke: pal.ruleLight, strokeMm: 0.1 });
     }
   }
   if (rowH >= 1.2) {
     for (let r = 1; r < rows; r++) {
       const y = bodyT + rowH * r;
-      out.push({ type: 'line', x1: left, y1: y, x2: right, y2: y, stroke: RULE_LIGHT, strokeMm: 0.15 });
+      out.push({ type: 'line', x1: left, y1: y, x2: right, y2: y, stroke: pal.ruleLight, strokeMm: 0.15 });
     }
   }
 
@@ -605,7 +618,7 @@ export function drawDateGrid(area: Rect, layout: Layout, spec: DateGridSpec): Pr
       if (acrossDates) {
         out.push({
           type: 'text', x: bodyL - 0.8, y: bodyT + rowH * i + rowH * 0.7,
-          text: crossText(i), sizePt: size, color: INK_SOFT, align: 'right',
+          text: crossText(i), sizePt: size, color: pal.inkSoft, align: 'right',
         });
         // And again inside every day, not once down the far left. On a spread
         // the far column is most of a hand's width from that scale, and
@@ -616,14 +629,14 @@ export function drawDateGrid(area: Rect, layout: Layout, spec: DateGridSpec): Pr
           for (let d = 0; d < dateCount; d++) {
             out.push({
               type: 'text', x: bodyL + colW * d + 0.7, y: bodyT + rowH * i + rowH * 0.7,
-              text: crossText(i), sizePt: Math.min(size, 3), color: INK_FAINT, align: 'left',
+              text: crossText(i), sizePt: Math.min(size, 3), color: pal.inkFaint, align: 'left',
             });
           }
         }
       } else {
         out.push({
           type: 'text', x: bodyL + colW * (i + 0.5), y: bodyT - 0.9,
-          text: crossText(i), sizePt: size, color: INK_SOFT, align: 'center',
+          text: crossText(i), sizePt: size, color: pal.inkSoft, align: 'center',
         });
       }
     }
@@ -664,17 +677,18 @@ export function drawPart(kind: PartKind, area: Rect, layout: Layout): Primitive[
   const grid = DATE_GRIDS[kind];
   if (grid) return drawDateGrid(area, layout, grid(layout));
 
+  const pal = paletteOf(layout);
   switch (kind) {
     case 'monthly':
       return drawMonthly(area, layout, { cols: [0, 7], rows: [0, weekCount(layout)], monthLabel: 'show' });
     case 'daylist': return drawDayList(area, layout);
-    case 'todo': return drawTodo(area);
-    case 'goal': return drawGoal(area);
-    case 'budget': return drawBudget(area);
+    case 'todo': return drawTodo(area, pal);
+    case 'goal': return drawGoal(area, pal);
+    case 'budget': return drawBudget(area, pal);
     case 'photo': return drawPhoto(area, layout);
-    case 'grid': return drawGrid(area);
-    case 'lines': return drawLines(area);
-    case 'memo': return drawMemo(area);
+    case 'grid': return drawGrid(area, pal);
+    case 'lines': return drawLines(area, pal);
+    case 'memo': return drawMemo(area, pal);
     // Everything with a date on an axis was handled above.
     default: return [];
   }

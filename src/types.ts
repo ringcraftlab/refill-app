@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 12;
+export const SCHEMA_VERSION = 13;
 
 export type RefillSize =
   | 'MINI3' | 'CARD3' | 'M5' | 'M5SQ' | 'M6' | 'BIBLE' | 'NARROW' | 'A5SLIM' | 'A5';
@@ -211,6 +211,11 @@ export interface Layout {
   orientation: Orientation;
   // 紙の地。省略は「なし」——これまで保存したものが全部そう。
   background?: Background;
+  // 体裁。リフィル全体にかかるので、パーツではなくレイアウトが持つ。
+  // どれも省略できて、省略は今までどおりの見た目になる。
+  words?: DateWords;
+  tone?: InkTone;
+  ruleWeight?: RuleWeight;
   // Printed refills usually tuck next month's dates into the spread's index
   // column, so it is on unless the user clears it.
   showNextMonth: boolean;
@@ -226,5 +231,17 @@ export interface Layout {
   // gets it.
   slotPhoto?: string;
 }
+
+// 日付まわりの言葉。月名と曜日名だけが変わる。
+// 'mix' は「9月」＋「Mon」で、日本の市販リフィルで一番よく見る形。
+export type DateWords = 'ja' | 'mix' | 'en';
+
+// 線と文字の色。土日祝の色は**どれを選んでも変わらない** — 日曜が赤いのは
+// 好みではなく約束事で、色みに合わせて変えると意味が消える。
+export type InkTone = 'sepia' | 'grey' | 'indigo' | 'green';
+
+// 罫線の濃さ。家庭のプリンタで飛ぶ・濃すぎるを直すための軸なので、
+// 文字には効かせない（読めなくなる）。
+export type RuleWeight = 'light' | 'normal' | 'dark';
 
 export const MAX_PARTS = 4;
