@@ -11,7 +11,8 @@ import { paletteOf } from '../palette';
 import { drawBackground } from '../background';
 import { holeCentres } from '../sizes';
 import { addMonths, isoDate, sheetStarts } from '../dates';
-import { DEFAULT_IMPOSE, duplexFlip, impose, planTiles } from './impose';
+import { DEFAULT_IMPOSE, duplexFlip, impose, PAPERS, planTiles } from './impose';
+import type { PaperId } from './impose';
 import type { DuplexFlip, TilePlan } from './impose';
 import type { SheetContent } from './impose';
 
@@ -145,10 +146,13 @@ export interface PrintOptions {
   backFill: BackFill;
   // Printed, unlike the editor's guides: you cannot punch what you cannot see.
   punchGuides: boolean;
+  // What the refills are laid out on. Only the tiling depends on it.
+  paper: PaperId;
 }
 
 export const DEFAULT_PRINT: PrintOptions = {
   impose: true,
+  paper: 'a4',
   copies: 1,
   cutLines: true,
   scalePercent: 100,
@@ -427,7 +431,10 @@ function facesInOrder(layout: Layout, size: SizeSpec, duplex: boolean): Face[] {
 // their punched sheets, chained front to back, then laid out on paper.
 export function buildPrintSheets(layout: Layout, size: SizeSpec, opts: PrintOptions): SheetContent[] {
   const faces = facesInOrder(layout, size, opts.duplex);
-  const spec = { ...DEFAULT_IMPOSE, cutLines: opts.cutLines, scalePercent: opts.scalePercent };
+  const spec = {
+    ...DEFAULT_IMPOSE,
+    paper: PAPERS[opts.paper], cutLines: opts.cutLines, scalePercent: opts.scalePercent,
+  };
   const fold = foldOf(layout, size);
   const sheetSize = sheetSizeOf(layout, size);
   // On a fold the far edge is the turned-over strip, which is what decides
@@ -493,16 +500,23 @@ export function buildPrintSheets(layout: Layout, size: SizeSpec, opts: PrintOpti
 // the screen passes what the run actually comes to.
 export const paperPlan = (
   size: SizeSpec, count?: number, sheet?: { widthMm: number; heightMm: number },
-): TilePlan => planTiles(sheet ?? { widthMm: size.widthMm, heightMm: size.heightMm }, DEFAULT_IMPOSE, count);
+  paper: PaperId = 'a4',
+): TilePlan => planTiles(
+  sheet ?? { widthMm: size.widthMm, heightMm: size.heightMm },
+  { ...DEFAULT_IMPOSE, paper: PAPERS[paper] },
+  count,
+);
 
 export const perPaperCount = (
   size: SizeSpec, count?: number, sheet?: { widthMm: number; heightMm: number },
-): number => paperPlan(size, count, sheet).perPage;
+  paper: PaperId = 'a4',
+): number => paperPlan(size, count, sheet, paper).perPage;
 
 // What the export screen has to say before anything is printed: a duplex job
 // only lands right if the paper is turned the way the tiling assumes.
-export const duplexFlipOf = (layout: Layout, size: SizeSpec, count?: number): DuplexFlip =>
-  duplexFlip(paperPlan(size, count, sheetSizeOf(layout, size)));
+export const duplexFlipOf = (
+  layout: Layout, size: SizeSpec, count?: number, paper: PaperId = 'a4',
+): DuplexFlip => duplexFlip(paperPlan(size, count, sheetSizeOf(layout, size), paper));
 
 // How many physical refill sheets a run comes to, which is what a single
 // imposition run has to place. A spread is two faces on one sheet's back and

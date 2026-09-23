@@ -12,6 +12,25 @@ export interface SheetContent {
 
 export const A4 = { widthMm: 210, heightMm: 297 };
 
+// The paper the refills are laid out on. A4 is what a home printer eats, but
+// it is not the only paper this app is printed on: A3 and B4 are what a
+// convenience-store printer takes, and a year of Bible-size goes from four
+// sheets to two on A3. A5 and B5 are for when that is the paper you have.
+//
+// The paper decides the tiling only. It does NOT decide what can be designed:
+// a fold's panels stay capped by A4 whatever is chosen here, so nothing made
+// in this app is a thing that will not print on ordinary paper.
+export const PAPERS = {
+  a4: { label: 'A4', widthMm: 210, heightMm: 297 },
+  a3: { label: 'A3', widthMm: 297, heightMm: 420 },
+  b4: { label: 'B4', widthMm: 257, heightMm: 364 },
+  a5: { label: 'A5', widthMm: 148, heightMm: 210 },
+  b5: { label: 'B5', widthMm: 182, heightMm: 257 },
+} as const;
+
+export type PaperId = keyof typeof PAPERS;
+export const PAPER_ORDER: PaperId[] = ['a4', 'a3', 'b4', 'a5', 'b5'];
+
 export interface ImposeSpec {
   paper: { widthMm: number; heightMm: number };
   gapMm: number;

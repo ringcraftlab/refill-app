@@ -24,6 +24,8 @@ import {
   duplexFlipOf, imposeCount, MONTH_PACED, paperPlan, punchInset, runEnd, sheetCount, sheetSizeOf,
 } from './lib/render/pages';
 import type { BackFill, PrintOptions } from './lib/render/pages';
+import { PAPER_ORDER, PAPERS } from './lib/render/impose';
+import type { PaperId } from './lib/render/impose';
 import { PageSvg, SheetSvg } from './lib/render/svg';
 import { downloadPdf, sheetsToPdf } from './lib/render/pdf';
 import { deleteLayout, listLayouts, newId, saveLayout } from './lib/storage';
@@ -777,10 +779,10 @@ function FoldIcon({ size, tint, plan }: {
 // carries the punch guide, whose rim comes 2.0-3.3mm in, while every other
 // edge is clear for 4.2mm. So the note says the number the user has to
 // compare against their own printer rather than a verdict this cannot reach.
-function EdgeNote({ size, count, sheet }: {
-  size: SizeSpec; count: number; sheet?: { widthMm: number; heightMm: number };
+function EdgeNote({ size, count, sheet, paper }: {
+  size: SizeSpec; count: number; sheet?: { widthMm: number; heightMm: number }; paper: PaperId;
 }) {
-  const plan = paperPlan(size, count, sheet);
+  const plan = paperPlan(size, count, sheet, paper);
   const tight: string[] = [];
   if (plan.sideMm < 0.75) tight.push('左右');
   if (plan.endMm < 0.75) tight.push('上下');
@@ -1152,7 +1154,9 @@ function CanvasScreen({ layout, setLayout, onBack }: {
     const sheets = buildPrintSheets(layout, size, opts);
     downloadPdf(await sheetsToPdf(sheets, layout.name), `${layout.name || 'refill'}.pdf`);
     setSheet(null);
-    say(opts.impose ? `A4 ${sheets.length}枚を書き出しました` : `原寸 ${sheets.length}枚を書き出しました`);
+    say(opts.impose
+      ? `${PAPERS[opts.paper].label} ${sheets.length}枚を書き出しました`
+      : `原寸 ${sheets.length}枚を書き出しました`);
   };
 
   // A region crossing the gutter shows up on both pages, so one region can be
@@ -2105,23 +2109,36 @@ function PartSheet({ target, layout, setLayout, inline, onClose, onRemove, onRem
           <>
             <PrintPreview layout={layout} size={size} print={print} />
             <Choice
-              label="用紙"
-              options={[{ v: 'a4', label: 'A4にまとめる' }, { v: 'exact', label: '原寸のまま' }]}
-              value={print.impose ? 'a4' : 'exact'}
-              onPick={v => setPrint(p => ({ ...p, impose: v === 'a4' }))}
+              label="刷り方"
+              options={[{ v: 'tile', label: '用紙にまとめる' }, { v: 'exact', label: '原寸のまま' }]}
+              value={print.impose ? 'tile' : 'exact'}
+              onPick={v => setPrint(p => ({ ...p, impose: v === 'tile' }))}
             />
+            {/* The paper decides the tiling and nothing else: a fold's panels
+                are capped by A4 whatever is picked here, so a refill made in
+                this app always prints on ordinary paper too. A3 and B4 are
+                what a convenience store takes. */}
+            {print.impose && (
+              <Choice
+                label="用紙"
+                options={PAPER_ORDER.map(v => ({ v, label: PAPERS[v].label }))}
+                value={print.paper}
+                onPick={v => setPrint(p => ({ ...p, paper: v as PaperId }))}
+              />
+            )}
             {/* The browser's own paragraph margin, kept deliberately: it is the
                 breathing room between the paper choice and the print options. */}
             <p className="print-summary my-[13px] text-[13px] text-faint">
               {hasDatedPart(layout) && `${layout.year}年${layout.month}月から${layout.monthCount}ヶ月分・`}
               {isDayPaced(layout) && `${sheetCount(layout)}枚・`}
-              {print.impose && `A4 1枚に ${paperPlan(size, imposeCount(layout, size, print), sheetSizeOf(layout, size)).perPage} ${layout.fold > 1 ? '本' : '面'}`}
+              {print.impose && `${PAPERS[print.paper].label} 1枚に ${paperPlan(size, imposeCount(layout, size, print), sheetSizeOf(layout, size), print.paper).perPage} ${layout.fold > 1 ? '本' : '面'}`}
             </p>
             {print.impose && (
               <EdgeNote
                 size={size}
                 count={imposeCount(layout, size, print)}
                 sheet={sheetSizeOf(layout, size)}
+                paper={print.paper}
               />
             )}
 
@@ -2140,7 +2157,7 @@ function PartSheet({ target, layout, setLayout, inline, onClose, onRemove, onRem
               <p className="duplex-note m-0 mb-[13px] text-[12px] text-faint">
                 プリンタの両面設定は
                 <strong className="font-semibold text-label">
-                  {duplexFlipOf(layout, size, imposeCount(layout, size, print))}
+                  {duplexFlipOf(layout, size, imposeCount(layout, size, print), print.paper)}
                 </strong>
                 。紙の隅にも刷ってあります
               </p>

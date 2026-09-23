@@ -12,7 +12,7 @@ import { holeCentres, SIZES } from '../src/lib/sizes.ts';
 // Measured off the rendered page, not derived here: OUTER_MM plus each part's
 // own PAD came to 4.20mm on every size that was looked at.
 const INK_INSET_MM = 4.2;
-import { DEFAULT_IMPOSE, duplexFlip, planTiles } from '../src/lib/render/impose.ts';
+import { DEFAULT_IMPOSE, duplexFlip, PAPER_ORDER, PAPERS, planTiles } from '../src/lib/render/impose.ts';
 import { FOLD_PANELS, foldGrainsOf, foldPlan, ringReachMm } from '../src/lib/fold.ts';
 
 let bad = 0;
@@ -49,6 +49,19 @@ for (const s of Object.values(SIZES)) {
     plan.sideMm >= 0 && plan.endMm >= 0,
     `${name} ${turned}に入る（${plan.cols}列×${plan.rows}段 = ${plan.perPage}面`
     + `・外周 左右${plan.sideMm.toFixed(1)} 上下${plan.endMm.toFixed(1)}mm）`,
+  );
+
+  // Every paper the export screen offers, not just A4: a size that does not
+  // fit one of them would print off the edge with nothing saying so.
+  const perPaper = PAPER_ORDER.map(id => {
+    const t = planTiles(s, { ...DEFAULT_IMPOSE, paper: PAPERS[id] });
+    return { id, t, ok: t.sideMm >= 0 && t.endMm >= 0 };
+  });
+  check(
+    perPaper.every(p => p.ok),
+    `${name} どの用紙にも入る（`
+    + perPaper.map(p => `${PAPERS[p.id].label}${p.t.paper.widthMm > p.t.paper.heightMm ? '横' : '縦'}`
+      + `${p.t.perPage}面`).join(' ') + '）',
   );
 
   // Where the block runs to the paper's edge, the refill's own edge is the
@@ -103,6 +116,19 @@ for (const s of Object.values(SIZES)) {
       `${name} ${panels}面 外枠${plan.sheetWmm}×${plan.sheetHmm} が${turned}に`
       + `${tile.cols}列×${tile.rows}段 = ${tile.perPage}本`
       + `・両面は${duplexFlip(tile)}`,
+    );
+
+    // A strip is the one thing that can be longer than the paper, so the
+    // papers that cannot take it are named rather than found out in print.
+    const strips = PAPER_ORDER.map(id => {
+      const t = planTiles({ widthMm: plan.sheetWmm, heightMm: plan.sheetHmm },
+        { ...DEFAULT_IMPOSE, paper: PAPERS[id] });
+      return { id, t, ok: t.sideMm >= 0 && t.endMm >= 0 };
+    });
+    check(
+      strips.some(p => p.ok) && strips.filter(p => p.ok).some(p => p.id === 'a4'),
+      `${name} ${panels}面 の帯が入る用紙（`
+      + strips.map(p => `${PAPERS[p.id].label}${p.ok ? `${p.t.perPage}本` : '×'}`).join(' ') + '）',
     );
 
     // The panels have to add up to the strip, or the creases land somewhere

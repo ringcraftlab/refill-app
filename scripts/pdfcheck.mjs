@@ -60,6 +60,31 @@ doc.getPages().forEach((p, i) => {
   console.log(`  page${i + 1}: ${(width * MM).toFixed(1)} x ${(height * MM).toFixed(1)} mm`);
 });
 
+// The paper is a choice now, and the page that comes out has to be the paper
+// that was picked -- a tiling that ignored it would still look plausible on
+// screen and print off the edge.
+// The export closes the sheet behind it, so it is opened again first.
+await page.getByRole('button', { name: 'PDF出力プレビュー' }).click();
+await page.locator('.preview').waitFor();
+const papers = page.locator('.sheet').getByRole('button', { name: 'A3', exact: true });
+if (await papers.count()) {
+  await papers.click();
+  await page.waitForTimeout(300);
+  console.log('A3 says:', (await page.locator('.print-summary').textContent()).trim());
+  const dl3 = page.waitForEvent('download');
+  await page.getByRole('button', { name: '書き出す' }).click();
+  const a3 = `${OUT}/a3.pdf`;
+  await (await dl3).saveAs(a3);
+  const doc3 = await PDFDocument.load(await readFile(a3));
+  const { width, height } = doc3.getPage(0).getSize();
+  const mm = [width * MM, height * MM].map(v => Math.round(v)).sort((a, b) => a - b);
+  console.log(`  A3 pdf: ${doc3.getPageCount()} pages, ${mm[1]}x${mm[0]} mm`);
+  if (mm[0] !== 297 || mm[1] !== 420) {
+    console.log('  NG A3を選んだのにA3で出ていない');
+    process.exitCode = 1;
+  }
+}
+
 // Look at it rather than trusting the numbers.
 const viewer = await ctx.newPage();
 await viewer.setViewportSize({ width: 900, height: 1200 });
