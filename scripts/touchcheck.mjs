@@ -67,5 +67,28 @@ await swipe(await middleOf(page.locator('.stamp', { hasText: 'マンスリー' }
   await middleOf(page.locator('.page').first()), 18);
 check(await page.locator('.part').count() === 1, '紙に向かって引けばパーツは取れる');
 
+// The borders take a finger too. They were left capturing the pointer on
+// touch -- the one thing that stopped a stamp leaving the tray -- and a
+// border that will not move under a finger reads as one that cannot be moved.
+const sheet = await page.locator('.page').first().boundingBox();
+// The tray scrolls, so the second stamp has to be brought into view first --
+// otherwise the swipe starts off-screen and nothing moves.
+const memo = page.locator('.stamp', { hasText: 'メモ' });
+await memo.scrollIntoViewIfNeeded();
+await page.waitForTimeout(200);
+await swipe(await middleOf(memo),
+  { x: sheet.x + sheet.width / 2, y: sheet.y + sheet.height * 0.85 }, 18);
+console.log('  置いたパーツ:', await page.locator('.part').count());
+const handle = page.locator('.divider').first();
+if (await handle.count()) {
+  const before = await handle.boundingBox();
+  const from = { x: before.x + before.width / 2, y: before.y + before.height / 2 };
+  await swipe(from, { x: from.x, y: from.y - 60 }, 14);
+  const after = await page.locator('.divider').first().boundingBox();
+  check(Math.abs(after.y - before.y) > 20, `つまみも指で動く（${(after.y - before.y).toFixed(0)}px）`);
+} else {
+  check(false, 'つまみが出ない（2つ置けていない）');
+}
+
 await browser.close();
 if (bad) process.exitCode = 1;

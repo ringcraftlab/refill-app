@@ -1003,7 +1003,12 @@ function CanvasScreen({ layout, setLayout, onBack }: {
   };
 
   const startDivider = (e: React.PointerEvent, d: Divider) => {
-    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    // Same rule as the tray: a mouse has to be captured or its moves go to
+    // whatever is under the cursor; a finger already has the capture and
+    // taking it again is what stopped a stamp being dragged out of the tray.
+    // This one was left capturing both, and a border that will not move under
+    // a finger looks exactly like a border that is not draggable.
+    if (e.pointerType !== 'touch') (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
     if (!taught) {
       setTaught(true);
       try { localStorage.setItem(TAUGHT_KEY, '1'); } catch { /* private mode */ }

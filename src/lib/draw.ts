@@ -130,7 +130,11 @@ export const SUNDAY: Color = [0.788, 0.482, 0.576];
 export const SATURDAY: Color = [0.431, 0.561, 0.651];
 export const RULE: Color = [0.894, 0.874, 0.827];
 export const RULE_LIGHT: Color = [0.941, 0.918, 0.851];
-// Refill stock is cream, not screen white.
-export const PAPER: Color = [0.992, 0.980, 0.925];
+// White, because that is what comes out of the printer. The editor used to
+// draw the sheet cream, which looked like the refill stock it is meant to be
+// printed on -- but nothing prints that colour, so the screen was promising
+// something the paper does not keep. It also put a cream-on-white seam along
+// every page edge, since the sheet sits on a white box.
+export const PAPER: Color = [1, 1, 1];
 export const RING_BAND: Color = [0.965, 0.957, 0.933];
 export const RING_HOLE: Color = [0.847, 0.824, 0.769];
