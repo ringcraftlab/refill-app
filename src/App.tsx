@@ -33,7 +33,7 @@ import { downloadPdf, sheetsToPdf } from './lib/render/pdf';
 import { deleteLayout, layoutsRevision, listLayouts, newId, saveLayout } from './lib/storage';
 import { Button } from './ui/Button';
 import { Field, Segmented, Stepper } from './ui/Field';
-import { Dialog, Sheet, Toast } from './ui/Overlay';
+import { Dialog, Modal, Sheet, Toast } from './ui/Overlay';
 
 type Stage = 'size' | 'sides' | 'canvas';
 // A rectangle on screen, in the page area's own pixels.
@@ -1387,6 +1387,7 @@ function CanvasScreen({ layout, setLayout, onBack }: {
         say(`「${name}」を同じ紙に置きました`);
       }}
       onOpenPrint={() => setSheet('print')}
+      say={say}
     />
   );
 
@@ -2243,11 +2244,14 @@ type PaperJob = ReturnType<typeof usePaperJob>;
 // to keep this refill and start another one on the same paper. Taking the ＋
 // away in that case was the wrong fix: the empty place is still real, and
 // what to do about it is exactly what someone pressing it wants to know.
-function PaperFill({ size, print, setPrint, job, onSaveAndNew, currentName }: {
+function PaperFill({ size, print, setPrint, job, onAdd, onSaveAndNew, currentName }: {
   size: SizeSpec;
   print: PrintOptions;
   setPrint: (fn: (p: PrintOptions) => PrintOptions) => void;
   job: PaperJob;
+  // Putting one on the paper is the same act from either picture, toast and
+  // all, so it is done in one place.
+  onAdd: (l: Layout) => void;
   // Save what is on the screen and start another refill on this same paper.
   onSaveAndNew: () => void;
   currentName: string;
@@ -2273,6 +2277,11 @@ function PaperFill({ size, print, setPrint, job, onSaveAndNew, currentName }: {
         {PAPERS[print.paper].label} 1枚にリフィル{perPaper}{job.unit}・いま{used}{job.unit}（紙{sheets}枚）
         {spare > 0 ? `・最後の紙にあと${spare}${job.unit}ぶん` : '・あきはありません'}
       </p>
+      {spare > 0 && (
+        <p className="fill-how m-0 text-[12px] text-accent">
+          あと{spare}{job.unit}入れられます。空きの ＋ をタップして入れてください
+        </p>
+      )}
 
       {/* The sheet, at a size worth pressing: this is the control, not an
           illustration beside one. */}
@@ -2334,7 +2343,7 @@ function PaperFill({ size, print, setPrint, job, onSaveAndNew, currentName }: {
       {picking !== null && (
         <AddPicker
           size={size} print={print} canShare={canShare} job={job}
-          onAdd={l => add(l, 1)} onClose={() => setPicking(null)}
+          onAdd={l => { onAdd(l); setPicking(null); }} onClose={() => setPicking(null)}
           onSaveAndNew={onSaveAndNew} currentName={currentName}
         />
       )}
@@ -2355,30 +2364,17 @@ function AddPicker({ size, print, canShare, job, onAdd, onClose, onSaveAndNew, c
   onSaveAndNew: () => void;
   currentName: string;
 }) {
-  const box = useRef<HTMLDivElement>(null);
-  // Pressed there, answered there: in a sheet that scrolls, that has to be
-  // asked for, or on a 900px window the answer opens below the fold and the
-  // press reads as nothing happening.
-  useLayoutEffect(() => {
-    box.current?.scrollIntoView({ block: 'end', behavior: 'smooth' });
-  }, []);
   return (
-    <div
-      ref={box}
-      className="picker flex flex-col gap-1.5 rounded-[10px] border border-accent bg-accent-soft/40 p-2"
-    >
-      <span className="flex items-center gap-2">
-        {/* What this paper can still take, not what is missing from the
-            store. "There are no saved refills" is the app's own bookkeeping
-            talking; the press was about the paper. */}
-        <strong className="flex-1 text-[12px] font-normal text-muted">
-          {job.spare > 0
-            ? `${PAPERS[print.paper].label}の${job.sheets}枚目に、あとリフィル${job.spare}${job.unit}ぶん入ります`
-            : `${PAPERS[print.paper].label}${job.sheets}枚に、あきはありません`}
-        </strong>
-        <Button variant="quiet" onClick={onClose}>やめる</Button>
-      </span>
-      <ul className="basket m-0 flex max-h-56 list-none flex-col gap-1.5 overflow-y-auto p-0">
+    <Modal title="ここに入れるリフィル" onClose={onClose}>
+      {/* What this paper can still take, not what is missing from the store.
+          "There are no saved refills" is the app's own bookkeeping talking;
+          the press was about the paper. */}
+      <p className="picker m-0 text-[12px] text-muted">
+        {job.spare > 0
+          ? `${PAPERS[print.paper].label}の${job.sheets}枚目に、あとリフィル${job.spare}${job.unit}ぶん入ります`
+          : `${PAPERS[print.paper].label}${job.sheets}枚に、あきはありません`}
+      </p>
+      <ul className="basket m-0 flex list-none flex-col gap-1.5 p-0">
         {canShare.map(l => {
           const n = print.also.find(a => a.id === l.id)?.n ?? 0;
           const adds = imposeCount(l, size, print);
@@ -2417,8 +2413,17 @@ function AddPicker({ size, print, canShare, job, onAdd, onClose, onSaveAndNew, c
       <span className="text-[10px] leading-snug text-faint">
         いまの「{currentName}」をこの紙に置いて、白紙をもう1枚ひらきます
       </span>
-    </div>
+    </Modal>
   );
+}
+
+// What the paper has left once this many refills are on it. Worked out again
+// rather than subtracted: the tiling itself can change with the count （Micro5
+// goes 6-up upright and 8-up turned), and a number that is only nearly right
+// is worse here than none.
+function spareWith(layout: Layout, size: SizeSpec, print: PrintOptions, used: number): number {
+  const p = paperPlan(size, used, sheetSizeOf(layout, size), print.paper);
+  return p.perPage > 0 ? (p.perPage - (used % p.perPage)) % p.perPage : 0;
 }
 
 // The places on a printed sheet that nothing is going on, drawn over the
@@ -2488,7 +2493,7 @@ function basketOf(layout: Layout, size: SizeSpec): Layout[] {
 
 function PartSheet({
   target, layout, setLayout, inline, onClose, onRemove, onRemoveSpanning, onLoad, onSave, size,
-  onExport, print, setPrint, onSaveAndNew, onOpenPrint,
+  onExport, print, setPrint, onSaveAndNew, onOpenPrint, say,
 }: {
   target: Exclude<SheetTarget, null>;
   layout: Layout;
@@ -2512,6 +2517,7 @@ function PartSheet({
   onSaveAndNew: () => void;
   // From the paper to what it comes out as.
   onOpenPrint: () => void;
+  say: (message: string) => void;
 }) {
   const lastMonth = addMonths(layout.year, layout.month, Math.max(1, layout.monthCount) - 1);
   const saved = useMemo(() => target === 'load' ? listLayouts() : [], [target]);
@@ -2519,6 +2525,18 @@ function PartSheet({
   const { also, perPaper } = job;
   // An empty place pressed on the printed sheet itself.
   const [pickHere, setPickHere] = useState(false);
+  // One refill onto the paper: the picture updates behind the modal, so the
+  // modal goes and says what the paper has left. Pressing ＋ again is how the
+  // second one goes on -- every press shows its own result.
+  const addToPaper = (l: Layout) => {
+    const left = spareWith(layout, size, print, job.used + imposeCount(l, size, print));
+    setPrint(p => {
+      const n = (p.also.find(a => a.id === l.id)?.n ?? 0) + 1;
+      return { ...p, also: [...p.also.filter(a => a.id !== l.id), { id: l.id, n }] };
+    });
+    setPickHere(false);
+    say(left > 0 ? `入れました。あと${left}${job.unit}入れられます` : '入れました。この紙はいっぱいです');
+  };
   const kind = typeof target === 'string' ? null : layout.surface.placed[target.slot];
   // What the months actually come to, for the run this sheet is setting.
   const [firstDay, lastDay] = runDates(layout);
@@ -2596,6 +2614,7 @@ function PartSheet({
                 <Field label="1枚の紙に並べるもの">
                   <PaperFill
                     size={size} print={print} setPrint={setPrint} job={job}
+                    onAdd={addToPaper}
                     onSaveAndNew={onSaveAndNew}
                     currentName={layout.name && layout.name !== '新しいリフィル'
                       ? layout.name
@@ -2627,10 +2646,7 @@ function PartSheet({
             {pickHere && (
               <AddPicker
                 size={size} print={print} canShare={job.canShare} job={job}
-                onAdd={l => setPrint(p => {
-                  const n = (p.also.find(a => a.id === l.id)?.n ?? 0) + 1;
-                  return { ...p, also: [...p.also.filter(a => a.id !== l.id), { id: l.id, n }] };
-                })}
+                onAdd={addToPaper}
                 onClose={() => setPickHere(false)}
                 onSaveAndNew={onSaveAndNew}
                 currentName={layout.name && layout.name !== '新しいリフィル'
@@ -2645,14 +2661,21 @@ function PartSheet({
                 under it. What belongs here is the number that makes someone
                 want to add -- and one press to where that is done. */}
             {print.impose && (
-              <div className="spare flex flex-wrap items-center gap-x-3 gap-y-1.5">
-                <p className="fill-note m-0 min-w-[15rem] flex-1 text-[12px] text-muted">
+              <div className="spare flex flex-col gap-0.5">
+                <p className="fill-note m-0 text-[12px] text-muted">
                   {PAPERS[print.paper].label} 1枚にリフィル{perPaper}{job.unit}・いま{job.used}{job.unit}（紙{job.sheets}枚）
                   {job.spare > 0
                     ? `・最後の紙にあと${job.spare}${job.unit}ぶん`
                     : '・あきはありません'}
                 </p>
-
+                {/* The number alone does not say what to do with it, and the
+                    ＋ on the sheet is small. One sentence, beside the picture
+                    it is about. */}
+                {job.spare > 0 && (
+                  <p className="fill-how m-0 text-[12px] text-accent">
+                    あと{job.spare}{job.unit}入れられます。空きの ＋ をタップして入れてください
+                  </p>
+                )}
               </div>
             )}
 

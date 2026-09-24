@@ -83,18 +83,19 @@ check(
   `保存が1つも無くても空きマスは押せる（${await page.locator('.fillmap .empty').count()}マス）`,
 );
 await page.locator('.fillmap .empty').first().click();
-await page.waitForTimeout(500);
-// What the paper can still take, said where it was pressed -- not what the
-// store happens to be missing.
-const said = (await page.locator('.picker').textContent()).replace(/\s+/g, '');
+await page.locator('.modal').waitFor();
+await page.waitForTimeout(300);
+// A modal, over everything: a panel below the press sat off the bottom of a
+// 900px window, and "pressed ＋ and nothing happened" is how that reads.
+const said = (await page.locator('.modal').textContent()).replace(/\s+/g, '');
 check(
   /A3の\d+枚目に、あとリフィル\d+枚ぶん入ります/.test(said),
-  `押した場所が、この紙にあと何枚入るかを言う（「${said.slice(0, 32)}」）`,
+  `押すとモーダルが出て、この紙にあと何枚入るかを言う（「${said.slice(0, 34)}」）`,
 );
 // No dialog on the way: being made to name something is not what someone
 // pressing an empty square came to do, so it keeps the name the app would
 // have suggested and 保存 can change it afterwards.
-await page.locator('.picker .makenew').click();
+await page.locator('.modal .makenew').click();
 await page.waitForTimeout(500);
 check(
   await page.locator('.savename').count() === 0,
@@ -157,17 +158,18 @@ check(await mine.count() > 0, `このリフィルのぶんは埋まって見え�
 await page.screenshot({ path: `${OUT}/03-用紙の空きを押す.png` });
 
 await empty.first().click();
-// Pressed here, answered here. The first version put the list at the foot of
-// a scrolling sheet, so on a 900px window pressing ＋ looked like nothing
-// happening at all.
-await page.waitForTimeout(500);
-const seen = await page.locator('.picker').evaluate(el => {
+// A modal, over everything, in the middle of the window: pressed anywhere,
+// it arrives in the same place and nothing else can be pressed until it is
+// answered.
+await page.locator('.modal').waitFor();
+await page.waitForTimeout(300);
+const seen = await page.locator('.modal').evaluate(el => {
   const r = el.getBoundingClientRect();
   return { top: Math.round(r.top), bottom: Math.round(r.bottom), win: innerHeight };
 });
 check(
   seen.top >= 0 && seen.bottom <= seen.win,
-  `＋を押すと、そのすぐ下に丸ごと出る（${seen.top}〜${seen.bottom}px・窓${seen.win}px）`,
+  `＋を押すとモーダルが丸ごと出る（${seen.top}〜${seen.bottom}px・窓${seen.win}px）`,
 );
 const picks = page.locator('.basket li');
 const names = (await picks.allTextContents()).map(t => t.replace(/\s+/g, ' ').trim());
@@ -179,10 +181,17 @@ check(!names.join(' ').includes('蛇腹'), '蛇腹は混ぜられない（帯の
 check(await page.locator('.basket .thumb svg').count() >= 2, '候補は絵で見える');
 
 await picks.filter({ hasText: 'メモ' }).click();
-await page.waitForTimeout(200);
+await page.waitForTimeout(300);
 check(await page.locator('.fillmap .added').count() === 1, '押した紙に入る（1枚ぶん）');
+check(await page.locator('.modal').count() === 0, '選んだらモーダルは閉じる（入ったのが見える）');
+check(
+  /入れました。あと\d+枚入れられます/.test(await page.locator('.toast').textContent().catch(() => '')),
+  `入れたことと、あと何枚かを言う（「${(await page.locator('.toast').textContent().catch(() => 'なし')).trim()}」）`,
+);
+await page.locator('.fillmap .empty').first().click();
+await page.locator('.modal').waitFor();
 await picks.filter({ hasText: 'メモ' }).click();
-await page.waitForTimeout(200);
+await page.waitForTimeout(300);
 check(await page.locator('.fillmap .added').count() === 2, 'もう一度押せば2枚ぶん');
 check(await page.locator('.fillmap .added .thumb svg').count() === 2, '入れたものが紙の上で絵になる');
 await page.screenshot({ path: `${OUT}/01-入れたあと.png` });
@@ -224,16 +233,22 @@ const spare = (await note()).match(/あと(\d+)枚ぶん/);
 check(!!spare, `あきの数は書き出し画面にも出る（${(await note()).trim()}）`);
 await page.screenshot({ path: `${OUT}/02-書き出し.png` });
 
-// Pressed on the sheet, answered under it.
+// The same modal from the printed sheet, and the same line telling anyone
+// looking at it what the ＋ is for.
+check(
+  /あと\d+枚入れられます。空きの ＋ をタップ/.test((await page.locator('.fill-how').textContent()).trim()),
+  `＋の使い方が刷り上がりの下に書いてある（「${(await page.locator('.fill-how').textContent()).trim()}」）`,
+);
 await onSheet.first().click();
-await page.waitForTimeout(500);
-const seenHere = await page.locator('.picker').evaluate(el => {
+await page.locator('.modal').waitFor();
+await page.waitForTimeout(300);
+const seenHere = await page.locator('.modal').evaluate(el => {
   const r = el.getBoundingClientRect();
   return { top: Math.round(r.top), bottom: Math.round(r.bottom), win: innerHeight };
 });
 check(
   seenHere.top >= 0 && seenHere.bottom <= seenHere.win,
-  `刷り上がりの＋でも、その場に出る（${seenHere.top}〜${seenHere.bottom}px・窓${seenHere.win}px）`,
+  `刷り上がりの＋でも同じモーダル（${seenHere.top}〜${seenHere.bottom}px・窓${seenHere.win}px）`,
 );
 const wasSpare = Number((await note()).match(/あと(\d+)枚ぶん/)[1]);
 await page.locator('.basket li').filter({ hasText: 'メモ' }).click();

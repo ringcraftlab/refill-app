@@ -41,6 +41,33 @@ export function Sheet({ title, onClose, inline = false, children }: {
   );
 }
 
+// A choice that has to be made now, and nothing else until it is. Wider than
+// the question below because what is being chosen are pictures, and centred
+// rather than under the thing pressed: a panel below the press sat off the
+// bottom of the window on a desktop, and "press ＋ and nothing happens" is
+// how that reads.
+//
+// Its own scrim class, because the sheet's is what a tap outside the sheet
+// closes, and these can be open at the same time.
+export function Modal({ title, onClose, children }: {
+  title: string;
+  onClose: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <>
+      <div className="modal-scrim absolute inset-0 z-40 bg-[rgba(58,54,46,0.34)]" onClick={onClose} />
+      <div className="modal absolute left-1/2 top-1/2 z-[41] flex max-h-[82%] w-[min(360px,calc(100%-32px))] -translate-x-1/2 -translate-y-1/2 flex-col gap-2.5 overflow-y-auto rounded-2xl bg-white px-4 pb-4 pt-3.5 shadow-[0_12px_32px_rgba(0,0,0,0.2)]">
+        <div className="flex shrink-0 items-center gap-2">
+          <h2 className="m-0 text-sm font-bold">{title}</h2>
+          <Button variant="icon" className="ml-auto" onClick={onClose} aria-label="閉じる">×</Button>
+        </div>
+        {children}
+      </div>
+    </>
+  );
+}
+
 // A plain question before anything is taken away.
 export function Dialog({ message, confirmLabel, onConfirm, onCancel }: {
   message: string;
