@@ -1342,6 +1342,11 @@ function CanvasScreen({ book, at, nth, setBook, onBack, goTo, print, setPrint, o
   }, [book.sections, at, nth]);
 
   const [traySelected, setTraySelected] = useState<PartKind[]>([]);
+  // The tray is what this page can take. A cover is one page, so nothing that
+  // runs on dates belongs in it -- and offering a part only to refuse it after
+  // the drag is worse than not offering it: turning the pages is meant to be
+  // something you do without stopping.
+  const trayParts = layout.cover ? TRAY.filter(t => !isDatedKind(t.kind)) : TRAY;
   const [sheet, setSheet] = useState<SheetTarget>(null);
   const [toast, setToast] = useState<ReactNode>('');
   const [ghost, setGhost] = useState<{ x: number; y: number; kinds: PartKind[] } | null>(null);
@@ -1444,6 +1449,13 @@ function CanvasScreen({ book, at, nth, setBook, onBack, goTo, print, setPrint, o
 
   // A message, and how long it stands. Anything with something to press in
   // it needs longer than something to read.
+  // Turning to the cover puts down whatever the tray was holding that cannot
+  // go on it: a tap on the paper must never place something the tray on that
+  // page does not even show.
+  useLayoutEffect(() => {
+    if (layout.cover) setTraySelected(sel => (sel.some(isDatedKind) ? sel.filter(k => !isDatedKind(k)) : sel));
+  }, [layout.cover]);
+
   const say = (text: ReactNode, ms = 1800) => {
     setToast(text);
     window.clearTimeout(toastTimer.current);
@@ -2355,7 +2367,7 @@ function CanvasScreen({ book, at, nth, setBook, onBack, goTo, print, setPrint, o
             sheetEl ? 'lg:max-h-[34vh] lg:overflow-y-auto' : ''
           }`}
         >
-        {TRAY.map(t => {
+        {trayParts.map(t => {
           const idx = traySelected.indexOf(t.kind);
           return (
             <button

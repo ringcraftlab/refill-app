@@ -300,44 +300,27 @@ check(
 );
 await page.screenshot({ path: `${OUT}/33-表紙になった.png` });
 
-const was = await flat('.pageno');
-await drag(
-  await centerOf(page.locator('.stamp', { hasText: 'マンスリー' })),
-  await centerOf(page.locator('.page').first()),
-);
-await page.waitForTimeout(500);
+// What the tray holds is what this page can take. A calendar on a one-page
+// cover would print twelve single-sided sheets in a book of spreads, so it is
+// not offered there -- offering it and refusing the drag afterwards is worse
+// than not offering it, because turning pages should not stop.
+const trayHas = async name =>
+  await page.locator('.stamp', { hasText: name }).count() > 0;
 check(
-  (await flat('.dateoncover')).includes('表紙は1ページです'),
-  `表紙に日付のパーツは置けない（${(await flat('.dateoncover')).slice(0, 40)}）`,
-);
-check(
-  await page.locator('.hitbox.part').count() === 0 && (await flat('.pageno')) === was,
-  `断ったのだから何も起きない（${await flat('.pageno')}）`,
-);
-await page.screenshot({ path: `${OUT}/34-表紙にマンスリーは置けない.png` });
-
-// Being told no is not the end of it: the way on is in the message.
-check(await page.locator('.tonext').count() === 1, '断るだけで終わらない（次のページに入れる）');
-await page.locator('.tonext').click();
-await page.waitForTimeout(600);
-check(
-  (await flat('.pageno')).startsWith('2\u20133'),
-  `押すと次のページに入って、そこへめくる（${await flat('.pageno')}）`,
+  !(await trayHas('マンスリー')) && !(await trayHas('バーチカル')) && !(await trayHas('ウィークリー')),
+  '表紙に日付のパーツは出ていない',
 );
 check(
-  await page.locator('.hitbox.part').count() > 0 || await page.locator('.page').count() === 2,
-  '入れたページは見開き',
+  await trayHas('写真') && await trayHas('方眼') && await trayHas('メモ'),
+  '置けるものは出ている（写真・方眼・メモ）',
 );
-await toContents();
+await page.screenshot({ path: `${OUT}/34-表紙のトレイ.png` });
+await page.locator('.nextpage').click();
+await page.waitForTimeout(400);
 check(
-  (await names())[0] === '表紙',
-  `表紙は消えない（${(await names()).join(' / ')}）`,
+  await trayHas('マンスリー') && await trayHas('バーチカル'),
+  '中身のページには全部出ている',
 );
-await page.screenshot({ path: `${OUT}/35-次のページに入れた.png` });
-await page.locator('.leaf').nth(1).click();
-await page.locator('.page').first().waitFor();
-await page.waitForTimeout(300);
-
 
 // ---- ＋ puts in, it does not replace -------------------------------------
 // Pressing ＋ on a book that is still blank used to delete the spread on
