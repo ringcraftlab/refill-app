@@ -80,13 +80,16 @@ await page.locator('.sheet').getByRole('button', { name: 'A3', exact: true }).cl
 await page.waitForTimeout(300);
 check(
   await page.locator('.fillmap .empty').count() > 0,
-  `保存が1つも無くても空きマスは押せる（${await page.locator('.fillmap .empty').count()}面）`,
+  `保存が1つも無くても空きマスは押せる（${await page.locator('.fillmap .empty').count()}マス）`,
 );
 await page.locator('.fillmap .empty').first().click();
 await page.waitForTimeout(500);
+// What the paper can still take, said where it was pressed -- not what the
+// store happens to be missing.
+const said = (await page.locator('.picker').textContent()).replace(/\s+/g, '');
 check(
-  (await page.locator('.picker').textContent()).includes('保存済みのリフィルがありません'),
-  '入れられるものが無いことは、押した場所で言う',
+  /A3の\d+枚目に、あとリフィル\d+枚ぶん入ります/.test(said),
+  `押した場所が、この紙にあと何枚入るかを言う（「${said.slice(0, 32)}」）`,
 );
 // No dialog on the way: being made to name something is not what someone
 // pressing an empty square came to do, so it keeps the name the app would
@@ -111,7 +114,7 @@ await page.locator('.sheet').waitFor();
 await page.waitForTimeout(300);
 check(
   await page.locator('.fillmap .added').count() > 0,
-  `保存したぶんが紙の絵に入っている（${await page.locator('.fillmap .added').count()}面）`,
+  `保存したぶんが紙の絵に入っている（${await page.locator('.fillmap .added').count()}枚ぶん）`,
 );
 await page.screenshot({ path: `${OUT}/00-保存してもう1つ作る.png` });
 
@@ -149,8 +152,8 @@ check((await note()).includes('A3'), `用紙を変えると数も変わる（${(
 const empty = page.locator('.fillmap .empty');
 const mine = page.locator('.fillmap .mine');
 const emptied = await empty.count();
-check(emptied > 0, `空いているところが押せる（${emptied}面）`);
-check(await mine.count() > 0, `このリフィルのぶんは埋まって見える（${await mine.count()}面）`);
+check(emptied > 0, `空いているところが押せる（${emptied}マス）`);
+check(await mine.count() > 0, `このリフィルのぶんは埋まって見える（${await mine.count()}マス）`);
 await page.screenshot({ path: `${OUT}/03-用紙の空きを押す.png` });
 
 await empty.first().click();
@@ -177,10 +180,10 @@ check(await page.locator('.basket .thumb svg').count() >= 2, '候補は絵で見
 
 await picks.filter({ hasText: 'メモ' }).click();
 await page.waitForTimeout(200);
-check(await page.locator('.fillmap .added').count() === 1, '押した紙に入る（1面）');
+check(await page.locator('.fillmap .added').count() === 1, '押した紙に入る（1枚ぶん）');
 await picks.filter({ hasText: 'メモ' }).click();
 await page.waitForTimeout(200);
-check(await page.locator('.fillmap .added').count() === 2, 'もう一度押せば2面');
+check(await page.locator('.fillmap .added').count() === 2, 'もう一度押せば2枚ぶん');
 check(await page.locator('.fillmap .added .thumb svg').count() === 2, '入れたものが紙の上で絵になる');
 await page.screenshot({ path: `${OUT}/01-入れたあと.png` });
 
@@ -188,7 +191,7 @@ await page.screenshot({ path: `${OUT}/01-入れたあと.png` });
 // that takes it off.
 await page.locator('.fillmap .added').first().click();
 await page.waitForTimeout(200);
-check(await page.locator('.fillmap .added').count() === 1, '入れた面を押すと外れる');
+check(await page.locator('.fillmap .added').count() === 1, '入れたマスを押すと外れる');
 await page.locator('.fillmap .empty').first().click();
 await page.locator('.basket li').filter({ hasText: 'メモ' }).click();
 await page.waitForTimeout(200);
@@ -215,9 +218,9 @@ const onSheet = page.locator('.preview .empty');
 const plusBox = await onSheet.first().boundingBox();
 check(
   await onSheet.count() > 0 && plusBox.width >= 20 && plusBox.height >= 20,
-  `刷り上がりの空き面に＋が出て、押せる大きさ（${await onSheet.count()}個・${Math.round(plusBox.width)}×${Math.round(plusBox.height)}px）`,
+  `刷り上がりの空きマスに＋が出て、押せる大きさ（${await onSheet.count()}個・${Math.round(plusBox.width)}×${Math.round(plusBox.height)}px）`,
 );
-const spare = (await note()).match(/(\d+)面あいて/);
+const spare = (await note()).match(/あと(\d+)枚ぶん/);
 check(!!spare, `あきの数は書き出し画面にも出る（${(await note()).trim()}）`);
 await page.screenshot({ path: `${OUT}/02-書き出し.png` });
 
@@ -232,11 +235,11 @@ check(
   seenHere.top >= 0 && seenHere.bottom <= seenHere.win,
   `刷り上がりの＋でも、その場に出る（${seenHere.top}〜${seenHere.bottom}px・窓${seenHere.win}px）`,
 );
-const wasSpare = Number((await note()).match(/(\d+)面あいて/)[1]);
+const wasSpare = Number((await note()).match(/あと(\d+)枚ぶん/)[1]);
 await page.locator('.basket li').filter({ hasText: 'メモ' }).click();
 await page.waitForTimeout(400);
-const nowSpare = Number((await note()).match(/(\d+)面あいて/)?.[1] ?? 0);
-check(nowSpare === wasSpare - 1, `刷り上がりから入れるとあきが減る（${wasSpare} → ${nowSpare}面）`);
+const nowSpare = Number((await note()).match(/あと(\d+)枚ぶん/)?.[1] ?? 0);
+check(nowSpare === wasSpare - 1, `刷り上がりから入れるとあきが減る（${wasSpare} → ${nowSpare}枚ぶん）`);
 await page.screenshot({ path: `${OUT}/04-刷り上がりから入れた.png` });
 
 const dl = page.waitForEvent('download');

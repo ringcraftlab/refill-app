@@ -1465,7 +1465,7 @@ function CanvasScreen({ layout, setLayout, onBack }: {
             ? `${PAPERS[print.paper].label} ${job.sheets}枚`
             : `${PAPERS[print.paper].label} 原寸`}
           {print.impose && job.spare > 0 && (
-            <em className="not-italic text-accent">あと{job.spare}面</em>
+            <em className="not-italic text-accent">あと{job.spare}{job.unit}ぶん</em>
           )}
         </Button>
         <Button variant="chip" onClick={() => setSheet('background')}>
@@ -2222,7 +2222,10 @@ function usePaperJob(layout: Layout, size: SizeSpec, print: PrintOptions) {
     }
     return out;
   }, [layout, also, size, print]);
-  return { canShare, also, used, plan, perPaper, spare, sheets, owners };
+  // A folded refill is a strip, and a strip is counted in 本 -- the same
+  // place on the paper, a different word for what sits in it.
+  const unit = layout.fold > 1 ? '本' : '枚';
+  return { canShare, also, used, plan, perPaper, spare, sheets, owners, unit };
 }
 
 type PaperJob = ReturnType<typeof usePaperJob>;
@@ -2267,8 +2270,8 @@ function PaperFill({ size, print, setPrint, job, onSaveAndNew, currentName }: {
   return (
     <div className="flex flex-col gap-2">
       <p className="fill-note m-0 text-[12px] text-muted">
-        {PAPERS[print.paper].label} 1枚に{perPaper}面・いま{used}面（紙{sheets}枚）
-        {spare > 0 ? `・最後の1枚に${spare}面あいています` : '・あきはありません'}
+        {PAPERS[print.paper].label} 1枚にリフィル{perPaper}{job.unit}・いま{used}{job.unit}（紙{sheets}枚）
+        {spare > 0 ? `・最後の紙にあと${spare}${job.unit}ぶん` : '・あきはありません'}
       </p>
 
       {/* The sheet, at a size worth pressing: this is the control, not an
@@ -2296,7 +2299,7 @@ function PaperFill({ size, print, setPrint, job, onSaveAndNew, currentName }: {
                     : 'border-line-strong text-faint'
                 }`}
                 style={{ aspectRatio: ratio }}
-                aria-label="ここに別のリフィルを入れる"
+                aria-label="ここにリフィルを追加する"
                 onClick={() => setPicking(picking === i ? null : i)}
               >＋</button>
             );
@@ -2330,7 +2333,7 @@ function PaperFill({ size, print, setPrint, job, onSaveAndNew, currentName }: {
 
       {picking !== null && (
         <AddPicker
-          size={size} print={print} canShare={canShare}
+          size={size} print={print} canShare={canShare} job={job}
           onAdd={l => add(l, 1)} onClose={() => setPicking(null)}
           onSaveAndNew={onSaveAndNew} currentName={currentName}
         />
@@ -2342,10 +2345,11 @@ function PaperFill({ size, print, setPrint, job, onSaveAndNew, currentName }: {
 // What an empty place offers, wherever one was pressed. Both pictures of the
 // paper -- the squares on the 用紙 sheet and the printed sheet itself -- open
 // this, so there is one list and one wording to learn.
-function AddPicker({ size, print, canShare, onAdd, onClose, onSaveAndNew, currentName }: {
+function AddPicker({ size, print, canShare, job, onAdd, onClose, onSaveAndNew, currentName }: {
   size: SizeSpec;
   print: PrintOptions;
   canShare: Layout[];
+  job: PaperJob;
   onAdd: (l: Layout) => void;
   onClose: () => void;
   onSaveAndNew: () => void;
@@ -2364,8 +2368,13 @@ function AddPicker({ size, print, canShare, onAdd, onClose, onSaveAndNew, curren
       className="picker flex flex-col gap-1.5 rounded-[10px] border border-accent bg-accent-soft/40 p-2"
     >
       <span className="flex items-center gap-2">
+        {/* What this paper can still take, not what is missing from the
+            store. "There are no saved refills" is the app's own bookkeeping
+            talking; the press was about the paper. */}
         <strong className="flex-1 text-[12px] font-normal text-muted">
-          {canShare.length ? 'ここに入れるものを選ぶ' : 'ここに入れられる保存済みのリフィルがありません'}
+          {job.spare > 0
+            ? `${PAPERS[print.paper].label}の${job.sheets}枚目に、あとリフィル${job.spare}${job.unit}ぶん入ります`
+            : `${PAPERS[print.paper].label}${job.sheets}枚に、あきはありません`}
         </strong>
         <Button variant="quiet" onClick={onClose}>やめる</Button>
       </span>
@@ -2387,7 +2396,7 @@ function AddPicker({ size, print, canShare, onAdd, onClose, onSaveAndNew, curren
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-[13px]">{l.name}</span>
                   <span className="block text-[10px] text-faint">
-                    {adds > 1 ? `1つで${adds}面` : '1面'}{n > 0 ? `・${n}つ入れています` : ''}
+                    {adds > 1 ? `1つで${adds}${job.unit}ぶん` : `1${job.unit}ぶん`}{n > 0 ? `・${n}つ入れています` : ''}
                   </span>
                 </span>
                 <span className="shrink-0 text-[13px] text-accent">入れる</span>
@@ -2448,7 +2457,7 @@ function SpareSlots({ plan, tile, spare, mirror, scalePercent, onPress }: {
               width: pct(tile.widthMm * k, paper.widthMm),
               height: pct(tile.heightMm * k, paper.heightMm),
             }}
-            aria-label="ここに別のリフィルを入れる"
+            aria-label="ここにリフィルを追加する"
             onClick={onPress}
           >＋</button>
         );
@@ -2617,7 +2626,7 @@ function PartSheet({
             />
             {pickHere && (
               <AddPicker
-                size={size} print={print} canShare={job.canShare}
+                size={size} print={print} canShare={job.canShare} job={job}
                 onAdd={l => setPrint(p => {
                   const n = (p.also.find(a => a.id === l.id)?.n ?? 0) + 1;
                   return { ...p, also: [...p.also.filter(a => a.id !== l.id), { id: l.id, n }] };
@@ -2638,9 +2647,9 @@ function PartSheet({
             {print.impose && (
               <div className="spare flex flex-wrap items-center gap-x-3 gap-y-1.5">
                 <p className="fill-note m-0 min-w-[15rem] flex-1 text-[12px] text-muted">
-                  {PAPERS[print.paper].label} 1枚に{perPaper}面・いま{job.used}面（紙{job.sheets}枚）
+                  {PAPERS[print.paper].label} 1枚にリフィル{perPaper}{job.unit}・いま{job.used}{job.unit}（紙{job.sheets}枚）
                   {job.spare > 0
-                    ? `・最後の1枚に${job.spare}面あいています`
+                    ? `・最後の紙にあと${job.spare}${job.unit}ぶん`
                     : '・あきはありません'}
                 </p>
 
@@ -2671,7 +2680,9 @@ function PartSheet({
             <p className="print-summary my-[13px] text-[13px] text-faint">
               {hasDatedPart(layout) && `${layout.year}年${layout.month}月から${layout.monthCount}ヶ月分・`}
               {isDayPaced(layout) && `${sheetCount(layout)}枚・`}
-              {print.impose && `${PAPERS[print.paper].label} 1枚に ${perPaper} ${layout.fold > 1 ? '本' : '面'}`}
+              {print.impose && (layout.fold > 1
+                ? `${PAPERS[print.paper].label} 1枚に ${perPaper} 本`
+                : `${PAPERS[print.paper].label} 1枚に リフィル${perPaper}枚`)}
             </p>
             {print.impose && (
               <EdgeNote
