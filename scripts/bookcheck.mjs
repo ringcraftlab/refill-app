@@ -241,20 +241,42 @@ await page.waitForTimeout(400);
 check((await pageno()).startsWith('2–3'), `戻れる（${await pageno()}）`);
 await page.screenshot({ path: `${OUT}/30-めくる編集画面.png` });
 
+// Pressing ＋ makes the page. No menu in between: picking a part from a
+// menu and dropping the same part from the tray on this screen make the same
+// section, so the menu was a screen in front of an answer that never varies.
 await page.locator('.addbefore').click();
-await page.locator('.modal').waitFor();
-await page.waitForTimeout(200);
-await page.locator('.addcover').click();
 await page.waitForTimeout(500);
 check(
+  await page.locator('.modal').count() === 0,
+  '＋は別画面を出さない（押したところにページができる）',
+);
+check(
   (await pageno()).startsWith('1/'),
-  `左端の＋で入れたものは1ページ目になる（${await pageno()}）`,
+  `左端の＋で入れたページが1ページ目になる（${await pageno()}）`,
 );
 check(
   await page.locator('.hitbox.part').count() === 0 && await page.locator('.page').count() === 1,
-  '表紙は白紙1ページで開く（編集画面から）',
+  '先頭の1ページは白紙で開く（表紙になる）',
 );
 await page.screenshot({ path: `${OUT}/33-表紙になった.png` });
+
+// Undone from where it was said, because a page put in by one press should
+// come out by one press.
+check(
+  (await flat('.toast')).includes('取り消す'),
+  `入れた直後に取り消せる（${await flat('.toast')}）`,
+);
+await page.locator('.undoadd').click();
+await page.waitForTimeout(400);
+check(
+  (await pageno()).startsWith('2\u20133'),
+  `取り消すと元のページに戻る（${await pageno()}）`,
+);
+await toContents();
+check(
+  (await names()).join(' / ') === 'マンスリー',
+  `取り消すと中身も元どおり（${(await names()).join(' / ')}）`,
+);
 
 await browser.close();
 if (bad) process.exitCode = 1;

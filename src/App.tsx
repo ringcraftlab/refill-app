@@ -1342,9 +1342,8 @@ function CanvasScreen({ book, at, nth, setBook, onBack, goTo, print, setPrint, o
   }, [book.sections, at, nth]);
 
   const [traySelected, setTraySelected] = useState<PartKind[]>([]);
-  const [addAt, setAddAt] = useState<number | null>(null);
   const [sheet, setSheet] = useState<SheetTarget>(null);
-  const [toast, setToast] = useState('');
+  const [toast, setToast] = useState<ReactNode>('');
   const [ghost, setGhost] = useState<{ x: number; y: number; kinds: PartKind[] } | null>(null);
   // Which sides of the tray still have stamps out of sight.
   const trayRef = useRef<HTMLDivElement | null>(null);
@@ -1443,10 +1442,39 @@ function CanvasScreen({ book, at, nth, setBook, onBack, goTo, print, setPrint, o
     return geo.flow === 'row' ? { x: at, y: 0 } : { x: 0, y: at };
   };
 
-  const say = (text: string) => {
+  // A message, and how long it stands. Anything with something to press in
+  // it needs longer than something to read.
+  const say = (text: ReactNode, ms = 1800) => {
     setToast(text);
     window.clearTimeout(toastTimer.current);
-    toastTimer.current = window.setTimeout(() => setToast(''), 1800);
+    toastTimer.current = window.setTimeout(() => setToast(''), ms);
+  };
+
+  // The ＋ at the paper's edge puts a page in, here, and turns to it. It
+  // used to open a menu of parts first, and the menu was a second way of
+  // doing what the tray on this very screen already does: picking マンスリー
+  // there and dropping マンスリー here make the same section. So the ＋ now
+  // answers the question it asks -- a blank page appears where the ＋ was --
+  // and what goes on it is placed the one way this app places anything.
+  //
+  // The front page is a cover: a single page even in a book of spreads,
+  // because the spread was leaving page 1 blank anyway and a cover is the
+  // outside of the stack, not a pair of facing pages. Further in, a page
+  // matches the book, or it would break the pairing of every spread after it.
+  const addPageHere = () => {
+    const where = at;
+    const front = where === 0;
+    const was = book.sections;
+    const back = () => { setBook(b => ({ ...b, sections: was })); goTo(at, nth); setToast(''); };
+    setBook(b => ({ ...b, sections: withSection(b.sections, sectionOf(front ? 'cover' : 'blank', layout), where) }));
+    goTo(where, 0);
+    say(
+      <>
+        {front ? '表紙になる白紙を入れました' : '白紙を入れました'}
+        <button className="undoadd ml-2 underline underline-offset-2" onClick={back}>取り消す</button>
+      </>,
+      5000,
+    );
   };
 
   // Client point → surface millimetres, or null when the point is off the
@@ -2016,7 +2044,7 @@ function CanvasScreen({ book, at, nth, setBook, onBack, goTo, print, setPrint, o
           )}
           {nth === 0 && (
             <span className="flex flex-col items-center gap-0.5">
-              <Button variant="edge" className="addbefore" onClick={() => setAddAt(at)} aria-label="前にページを足す">
+              <Button variant="edge" className="addbefore" onClick={() => addPageHere()} aria-label="前にページを足す">
                 ＋
               </Button>
               <em className="not-italic text-[9px] leading-none text-faint">足す</em>
@@ -2327,23 +2355,6 @@ function CanvasScreen({ book, at, nth, setBook, onBack, goTo, print, setPrint, o
         </div>
       )}
 
-      {/* Pressed on the paper's edge: what is chosen goes at that page. */}
-      {addAt !== null && (
-        <AddSection
-          job={job} print={print}
-          onPick={kind => {
-            const where = addAt;
-            setAddAt(null);
-            setBook(b => ({
-              ...b,
-              sections: withSection(b.sections, sectionOf(kind, layout), where),
-            }));
-            goTo(where, 0);
-            say(`${SECTION_LABEL(kind)}を足しました`);
-          }}
-          onClose={() => setAddAt(null)}
-        />
-      )}
       {toast && <Toast>{toast}</Toast>}
 
       {confirm && (
