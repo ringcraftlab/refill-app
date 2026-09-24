@@ -367,6 +367,11 @@ export const MONTH_PACED: PartKind[] = ['monthly', 'daylist', 'gantt', 'habit'];
 export const isDayPaced = (layout: Layout): boolean =>
   layout.surface.placed.some(k => DAY_PACED.includes(k));
 
+// Whether a part paces itself by the calendar, asked of the kind alone --
+// before it is placed, by whoever has to decide whether it may be.
+export const isDatedKind = (kind: PartKind): boolean =>
+  DAY_PACED.includes(kind) || MONTH_PACED.includes(kind);
+
 export const hasDatedPart = (layout: Layout): boolean =>
   !!layout.spanning || layout.surface.placed.some(k => MONTH_PACED.includes(k)) || isDayPaced(layout);
 

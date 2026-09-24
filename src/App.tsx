@@ -21,7 +21,7 @@ import { nextMonthCell } from './lib/parts';
 import { addDays, addMonths, isoDate, runDates } from './lib/dates';
 import {
   buildPages, buildPrintSheets, datedSlotOf, DEFAULT_PRINT, hasDatedPart, INK_INSET_MM, isDayPaced,
-  chainCount, chainOwners, duplexFlipOf, imposeCount, MONTH_PACED, paperPlan, punchInset, runEnd,
+  chainCount, chainOwners, duplexFlipOf, imposeCount, isDatedKind, MONTH_PACED, paperPlan, punchInset, runEnd,
   sameSheet, sheetAt, sheetCount, sheetLabel, sheetSizeOf,
 } from './lib/render/pages';
 import type { BackFill, PrintOptions } from './lib/render/pages';
@@ -1466,7 +1466,13 @@ function CanvasScreen({ book, at, nth, setBook, onBack, goTo, print, setPrint, o
     const front = where === 0;
     const was = book.sections;
     const back = () => { setBook(b => ({ ...b, sections: was })); goTo(at, nth); setToast(''); };
-    setBook(b => ({ ...b, sections: withSection(b.sections, sectionOf(front ? 'cover' : 'blank', layout), where) }));
+    // Put in, never instead of. `withSection` drops an empty starting section,
+    // which is right when something is added from the contents (a stub nobody
+    // ever opened) and wrong here, because that empty section is the page on
+    // screen: pressing 「前に足す」 on a fresh book of spreads used to delete the
+    // spread and leave a one-page cover with nowhere to turn to.
+    const made = sectionOf(front ? 'cover' : 'blank', layout);
+    setBook(b => ({ ...b, sections: [...b.sections.slice(0, where), made, ...b.sections.slice(where)] }));
     goTo(where, 0);
     say(
       <>
@@ -1520,6 +1526,24 @@ function CanvasScreen({ book, at, nth, setBook, onBack, goTo, print, setPrint, o
   };
 
   const placeParts = (kinds: PartKind[], at: DropPoint | null) => {
+    // A cover is one page in a book of spreads, so a calendar laid on it would
+    // print as a single-page run -- twelve months of it, in a form the rest of
+    // the book is not. Refused rather than quietly turned into an ordinary
+    // spread: a cover disappearing under your hands is harder to understand
+    // than being told no.
+    const dated = kinds.find(isDatedKind);
+    if (layout.cover && dated) {
+      say(
+        <span className="dateoncover block max-w-[260px] whitespace-normal leading-[1.6]">
+          表紙は1ページです。{PART_LABEL[dated]}は{book.sections.some(l => !l.cover && l.spread) ? '見開き' : '中身'}のページに入ります
+          <em className="mt-1 block not-italic text-white/70">
+            表紙をやめるなら、中身の画面で表紙を外してください
+          </em>
+        </span>,
+        4500,
+      );
+      return;
+    }
     setLayout(prev => {
       const planned = planPlacement(prev, size, kinds, at);
       if (!planned) {
@@ -1934,7 +1958,7 @@ function CanvasScreen({ book, at, nth, setBook, onBack, goTo, print, setPrint, o
               one section and one sheet there is no book to be lost in, and
               the form the refill is folded into is what a phone has room to
               say instead. */}
-          {book.sections.length > 1 && (
+          {book.sections.length > 1 && !layout.cover && (
             <>{sectionLabel(layout)}<span className="mx-1 text-faint">・</span></>
           )}
           {size.label}
@@ -1945,7 +1969,11 @@ function CanvasScreen({ book, at, nth, setBook, onBack, goTo, print, setPrint, o
               hold on to their words the longest they can, because a button
               nobody recognises is a feature nobody finds. */}
           <span className="hidden min-[400px]:inline"> {size.widthMm}×{size.heightMm}mm</span>
-          {' ・ '}{formLabel(layout, foldNow?.grain)}
+          {/* A cover is one page whatever the book is folded into, so saying
+              「片面」 here -- the form of this section, truthfully -- told
+              anyone standing on the cover of a book of spreads that their
+              book had become single-sided. It says which page it is instead. */}
+          {' ・ '}{layout.cover ? '表紙（1ページ）' : formLabel(layout, foldNow?.grain)}
         </span>
         {/* Below 360px even these give up their words: what they were pushing
             out of the title is worth more. The icons stay, and so do the
@@ -2042,7 +2070,10 @@ function CanvasScreen({ book, at, nth, setBook, onBack, goTo, print, setPrint, o
               <em className="not-italic text-[9px] leading-none text-faint">前へ</em>
             </span>
           )}
-          {nth === 0 && (
+          {/* Nothing goes in front of the cover -- it is the outside of the
+              stack. Between the cover and the first month is reached from the
+              ＋ on that month, which is where that page would go. */}
+          {nth === 0 && !layout.cover && (
             <span className="flex flex-col items-center gap-0.5">
               <Button variant="edge" className="addbefore" onClick={() => addPageHere()} aria-label="前にページを足す">
                 ＋
@@ -2155,7 +2186,12 @@ function CanvasScreen({ book, at, nth, setBook, onBack, goTo, print, setPrint, o
 
           {empty && (
             <div className="pointer-events-none absolute inset-0 flex items-center justify-center text-center text-[11px] leading-[1.7] text-faint">
-              スタンプをドラッグして<br />ここに配置
+              {/* A cover is a single page in a book of spreads, and an empty
+                  page looks like any other empty page. It says so itself,
+                  because the paper is what anyone is looking at. */}
+              {layout.cover
+                ? <span className="coverhint">表紙（1ページ）<br />写真や背景を置けます</span>
+                : <>スタンプをドラッグして<br />ここに配置</>}
             </div>
           )}
 
@@ -2732,7 +2768,10 @@ function DividerHandle({ box, teach, onDown, onMove, onUp }: {
 // making someone think of one before they can save.
 function suggestName(book: Book, size: SizeSpec, grain?: FoldGrain): string {
   const what = book.sections.map(sectionLabel).slice(0, 3).join('＋');
-  return `${size.label} ${formLabel(book.sections[0], grain)}・${what}`;
+  // The form is the book's, and a cover has none of its own: with one on the
+  // front, a book of spreads was saving itself as 「ミニ6 片面」.
+  const body = book.sections.find(l => !l.cover) ?? book.sections[0];
+  return `${size.label} ${formLabel(body, grain)}・${what}`;
 }
 
 // Naming what is being saved. A sheet rather than a dialog, because it is the

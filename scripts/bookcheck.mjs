@@ -258,7 +258,6 @@ check(
   await page.locator('.hitbox.part').count() === 0 && await page.locator('.page').count() === 1,
   '先頭の1ページは白紙で開く（表紙になる）',
 );
-await page.screenshot({ path: `${OUT}/33-表紙になった.png` });
 
 // Undone from where it was said, because a page put in by one press should
 // come out by one press.
@@ -277,6 +276,70 @@ check(
   (await names()).join(' / ') === 'マンスリー',
   `取り消すと中身も元どおり（${(await names()).join(' / ')}）`,
 );
+
+// Put the cover back, to look at what one is.
+await page.locator('.leaf').nth(1).click();
+await page.locator('.page').first().waitFor();
+await page.waitForTimeout(300);
+await page.locator('.addbefore').click();
+await page.waitForTimeout(500);
+// A cover is a single page in a book of spreads. The paper says so, the title
+// says so, and nothing that runs on dates may be laid on it -- a calendar
+// there would print twelve single-sided sheets in a book that is not.
+check(
+  (await flat('.coverhint')).includes('表紙（1ページ）'),
+  `紙を見れば表紙だと分かる（${await flat('.coverhint')}）`,
+);
+check(
+  (await flat('header')).includes('表紙（1ページ）') && !(await flat('header')).includes('片面'),
+  `見出しも表紙と言う（片面と言わない）（${(await flat('header')).slice(0, 40)}）`,
+);
+check(
+  await page.locator('.turn-left .addbefore').count() === 0,
+  '表紙の前には足せない（＋を出さない）',
+);
+await page.screenshot({ path: `${OUT}/33-表紙になった.png` });
+
+const was = await flat('.pageno');
+await drag(
+  await centerOf(page.locator('.stamp', { hasText: 'マンスリー' })),
+  await centerOf(page.locator('.page').first()),
+);
+await page.waitForTimeout(500);
+check(
+  (await flat('.dateoncover')).includes('表紙は1ページです'),
+  `表紙に日付のパーツは置けない（${(await flat('.dateoncover')).slice(0, 40)}）`,
+);
+check(
+  await page.locator('.hitbox.part').count() === 0 && (await flat('.pageno')) === was,
+  `断ったのだから何も起きない（${await flat('.pageno')}）`,
+);
+await page.screenshot({ path: `${OUT}/34-表紙にマンスリーは置けない.png` });
+
+
+// ---- ＋ puts in, it does not replace -------------------------------------
+// Pressing ＋ on a book that is still blank used to delete the spread on
+// screen: the empty section was the one `withSection` cleans away, and the
+// book became a one-page cover with no 次へ and no way back to a spread.
+await page.goto(BASE);
+await page.locator('.sizerow', { hasText: '80×128mm' }).click();
+await page.locator('.card', { hasText: '見開き' }).first().click();
+await page.getByRole('button', { name: 'この構成で作る' }).click();
+await page.locator('.page').first().waitFor();
+check(await page.locator('.page').count() === 2, '作った直後は見開き（2ページ）');
+await page.locator('.addbefore').click();
+await page.waitForTimeout(500);
+check(
+  await page.locator('.nextpage').count() === 1,
+  '表紙を入れても行き先が残る（次へがある）',
+);
+await page.locator('.nextpage').click();
+await page.waitForTimeout(400);
+check(
+  await page.locator('.page').count() === 2,
+  `＋の前に見ていた見開きが残っている（${await page.locator('.page').count()}ページ）`,
+);
+await page.screenshot({ path: `${OUT}/35-見開きは消えない.png` });
 
 await browser.close();
 if (bad) process.exitCode = 1;
