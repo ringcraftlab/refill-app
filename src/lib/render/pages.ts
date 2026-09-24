@@ -409,6 +409,25 @@ function sheetsOf(layout: Layout): Layout[] {
     (_, i) => ({ ...layout, ...addMonths(layout.year, layout.month, i * per) }));
 }
 
+// What one sheet of a section is, said the way its dates would be read. The
+// export screen needs it to answer "what is this page" when someone presses
+// one, which is how a run gets cut back to the length it should have been.
+export function sheetLabel(layout: Layout, nth: number): string {
+  if (!hasDatedPart(layout)) return `${nth + 1}枚目`;
+  const all = sheetsOf(layout);
+  const sheet = all[Math.max(0, Math.min(nth, all.length - 1))];
+  if (isDayPaced(layout) && sheet.sheetStart) {
+    const d = new Date(`${sheet.sheetStart}T00:00:00`);
+    return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日の週`;
+  }
+  const per = monthsPerSheet(layout);
+  if (per > 1) {
+    const last = addMonths(sheet.year, sheet.month, per - 1);
+    return `${sheet.year}年${sheet.month}月・${last.month}月`;
+  }
+  return `${sheet.year}年${sheet.month}月`;
+}
+
 // The last month the run actually prints. With two calendars to a sheet an odd
 // number of months still fills its final spread, so what comes out is a month
 // further on than the range was set to -- and the range has to say so rather

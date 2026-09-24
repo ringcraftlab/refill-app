@@ -153,5 +153,75 @@ const mm = [width * MM, height * MM].map(Math.round).sort((a, b) => a - b);
 check(mm[0] === 210 && mm[1] === 297, `A4で出る（${mm[1]}×${mm[0]}mm）`);
 console.log(`  ${doc.getPageCount()}ページ`);
 
+// ---- too much of something, and the three ways to cut it back ----------
+// A year of weeks is 53 sheets and spills onto a fourth sheet of paper for
+// five of them, which is exactly when someone wants to shorten it.
+await page.goto(BASE);
+await page.locator('.sizerow', { hasText: '62×105mm' }).click();
+await page.locator('.card', { hasText: '片面' }).first().click();
+await page.getByRole('button', { name: 'この構成で作る' }).click();
+await page.locator('.page').first().waitFor();
+await drag(
+  await centerOf(page.locator('.stamp', { hasText: 'ウィークリー' })),
+  await centerOf(page.locator('.page').first()),
+);
+await page.getByRole('button', { name: '戻る' }).click();
+await page.locator('.contents-list').waitFor();
+await page.waitForTimeout(300);
+check(
+  (await flat('.secspan')).includes('週'),
+  `期間は中身の言葉で出る（${await flat('.secspan')}）`,
+);
+
+// 2: the paper says what to cut, and cuts it.
+const spilled = await paper();
+check(await page.locator('.trim').count() === 1, `紙から逆算した減らし方が出る（${await flat('.trim')}）`);
+await page.locator('.dotrim').click();
+await page.waitForTimeout(400);
+check(
+  (await paper()).includes('あきはありません'),
+  `そうすると紙が1枚減る（${spilled} → ${await paper()}）`,
+);
+await page.screenshot({ path: `${OUT}/05-減らす提案.png` });
+
+// 1: the period of a dated section, reached from its row.
+await page.locator('.torange').first().click();
+await page.locator('.sheet').waitFor();
+check(
+  (await flat('.sheet')).includes('終了月'),
+  '「期間」からその中身の期間がすぐ開く',
+);
+await page.locator('.sheet button[aria-label=閉じる]').first().click().catch(() => {});
+await page.locator('.scrim').click({ position: { x: 10, y: 10 } }).catch(() => {});
+await page.waitForTimeout(200);
+
+// 3: the page you are looking at is the one it should stop at.
+await page.getByRole('button', { name: 'PDF出力プレビュー' }).click();
+await page.locator('.preview').waitFor();
+await page.waitForTimeout(400);
+await page.locator('.preview figure button').first().click();
+await page.locator('.lightbox').waitFor();
+await page.waitForTimeout(300);
+check(
+  await page.locator('.lightbox .onpaper').count() > 1,
+  `拡大した紙は1面ずつ押せる（${await page.locator('.lightbox .onpaper').count()}面）`,
+);
+await page.screenshot({ path: `${OUT}/06-拡大.png` });
+await page.locator('.lightbox .onpaper').nth(2).click();
+await page.locator('.modal').waitFor();
+await page.waitForTimeout(300);
+check(
+  (await flat('.pagewhat')).includes('週'),
+  `押した面が何かを言う（${await flat('.pagewhat')}）`,
+);
+await page.screenshot({ path: `${OUT}/07-ここまでにする.png` });
+const was = await flat('.cuthere');
+await page.locator('.cuthere').click();
+await page.waitForTimeout(500);
+check(
+  (await flat('.fill-note')).includes('いま3枚'),
+  `ここまでにすると、そこで終わる（${was} → ${await flat('.fill-note')}）`,
+);
+
 await browser.close();
 if (bad) process.exitCode = 1;

@@ -22,7 +22,7 @@ import { addDays, addMonths, isoDate, runDates } from './lib/dates';
 import {
   buildPages, buildPrintSheets, datedSlotOf, DEFAULT_PRINT, hasDatedPart, INK_INSET_MM, isDayPaced,
   duplexFlipOf, imposeCount, MONTH_PACED, paperPlan, punchInset, runEnd, sameSheet, sheetCount,
-  sheetSizeOf,
+  sheetLabel, sheetSizeOf,
 } from './lib/render/pages';
 import type { BackFill, PrintOptions } from './lib/render/pages';
 import type { TilePlan } from './lib/render/impose';
@@ -347,6 +347,9 @@ export function App() {
   // The paper is the book's, not a section's: everything in it is printed in
   // one run, on one kind of paper.
   const [print, setPrint] = useState<PrintOptions>(DEFAULT_PRINT);
+  // Bumped when the editor is entered to change a section's period, so that
+  // the sheet it opens on is the one that was asked for.
+  const [openRange, setOpenRange] = useState(0);
   // Size and form belong to the book: a section on a different punched sheet
   // could not be bound into it. They are kept on every section because that
   // is all `src/lib` knows how to read.
@@ -398,7 +401,11 @@ export function App() {
         setBook={setBook}
         print={print}
         at={Math.min(at, book.sections.length - 1)}
-        onOpen={(i: number) => { setAt(i); setStage('canvas'); }}
+        onOpen={(i: number, open?: 'range') => {
+          setAt(i);
+          if (open === 'range') setOpenRange(n => n + 1);
+          setStage('canvas');
+        }}
         onBack={() => setStage('sides')}
       />
     );
@@ -412,6 +419,7 @@ export function App() {
       goTo={setAt}
       print={print}
       setPrint={setPrint}
+      openRange={openRange}
     />
   );
 }
@@ -920,13 +928,34 @@ function ContentsScreen({ book, setBook, print, at, onOpen, onBack }: {
   print: PrintOptions;
   // Which section the editor was on, so that going back goes back.
   at: number;
-  onOpen: (i: number) => void;
+  // `'range'` opens that section's period straight away: the number someone
+  // wants to change is the one they just read in this row.
+  onOpen: (i: number, open?: 'range') => void;
   onBack: () => void;
 }) {
   const size = SIZES[book.sections[0].size];
   const job = usePaperJob(book.sections, size, print);
   const [adding, setAdding] = useState(false);
   const [ask, setAsk] = useState<number | null>(null);
+
+  // The last sheet of paper is mostly empty, and one section is what fills it:
+  // saying which one, and by how much, turns "too many" into one press. The
+  // section chosen is the last that can give the sheets up -- notes before
+  // dates, because a note has nothing to lose by being shorter.
+  const over = job.perPaper - job.spare;
+  const trim = useMemo(() => {
+    if (!print.impose || job.sheets < 2 || job.spare === 0) return null;
+    const order = book.sections.map((sec, at) => ({ sec, at }))
+      .filter(x => sheetCount(x.sec) > 1)
+      .sort((a, b) => (
+        Number(hasDatedPart(a.sec)) - Number(hasDatedPart(b.sec)) || b.at - a.at
+      ));
+    for (const { sec, at } of order) {
+      const to = shortenTo(sec, sheetCount(sec) - over);
+      if (to) return { at, to, by: sheetCount(sec) - sheetCount(to) };
+    }
+    return null;
+  }, [book.sections, job.sheets, job.spare, over, print.impose]);
 
   const move = (i: number, d: number) => setBook(b => {
     const to = i + d;
@@ -968,13 +997,20 @@ function ContentsScreen({ book, setBook, print, at, onOpen, onBack }: {
               <Thumb layout={sec} size={size} />
               <span className="min-w-0 flex-1">
                 <span className="secname block truncate text-[14px]">{sectionLabel(sec)}</span>
-                <span className="secspan block text-[11px] text-faint">{sectionSpan(sec)}</span>
+                <span className={`secspan block text-[11px] ${
+                  hasDatedPart(sec) ? 'text-accent underline decoration-dotted' : 'text-faint'
+                }`}>{sectionSpan(sec)}</span>
               </span>
             </button>
             {/* A note section is "how many sheets of it", and that is the
                 number someone changes when it turns out to be too many. A
                 dated one is as long as its dates, which the range in the
                 editor sets. */}
+            {hasDatedPart(sec) && (
+              <Button variant="quiet" className="torange shrink-0" onClick={() => onOpen(i, 'range')}>
+                期間
+              </Button>
+            )}
             {!hasDatedPart(sec) && (
               <span className="pages flex shrink-0 items-center gap-1">
                 <Button
@@ -1007,13 +1043,26 @@ function ContentsScreen({ book, setBook, print, at, onOpen, onBack }: {
 
       {/* What the whole book comes to on paper. The number that makes someone
           want to shorten something is this one, so it is here rather than
-          three screens away. */}
+          three screens away -- and so is the shortening. */}
       <p className="fill-note m-0 mt-auto pt-2 text-[12px] text-muted">
         {print.impose
           ? `${PAPERS[print.paper].label} ${job.sheets}枚・この束で${job.used}${job.unit}` +
             (job.spare > 0 ? `・最後の紙にあと${job.spare}${job.unit}ぶん` : '・あきはありません')
           : `原寸 ${job.used}${job.unit}`}
       </p>
+      {trim && (
+        <span className="trim flex flex-wrap items-center gap-x-2 gap-y-1 pt-0.5">
+          <span className="flex-1 text-[12px] text-accent">
+            {sectionLabel(book.sections[trim.at])}を
+            {runText(book.sections[trim.at])}→{runText(trim.to)}にすると
+            {PAPERS[print.paper].label} {job.sheets - 1}枚に収まります
+          </span>
+          <Button variant="quiet" className="dotrim" onClick={() => setBook(b => ({
+            ...b,
+            sections: b.sections.map((sec, k) => (k === trim.at ? trim.to : sec)),
+          }))}>そうする</Button>
+        </span>
+      )}
 
       <div className="flex shrink-0 gap-2 pb-1 pt-1.5">
         <Button variant="cta" className="flex-1" onClick={() => onOpen(at)}>編集にもどる</Button>
@@ -1042,17 +1091,38 @@ function ContentsScreen({ book, setBook, print, at, onOpen, onBack }: {
   );
 }
 
-// How long a section runs, in its own terms: months for a monthly, weeks for
-// a weekly, sheets for a note. This is the number someone shortens when it
-// turns out to be too much.
-function sectionSpan(l: Layout): string {
-  const n = sheetCount(l);
-  if (!hasDatedPart(l)) return `${n}枚`;
-  const end = runEnd(l);
-  return `${l.year}年${l.month}月 → ${end.year}年${end.month}月・${n}枚`;
+// The smallest change that gets a section down to `want` sheets or fewer.
+// A note section is however many sheets it says; a dated one is as long as
+// its dates, so it is shortened a month at a time -- a weekly cannot stop
+// mid-month, and pretending otherwise would be a control that lies.
+function shortenTo(l: Layout, want: number): Layout | null {
+  if (want < 1 || sheetCount(l) <= want) return null;
+  if (!hasDatedPart(l)) return { ...l, pages: want };
+  let months = Math.max(1, l.monthCount);
+  while (months > 1 && sheetCount({ ...l, monthCount: months }) > want) months--;
+  const out = { ...l, monthCount: months };
+  return sheetCount(out) < sheetCount(l) ? out : null;
 }
 
-function CanvasScreen({ book, at, setBook, onBack, goTo, print, setPrint }: {
+// How long a section runs, in the words its own content uses: months for a
+// monthly, weeks for a weekly, sheets for a note. Not in places on the paper
+// -- a week is a page and two pages share a sheet, so "48枚" for a year of
+// weeks is true of neither the run nor the paper.
+function runText(l: Layout): string {
+  if (!hasDatedPart(l)) return `${Math.max(1, l.pages ?? 1)}枚`;
+  if (isDayPaced(l)) return l.daysPerSheet === 7 ? `${sheetCount(l)}週` : `${sheetCount(l)}枚`;
+  return `${Math.max(1, l.monthCount)}ヶ月`;
+}
+
+// How long a section runs, with the dates it covers. This is what someone
+// shortens when it turns out to be too much.
+function sectionSpan(l: Layout): string {
+  if (!hasDatedPart(l)) return runText(l);
+  const end = runEnd(l);
+  return `${l.year}年${l.month}月 → ${end.year}年${end.month}月・${runText(l)}`;
+}
+
+function CanvasScreen({ book, at, setBook, onBack, goTo, print, setPrint, openRange }: {
   book: Book; at: number; setBook: (fn: (b: Book) => Book) => void;
   onBack: () => void;
   // Editing a different section of the same book -- adding one lands here too.
@@ -1060,6 +1130,8 @@ function CanvasScreen({ book, at, setBook, onBack, goTo, print, setPrint }: {
   // The paper belongs to the book, so it is held above this screen.
   print: PrintOptions;
   setPrint: (fn: (p: PrintOptions) => PrintOptions) => void;
+  // Changes when the contents asked for this section's period.
+  openRange: number;
 }) {
   // The section being edited. Everything below this line is written against
   // one refill, exactly as it was before books existed.
@@ -1491,6 +1563,12 @@ function CanvasScreen({ book, at, setBook, onBack, goTo, print, setPrint }: {
   // lists none either, and their range still has to be reachable.
   const datedSlot = datedSlotOf(layout);
   const monthlyTarget: SheetTarget = layout.spanning ? 'spanning' : { slot: datedSlot };
+  // Arrived from the contents with "shorten this one" in mind: the period is
+  // what that means, so it opens with it.
+  useLayoutEffect(() => {
+    if (openRange > 0 && (layout.spanning || datedSlot >= 0)) setSheet(monthlyTarget);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openRange]);
 
   // One button per removable thing, at the outer top corner of the whole
   // block. A part straddling the gutter is still one part, and its button
@@ -1568,6 +1646,7 @@ function CanvasScreen({ book, at, setBook, onBack, goTo, print, setPrint }: {
     <PartSheet
       target={sheet}
       book={book}
+      setBook={setBook}
       layout={layout}
       setLayout={setLayout}
       inline={wide}
@@ -2470,21 +2549,25 @@ function AddSection({ job, print, onPick, onClose }: {
 // sheet itself. The imposition centres the block and fills it in order, so
 // the empty ones are the last places of the last sheet -- mirrored on a back,
 // because that is what the paper does when it is turned over.
-function SpareSlots({ plan, tile, spare, mirror, scalePercent, onPress }: {
+function SpareSlots({ plan, tile, first, count, mirror, scalePercent, empty, onPress }: {
   plan: TilePlan;
   tile: { widthMm: number; heightMm: number };
-  spare: number;
+  // The first place on this page to draw, and how many.
+  first: number;
+  count: number;
   mirror: boolean;
   scalePercent: number;
-  onPress: () => void;
+  // Whether these places are empty (a ＋) or carry something (what is on them).
+  empty: boolean;
+  onPress: (place: number) => void;
 }) {
-  const { paper, cols, perPage, sideMm, endMm } = plan;
+  const { paper, cols, sideMm, endMm } = plan;
   const k = scalePercent / 100;
   const pct = (v: number, of: number) => `${(v / of) * 100}%`;
   return (
     <>
-      {Array.from({ length: spare }, (_, n) => {
-        const i = perPage - spare + n;
+      {Array.from({ length: count }, (_, n) => {
+        const i = first + n;
         const col = mirror ? cols - 1 - (i % cols) : i % cols;
         const row = Math.floor(i / cols);
         // The artwork is scaled about the paper's centre, so the places are
@@ -2495,19 +2578,63 @@ function SpareSlots({ plan, tile, spare, mirror, scalePercent, onPress }: {
         return (
           <button
             key={i}
-            className="empty absolute flex items-center justify-center rounded-[2px] border border-dashed border-accent bg-accent-soft/70 text-[13px] text-accent"
+            className={`absolute flex items-center justify-center rounded-[2px] ${
+              empty
+                ? 'empty border border-dashed border-accent bg-accent-soft/70 text-[13px] text-accent'
+                : 'onpaper border border-transparent hover:border-accent hover:bg-accent-soft/40'
+            }`}
             style={{
               left: pct(x, paper.widthMm),
               top: pct(y, paper.heightMm),
               width: pct(tile.widthMm * k, paper.widthMm),
               height: pct(tile.heightMm * k, paper.heightMm),
             }}
-            aria-label="ここにリフィルを追加する"
-            onClick={onPress}
-          >＋</button>
+            aria-label={empty ? 'ここにリフィルを追加する' : 'この面について'}
+            onClick={e => { e.stopPropagation(); onPress(i); }}
+          >{empty ? '＋' : ''}</button>
         );
       })}
     </>
+  );
+}
+
+// What one place on the printed sheet is, and what can be done about it.
+// "Too many weeklies" is noticed while looking at the paper, and the page
+// being looked at is the one it should stop at -- so that is the button.
+function PageSheet({ book, at, nth, onShorten, onDrop, onClose }: {
+  book: Book;
+  at: number;
+  nth: number;
+  onShorten: (i: number, to: Layout) => void;
+  onDrop: (i: number) => void;
+  onClose: () => void;
+}) {
+  const sec = book.sections[at];
+  const cut = shortenTo(sec, nth + 1);
+  return (
+    <Modal title={sectionLabel(sec)} onClose={onClose}>
+      <p className="pagewhat m-0 text-[12px] text-muted">
+        この面は「{sectionLabel(sec)}」の{nth + 1}枚目・{sheetLabel(sec, nth)}
+        （ぜんぶで{runText(sec)}）
+      </p>
+      {cut ? (
+        <Button variant="quiet" className="cuthere" onClick={() => onShorten(at, cut)}>
+          ここまでにする（{runText(sec)} → {runText(cut)}）
+        </Button>
+      ) : (
+        <p className="m-0 text-[11px] leading-snug text-faint">
+          これが最後の1枚です。短くするなら期間を変えてください
+        </p>
+      )}
+      {book.sections.length > 1 && (
+        <Button variant="quiet" className="dropsec" onClick={() => onDrop(at)}>
+          この中身を外す
+        </Button>
+      )}
+      <span className="text-[10px] leading-snug text-faint">
+        日付のあるものは月の単位で短くなります（週の途中では終われないため）
+      </span>
+    </Modal>
   );
 }
 
@@ -2526,11 +2653,12 @@ function Thumb({ layout, size }: { layout: Layout; size: SizeSpec }) {
 
 function PartSheet({
   target, book, layout, setLayout, inline, onClose, onRemove, onRemoveSpanning, onLoad, onSave,
-  size, onExport, print, setPrint, onAddSection, say,
+  size, onExport, print, setPrint, onAddSection, setBook, say,
 }: {
   target: Exclude<SheetTarget, null>;
   // The whole book, because the paper carries all of it.
   book: Book;
+  setBook: (fn: (b: Book) => Book) => void;
   layout: Layout;
   setLayout: (fn: (l: Layout) => Layout) => void;
   // Beside the paper rather than over it, on a screen with room for both.
@@ -2552,8 +2680,9 @@ function PartSheet({
   const saved = useMemo(() => target === 'load' ? listBooks() : [], [target]);
   const job = usePaperJob(book.sections, size, print);
   const { also, perPaper } = job;
-  // An empty place pressed on the printed sheet itself.
+  // An empty place pressed on the printed sheet itself, and a filled one.
   const [pickHere, setPickHere] = useState(false);
+  const [pageAt, setPageAt] = useState<number | null>(null);
   const kind = typeof target === 'string' ? null : layout.surface.placed[target.slot];
   // What the months actually come to, for the run this sheet is setting.
   const [firstDay, lastDay] = runDates(layout);
@@ -2650,7 +2779,24 @@ function PartSheet({
             <PrintPreview
               layout={layout} size={size} print={print} also={also} job={job}
               onPlus={() => setPickHere(true)}
+              onPage={setPageAt}
             />
+            {pageAt !== null && job.owners[pageAt] && (
+              <PageSheet
+                book={book} at={job.owners[pageAt].at} nth={job.owners[pageAt].nth}
+                onShorten={(i, to) => {
+                  setBook(b => ({ ...b, sections: b.sections.map((sec, k) => (k === i ? to : sec)) }));
+                  setPageAt(null);
+                  say(`${sectionLabel(to)}を${runText(to)}にしました`);
+                }}
+                onDrop={i => {
+                  setBook(b => ({ ...b, sections: b.sections.filter((_, k) => k !== i) }));
+                  setPageAt(null);
+                  say('外しました');
+                }}
+                onClose={() => setPageAt(null)}
+              />
+            )}
             {pickHere && (
               <AddSection
                 job={job} print={print}
@@ -2997,10 +3143,13 @@ const PREVIEW_PX = 168;
 // Imposed, duplexed sheets look like nonsense until you see them laid out and
 // numbered. Showing them here means the options can be judged before anyone
 // spends ink on them.
-function PrintPreview({ layout, size, print, also, job, onPlus }: {
+function PrintPreview({ layout, size, print, also, job, onPlus, onPage }: {
   layout: Layout; size: SizeSpec; print: PrintOptions; also: Layout[];
   job: PaperJob;
   onPlus: () => void;
+  // A place on the paper that has something on it: which refill of which
+  // section it is, and what can be done about it.
+  onPage: (place: number) => void;
 }) {
   const sheets = useMemo(
     () => buildPrintSheets(layout, size, print, also),
@@ -3026,6 +3175,11 @@ function PrintPreview({ layout, size, print, also, job, onPlus }: {
   // picture too many, and the printed sheet is the truer of the two.
   const tile = sheetSizeOf(layout, size);
   const lastSheet = Math.max(0, job.sheets - 1);
+  // Which refill of the run each place on a page holds: the pages run in the
+  // order the imposition laid them, so the sheet of paper a page belongs to
+  // says where its places start.
+  const pageStart = (i: number) => (print.duplex ? Math.floor(i / 2) : i) * job.perPaper;
+  const placesOn = (i: number) => Math.max(0, Math.min(job.perPaper, job.used - pageStart(i)));
   const spareOn = (i: number) => (
     print.impose && job.spare > 0 && (print.duplex ? Math.floor(i / 2) : i) === lastSheet
       ? { mirror: print.duplex && i % 2 === 1 }
@@ -3046,8 +3200,10 @@ function PrintPreview({ layout, size, print, also, job, onPlus }: {
               </button>
               {spareOn(i) && (
                 <SpareSlots
-                  plan={job.plan} tile={tile} spare={job.spare}
+                  plan={job.plan} tile={tile}
+                  first={job.perPaper - job.spare} count={job.spare}
                   mirror={spareOn(i)!.mirror} scalePercent={print.scalePercent}
+                  empty
                   onPress={onPlus}
                 />
               )}
@@ -3097,10 +3253,23 @@ function PrintPreview({ layout, size, print, also, job, onPlus }: {
                   ? 'block w-[calc((100dvw-32px)*2.4)] max-w-none'
                   : 'block h-auto w-auto max-h-[calc(100dvh-128px)] max-w-[calc(100dvw-32px)]'}
               />
+              {/* Every place on the enlarged sheet, not only the empty ones:
+                  this is where someone looks to decide how much of a run they
+                  actually want, so it is where a page says what it is and can
+                  be cut back to. */}
+              <SpareSlots
+                plan={job.plan} tile={tile}
+                first={0} count={placesOn(open)}
+                mirror={print.duplex && open % 2 === 1} scalePercent={print.scalePercent}
+                empty={false}
+                onPress={place => { setOpen(null); onPage(pageStart(open) + place); }}
+              />
               {spareOn(open) && (
                 <SpareSlots
-                  plan={job.plan} tile={tile} spare={job.spare}
+                  plan={job.plan} tile={tile}
+                  first={job.perPaper - job.spare} count={job.spare}
                   mirror={spareOn(open)!.mirror} scalePercent={print.scalePercent}
+                  empty
                   onPress={() => { setOpen(null); onPlus(); }}
                 />
               )}
