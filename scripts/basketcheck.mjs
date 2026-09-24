@@ -198,17 +198,33 @@ await page.waitForTimeout(200);
 const also = (await page.locator('.alsonote').textContent().catch(() => '')).replace(/\s+/g, '');
 check(also.includes('メモ') && also.includes('2つ'), `編集画面にも残る（「${also}」）`);
 
-// The export screen shows the same picture, because it is the same control.
+// The export screen is the result, and one picture of the paper is enough on
+// it: the squares live on the 用紙 sheet. What it carries is the number and
+// one press to where the adding is done.
 await page.getByRole('button', { name: 'PDF出力プレビュー' }).click();
 await page.locator('.preview').waitFor();
 await page.waitForTimeout(300);
 check(
-  await page.locator('.fillmap .added').count() === 2,
-  '書き出し画面にも同じ紙の絵が出ている',
+  await page.locator('.sheet .fillmap').count() === 0,
+  '書き出し画面に紙の絵は二重に出ない（刷り上がりだけ）',
 );
 const spare = (await note()).match(/(\d+)面あいて/);
-check(!!spare, `あきが出る（${(await note()).trim()}）`);
+check(!!spare, `あきの数は書き出し画面にも出る（${(await note()).trim()}）`);
+const toFill = await page.locator('.tofill').boundingBox();
+check(
+  !!toFill && toFill.y < 900,
+  `足しに行くボタンが刷り上がりのすぐ下にある（y=${Math.round(toFill?.y ?? -1)}px）`,
+);
 await page.screenshot({ path: `${OUT}/02-書き出し.png` });
+await page.locator('.tofill').click();
+await page.waitForTimeout(400);
+check(
+  await page.locator('.fillmap .added').count() === 2,
+  'そこから用紙の絵に戻れる（入れたものが入っている）',
+);
+await page.locator('.toprint').click();
+await page.locator('.preview').waitFor();
+await page.waitForTimeout(300);
 
 const dl = page.waitForEvent('download');
 await page.getByRole('button', { name: '書き出す' }).click();

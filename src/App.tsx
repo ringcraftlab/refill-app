@@ -1386,6 +1386,8 @@ function CanvasScreen({ layout, setLayout, onBack }: {
       setPrint={setPrint}
       onSaveAndNew={() => { setAfterSave('new'); setSheet('save'); }}
       andNew={afterSave === 'new'}
+      onOpenPaper={() => setSheet('paper')}
+      onOpenPrint={() => setSheet('print')}
     />
   );
 
@@ -2416,7 +2418,7 @@ function basketOf(layout: Layout, size: SizeSpec): Layout[] {
 
 function PartSheet({
   target, layout, setLayout, inline, onClose, onRemove, onRemoveSpanning, onLoad, onSave, size,
-  onExport, print, setPrint, onSaveAndNew, andNew,
+  onExport, print, setPrint, onSaveAndNew, andNew, onOpenPaper, onOpenPrint,
 }: {
   target: Exclude<SheetTarget, null>;
   layout: Layout;
@@ -2440,6 +2442,10 @@ function PartSheet({
   onSaveAndNew: () => void;
   // Whether the save sheet showing is the first half of that.
   andNew: boolean;
+  // Leave this screen for the picture of the paper, where the empty places
+  // are pressed, and back again for what it comes out as.
+  onOpenPaper: () => void;
+  onOpenPrint: () => void;
 }) {
   const lastMonth = addMonths(layout.year, layout.month, Math.max(1, layout.monthCount) - 1);
   const saved = useMemo(() => target === 'load' ? listLayouts() : [], [target]);
@@ -2531,6 +2537,12 @@ function PartSheet({
                       : suggestName(layout, size, foldOf(layout, size)?.grain)}
                   />
                 </Field>
+                {/* The other half of the trip: this screen decides what goes
+                    on the paper, and the next question is always what that
+                    comes out as. */}
+                <Button variant="quiet" className="toprint" onClick={onOpenPrint}>
+                  刷り上がりを見る
+                </Button>
               </>
             ) : (
               <p className="m-0 text-[12px] leading-snug text-faint">
@@ -2544,6 +2556,26 @@ function PartSheet({
         {target === 'print' && (
           <>
             <PrintPreview layout={layout} size={size} print={print} also={also} />
+
+            {/* One picture to a screen. The squares to press are on the 用紙
+                sheet; drawn here as well they read as a second preview of the
+                same paper, below the real one, and the way to add got lost
+                under it. What belongs here is the number that makes someone
+                want to add -- and one press to where that is done. */}
+            {print.impose && (
+              <div className="spare flex flex-wrap items-center gap-x-3 gap-y-1.5">
+                <p className="fill-note m-0 min-w-[15rem] flex-1 text-[12px] text-muted">
+                  {PAPERS[print.paper].label} 1枚に{perPaper}面・いま{job.used}面（紙{job.sheets}枚）
+                  {job.spare > 0
+                    ? `・最後の1枚に${job.spare}面あいています`
+                    : '・あきはありません'}
+                </p>
+                <Button variant="quiet" className="tofill shrink-0" onClick={onOpenPaper}>
+                  ＋ あきに足す
+                </Button>
+              </div>
+            )}
+
             <Choice
               label="刷り方"
               options={[{ v: 'tile', label: '用紙にまとめる' }, { v: 'exact', label: '原寸のまま' }]}
@@ -2563,25 +2595,6 @@ function PartSheet({
               />
             )}
 
-            {/* A year of monthlies is twelve refills and an A3 holds sixteen,
-                so the last four places print as filler and go in the bin. What
-                can be put there is anything already saved that is the same
-                punched sheet -- same size, same form, same way up -- because
-                the tiling lays out one tile, not a jigsaw. The same picture
-                as the 用紙 chip's, and it is the same control: this screen is
-                where the result is looked at, so it is where a place left
-                empty is most likely to be noticed. */}
-            {print.impose && (
-              <Field label="1枚の紙に並べるもの">
-                <PaperFill
-                    size={size} print={print} setPrint={setPrint} job={job}
-                    onSaveAndNew={onSaveAndNew}
-                    currentName={layout.name && layout.name !== '新しいリフィル'
-                      ? layout.name
-                      : suggestName(layout, size, foldOf(layout, size)?.grain)}
-                  />
-              </Field>
-            )}
             {/* The browser's own paragraph margin, kept deliberately: it is the
                 breathing room between the paper choice and the print options. */}
             <p className="print-summary my-[13px] text-[13px] text-faint">
