@@ -428,6 +428,15 @@ export function sheetLabel(layout: Layout, nth: number): string {
   return `${sheet.year}年${sheet.month}月`;
 }
 
+// One sheet of a section, with the dates that sheet carries. The editor
+// shows a page of the book rather than the template's first sheet: turning to
+// October has to show October. What is edited is still the section -- this is
+// only what is drawn.
+export function sheetAt(layout: Layout, nth: number): Layout {
+  const all = sheetsOf(layout);
+  return all[Math.max(0, Math.min(nth, all.length - 1))] ?? layout;
+}
+
 // The last month the run actually prints. With two calendars to a sheet an odd
 // number of months still fills its final spread, so what comes out is a month
 // further on than the range was set to -- and the range has to say so rather

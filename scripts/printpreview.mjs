@@ -55,7 +55,7 @@ await page.locator('.preview figure button').nth(1).click();
 await page.locator('.lightbox svg').waitFor();
 console.log('enlarged:', await page.locator('.lightbox-bar span').textContent());
 await page.screenshot({ path: `${OUT}/03-タップで拡大.png` });
-await page.getByRole('button', { name: '次のページ' }).click();
+await page.getByRole('button', { name: '次へ', exact: true }).click();
 console.log('next:', await page.locator('.lightbox-bar span').textContent());
 await page.getByRole('button', { name: '閉じる' }).click();
 console.log('closed:', await page.locator('.lightbox').count());

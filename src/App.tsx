@@ -22,7 +22,7 @@ import { addDays, addMonths, isoDate, runDates } from './lib/dates';
 import {
   buildPages, buildPrintSheets, datedSlotOf, DEFAULT_PRINT, hasDatedPart, INK_INSET_MM, isDayPaced,
   chainCount, chainOwners, duplexFlipOf, imposeCount, MONTH_PACED, paperPlan, punchInset, runEnd,
-  sameSheet, sheetCount, sheetLabel, sheetSizeOf,
+  sameSheet, sheetAt, sheetCount, sheetLabel, sheetSizeOf,
 } from './lib/render/pages';
 import type { BackFill, PrintOptions } from './lib/render/pages';
 import type { TilePlan } from './lib/render/impose';
@@ -375,8 +375,11 @@ function createBook(): Book {
 export function App() {
   const [stage, setStage] = useState<Stage>('size');
   const [book, setBook] = useState<Book>(createBook);
-  // Which section the editor is on. The contents screen is what moves it.
+  // Where the editor is: which section, and which of its sheets. Turning the
+  // page moves the second; the contents moves both.
   const [at, setAt] = useState(0);
+  const [nth, setNth] = useState(0);
+  const goTo = (i: number, sheet = 0) => { setAt(i); setNth(sheet); };
   // The paper is the book's, not a section's: everything in it is printed in
   // one run, on one kind of paper.
   const [print, setPrint] = useState<PrintOptions>(DEFAULT_PRINT);
@@ -443,7 +446,7 @@ export function App() {
         print={print}
         at={Math.min(at, book.sections.length - 1)}
         onOpen={(i: number, open?: 'range' | 'part0') => {
-          setAt(i);
+          goTo(i);
           if (open) setOpenOn(o => ({ key: o.key + 1, what: open }));
           setStage('canvas');
         }}
@@ -455,9 +458,10 @@ export function App() {
     <CanvasScreen
       book={book}
       at={Math.min(at, book.sections.length - 1)}
+      nth={nth}
       setBook={setBook}
       onBack={() => setStage('contents')}
-      goTo={setAt}
+      goTo={goTo}
       print={print}
       setPrint={setPrint}
       openOn={openOn}
@@ -1285,11 +1289,14 @@ function sectionSpan(l: Layout): string {
   return `${l.year}年${l.month}月 → ${end.year}年${end.month}月・${runText(l)}`;
 }
 
-function CanvasScreen({ book, at, setBook, onBack, goTo, print, setPrint, openOn }: {
+function CanvasScreen({ book, at, nth, setBook, onBack, goTo, print, setPrint, openOn }: {
   book: Book; at: number; setBook: (fn: (b: Book) => Book) => void;
+  // Which sheet of that section the book is turned to.
+  nth: number;
   onBack: () => void;
-  // Editing a different section of the same book -- adding one lands here too.
-  goTo: (i: number) => void;
+  // Editing a different section of the same book, at one of its sheets:
+  // turning the page and adding one both land here.
+  goTo: (i: number, nth?: number) => void;
   // The paper belongs to the book, so it is held above this screen.
   print: PrintOptions;
   setPrint: (fn: (p: PrintOptions) => PrintOptions) => void;
@@ -1305,9 +1312,33 @@ function CanvasScreen({ book, at, setBook, onBack, goTo, print, setPrint, openOn
   }));
   const size = SIZES[layout.size];
   const geo = useMemo(() => buildGeometry(layout, size), [layout, size]);
-  const pages = useMemo(() => buildPages(layout, size), [layout, size]);
+  // What is drawn is the page the book is turned to -- October's sheet shows
+  // October. What is edited is still the section: the dates are the only
+  // difference between one of its sheets and the next.
+  const shown = useMemo(() => sheetAt(layout, nth), [layout, nth]);
+  const pages = useMemo(() => buildPages(shown, size), [shown, size]);
+
+  // Every sheet of the book in order, which is what turning the page walks.
+  // A sheet is what can be edited: a spread is one sheet with two pages on it.
+  const leaves = useMemo(
+    () => book.sections.flatMap((sec, i) =>
+      Array.from({ length: sheetCount(sec) }, (_, k) => ({ at: i, nth: k }))),
+    [book.sections],
+  );
+  const cursor = leaves.findIndex(l => l.at === at && l.nth === nth);
+  // Where this sheet falls in the book, said in pages, which is how anyone
+  // holding a planner counts.
+  const paging = useMemo(() => {
+    const all = pagesOf(book.sections);
+    const first = all.findIndex(l => l.at === at && l.nth === nth);
+    if (first < 0) return null;
+    let last = first;
+    while (all[last + 1] && all[last + 1].at === at && all[last + 1].nth === nth) last++;
+    return { from: first + 1, to: last + 1, of: all.length };
+  }, [book.sections, at, nth]);
 
   const [traySelected, setTraySelected] = useState<PartKind[]>([]);
+  const [addAt, setAddAt] = useState<number | null>(null);
   const [sheet, setSheet] = useState<SheetTarget>(null);
   const [toast, setToast] = useState('');
   const [ghost, setGhost] = useState<{ x: number; y: number; kinds: PartKind[] } | null>(null);
@@ -1870,9 +1901,10 @@ function CanvasScreen({ book, at, setBook, onBack, goTo, print, setPrint, openOn
         {/* The two buttons keep their room; the name gives way. A long size
             name pushing them off the edge is worse than a name cut short. */}
         <span className="min-w-0 truncate">
-          {/* Which section, but only once there is more than one: with a
-              single one the title is the refill itself, and the form it is
-              folded into is what a phone has room to say. */}
+          {/* Which page of the book, and which section it came from -- with
+              one section and one sheet there is no book to be lost in, and
+              the form the refill is folded into is what a phone has room to
+              say instead. */}
           {book.sections.length > 1 && (
             <>{sectionLabel(layout)}<span className="mx-1 text-faint">・</span></>
           )}
@@ -1960,6 +1992,44 @@ function CanvasScreen({ book, at, setBook, onBack, goTo, print, setPrint, openOn
       </div>
 
       <div className="relative flex min-h-0 grow items-center justify-center px-3 py-2" ref={boxRef}>
+        {/* The book, turned. A planner is something you flip through, so the
+            page you are on has the next one to its right and what comes
+            before it on its left -- and where a page can be put before this
+            one, a ＋ sits exactly there. That is where a cover goes, and it
+            is on the paper rather than three screens away. */}
+        <span className="turn-left absolute left-0.5 top-1/2 z-10 flex -translate-y-1/2 flex-col gap-1.5">
+          {nth === 0 && (
+            <Button variant="edge" className="addbefore" onClick={() => setAddAt(at)} aria-label="前にページを足す">
+              ＋
+            </Button>
+          )}
+          {cursor > 0 && (
+            <Button
+              variant="edge"
+              className="prevpage"
+              onClick={() => goTo(leaves[cursor - 1].at, leaves[cursor - 1].nth)}
+              aria-label="前のページ"
+            >‹</Button>
+          )}
+        </span>
+        <span className="turn-right absolute right-0.5 top-1/2 z-10 flex -translate-y-1/2 flex-col gap-1.5">
+          {cursor >= 0 && cursor < leaves.length - 1 && (
+            <Button
+              variant="edge"
+              className="nextpage"
+              onClick={() => goTo(leaves[cursor + 1].at, leaves[cursor + 1].nth)}
+              aria-label="次のページ"
+            >›</Button>
+          )}
+          {cursor === leaves.length - 1 && (
+            <Button
+              variant="edge"
+              className="addafter"
+              onClick={() => setAddAt(book.sections.length)}
+              aria-label="後ろにページを足す"
+            >＋</Button>
+          )}
+        </span>
         <div
           className="flex items-center justify-center"
           ref={setRef}
@@ -2123,6 +2193,16 @@ function CanvasScreen({ book, at, setBook, onBack, goTo, print, setPrint, openOn
         </div>
       </div>
 
+      {/* Where in the book this page is, printed under it the way a page
+          number is. Not in the header: the form the refill is folded into is
+          what a narrow screen has room for up there. */}
+      {paging && paging.of > 2 && (
+        <p className="pageno m-0 shrink-0 pt-0.5 text-center text-[10px] text-faint">
+          {paging.from === paging.to ? paging.from : `${paging.from}–${paging.to}`}
+          <span className="mx-0.5">/</span>{paging.of}ページ
+        </p>
+      )}
+
       {/* What the rest of the book is, from inside one section of it. */}
       {book.sections.length > 1 && (
         <button
@@ -2240,6 +2320,24 @@ function CanvasScreen({ book, at, setBook, onBack, goTo, print, setPrint, openOn
         </div>
       )}
 
+      {/* Pressed on the paper's edge: what is chosen goes at that page. */}
+      {addAt !== null && (
+        <AddSection
+          job={job} print={print}
+          onPick={kind => {
+            const where = addAt;
+            setAddAt(null);
+            setBook(b => ({
+              ...b,
+              sections: withSection(b.sections, sectionOf(kind, layout), where),
+            }));
+            goTo(where, 0);
+            if (kind === 'cover') setSheet({ slot: 0 });
+            say(`${SECTION_LABEL(kind)}を足しました`);
+          }}
+          onClose={() => setAddAt(null)}
+        />
+      )}
       {toast && <Toast>{toast}</Toast>}
 
       {confirm && (
@@ -3481,12 +3579,12 @@ function PrintPreview({ layout, size, print, also, job, onPlus, onPage }: {
             </span>
           </div>
           <div className="lightbox-bar flex items-center gap-3.5 text-xs text-white" onClick={e => e.stopPropagation()}>
-            <Button variant="quiet" className="min-w-[52px] disabled:opacity-35" disabled={open === 0} onClick={() => step(-1)} aria-label="前のページ">←</Button>
+            <Button variant="quiet" className="min-w-[52px] disabled:opacity-35" disabled={open === 0} onClick={() => step(-1)} aria-label="前へ">←</Button>
             <span className="flex flex-col items-center gap-0.5 text-center">
               {label(open)}　{open + 1}/{sheets.length}
               <em className="not-italic text-[10px] text-white/55">{zoom ? 'タップで全体' : 'タップで拡大'}</em>
             </span>
-            <Button variant="quiet" className="min-w-[52px] disabled:opacity-35" disabled={open === sheets.length - 1} onClick={() => step(1)} aria-label="次のページ">→</Button>
+            <Button variant="quiet" className="min-w-[52px] disabled:opacity-35" disabled={open === sheets.length - 1} onClick={() => step(1)} aria-label="次へ">→</Button>
           </div>
         </div>
       )}

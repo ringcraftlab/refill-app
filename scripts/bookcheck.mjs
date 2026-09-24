@@ -213,5 +213,43 @@ check(
 );
 await page.screenshot({ path: `${OUT}/25-片面のページ.png` });
 
+// ---- the book, turned, in the editor ------------------------------------
+// A planner is something you flip through, so the page being edited has the
+// next one to its right and a ＋ where a page can go before it. That ＋ is
+// how a cover is reached without knowing the contents screen exists: five
+// presses from opening the app, all of them on the paper.
+await start('80×128mm', '見開き', 'マンスリー');
+const pageno = () => flat('.pageno');
+check((await pageno()).startsWith('2–3'), `いま何ページ目かが紙の下に出る（${await pageno()}）`);
+check(
+  await page.locator('.turn-left .addbefore').count() === 1
+    && await page.locator('.turn-right .nextpage').count() === 1,
+  '紙の左端に＋、右端にページ送りがある',
+);
+await page.locator('.nextpage').click();
+await page.waitForTimeout(400);
+check((await pageno()).startsWith('4–5'), `めくると次のページになる（${await pageno()}）`);
+const month = (await page.locator('.page').first().textContent()).replace(/\s+/g, '');
+check(month.includes('10'), `中身も次の月になっている（${month.slice(0, 10)}…）`);
+await page.locator('.prevpage').click();
+await page.waitForTimeout(400);
+check((await pageno()).startsWith('2–3'), `戻れる（${await pageno()}）`);
+await page.screenshot({ path: `${OUT}/30-めくる編集画面.png` });
+
+await page.locator('.addbefore').click();
+await page.locator('.modal').waitFor();
+await page.waitForTimeout(200);
+await page.locator('.addcover').click();
+await page.waitForTimeout(500);
+check(
+  (await pageno()).startsWith('1/'),
+  `左端の＋で入れたものは1ページ目になる（${await pageno()}）`,
+);
+check(
+  (await page.locator('.sheet h2').textContent().catch(() => '')).includes('写真'),
+  '表紙は写真を選ぶところが開く（編集画面から）',
+);
+await page.screenshot({ path: `${OUT}/33-表紙になった.png` });
+
 await browser.close();
 if (bad) process.exitCode = 1;
