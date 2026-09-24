@@ -596,10 +596,51 @@ const HOLE_RING_PX = 0.9;
 // would break out through the edge of the paper it is punched in.
 const HOLE_MIN_PX = 1;
 
-function SizeIcon({ size, tint, flip = false }: {
-  size: SizeSpec; tint: { fill: string; line: string }; flip?: boolean;
+// The faint ruling inside a drawn sheet: a month's columns and weeks. On the
+// form picker this is the choice itself -- 「左右セットで1ヶ月分」 is a claim in
+// words, and the same thing drawn is the thing. Lines only, no dates: at this
+// size a date would be a smudge, and the shape of the grid is what differs.
+function PageInk({ box, cols, rows, tint, pen }: {
+  box: { x: number; y: number; w: number; h: number };
+  cols: number; rows: number;
+  tint: { line: string }; pen: (onScreen: number) => number;
 }) {
-  const k = SHEET_SCALE;
+  const at = (i: number, from: number, span: number, of: number) => from + (span / of) * i;
+  return (
+    <g stroke={tint.line} strokeWidth={pen(0.7)} opacity={0.5}>
+      {Array.from({ length: cols - 1 }, (_, i) => (
+        <line
+          key={`v${i}`}
+          x1={at(i + 1, box.x, box.w, cols)} y1={box.y}
+          x2={at(i + 1, box.x, box.w, cols)} y2={box.y + box.h}
+        />
+      ))}
+      {Array.from({ length: rows - 1 }, (_, i) => (
+        <line
+          key={`h${i}`}
+          x1={box.x} y1={at(i + 1, box.y, box.h, rows)}
+          x2={box.x + box.w} y2={at(i + 1, box.y, box.h, rows)}
+        />
+      ))}
+    </g>
+  );
+}
+
+// The area of a sheet a part is drawn on: everything but the margin the rings
+// run down (or across the top, on the one size bound that way) and a little
+// air at the other edges.
+function inkBox(size: SizeSpec, flip: boolean) {
+  const m = size.ringMarginMm, pad = 2.5;
+  return size.ringsOn === 'top'
+    ? { x: pad, y: flip ? pad : m, w: size.widthMm - pad * 2, h: size.heightMm - m - pad }
+    : { x: flip ? pad : m, y: pad, w: size.widthMm - m - pad, h: size.heightMm - pad * 2 };
+}
+
+function SizeIcon({ size, tint, flip = false, scale = SHEET_SCALE, ink }: {
+  size: SizeSpec; tint: { fill: string; line: string }; flip?: boolean;
+  scale?: number; ink?: { cols: number; rows: number };
+}) {
+  const k = scale;
   const pen = (onScreen: number) => onScreen / k;
   const onTop = size.ringsOn === 'top';
   // `flip` is the left page of a spread: the binding is the seam between the
@@ -623,6 +664,7 @@ function SizeIcon({ size, tint, flip = false }: {
         width={size.widthMm - inset * 2} height={size.heightMm - inset * 2}
         rx={pen(2)} fill={tint.fill} stroke={tint.line} strokeWidth={pen(OUTLINE_PX)}
       />
+      {ink && <PageInk box={inkBox(size, flip)} cols={ink.cols} rows={ink.rows} tint={tint} pen={pen} />}
       {holeCentres(size.holes).map((at, i) => (
         <circle
           key={i}
@@ -737,6 +779,7 @@ function SidesScreen({ size, spread, fold, foldGrain, onPick, onBack, onConfirm 
   onPick: (v: { spread: boolean; fold: FoldCount; foldGrain?: FoldGrain }) => void;
   onBack: () => void; onConfirm: () => void;
 }) {
+  const wide = useWide();
   const spec = SIZES[size];
   const tint = SIZE_TINT[size];
   const flat = fold <= 1;
@@ -787,6 +830,15 @@ function SidesScreen({ size, spread, fold, foldGrain, onPick, onBack, onConfirm 
   // an ordinary alternative, and the extra cut went unsaid.
   const special = grains.includes('along') ? foldCards('along') : [];
   const picked = [...choices, ...special].find(c => c.on);
+  // The drawing is the choice, so it gets the room: as large as the widest
+  // one on this screen can be and still fit a card, and one box only as tall
+  // as the tallest of them -- the picker's own slot is A5's, which on
+  // 横長ミニ3穴 left four rows of empty air above a 55mm strip. One scale for
+  // every card, or a folded strip and a pair of pages could not be compared.
+  const all = [...choices, ...special];
+  const widestMm = Math.max(...all.map(c => (c.plan ? c.plan.sheetWmm : spec.widthMm * c.sheets!.length)));
+  const tallestMm = Math.max(...all.map(c => (c.plan ? c.plan.sheetHmm : spec.heightMm)));
+  const k = Math.min(SHEET_SCALE * 2.2, (wide ? 190 : 140) / widestMm);
 
   const card = (choice: Choice) => (
     <button
@@ -796,11 +848,17 @@ function SidesScreen({ size, spread, fold, foldGrain, onPick, onBack, onConfirm 
       aria-pressed={choice.on}
       onClick={() => onPick(choice.pick)}
     >
-      <span className="flex items-center justify-center gap-[3px]" style={{ height: SHEET_SLOT.height }}>
+      <span className="flex items-center justify-center gap-[3px]" style={{ height: tallestMm * k }}>
         {choice.plan
-          ? <FoldIcon size={spec} tint={tint} plan={choice.plan} />
+          ? <FoldIcon size={spec} tint={tint} plan={choice.plan} scale={k} ink />
           : choice.sheets!.map((flip, i) => (
-            <SizeIcon key={i} size={spec} tint={tint} flip={flip} />
+            <SizeIcon
+              key={i} size={spec} tint={tint} flip={flip} scale={k}
+              // A month across a spread is an index column and three days on
+              // the left, four days on the right -- which is what the words
+              // under the card had to say before the drawing said it.
+              ink={{ cols: choice.sheets!.length > 1 ? 4 : 7, rows: 6 }}
+            />
           ))}
       </span>
       <span className="flex flex-col gap-0.5">
@@ -866,10 +924,11 @@ function SidesScreen({ size, spread, fold, foldGrain, onPick, onBack, onConfirm 
 // The strip a fold unfolds into, drawn at the picker's scale so it can be
 // compared with the pages above it. Only the first panel is punched, and the
 // creases are where the paper actually bends.
-function FoldIcon({ size, tint, plan }: {
+function FoldIcon({ size, tint, plan, scale = SHEET_SCALE, ink = false }: {
   size: SizeSpec; tint: { fill: string; line: string }; plan: FoldPlan;
+  scale?: number; ink?: boolean;
 }) {
-  const k = SHEET_SCALE;
+  const k = scale;
   const pen = (onScreen: number) => onScreen / k;
   const margin = size.ringMarginMm / 2;
   const hole = Math.min(
@@ -902,6 +961,24 @@ function FoldIcon({ size, tint, plan }: {
           rx={pen(2)} fill={tint.fill} stroke={tint.line} strokeWidth={pen(OUTLINE_PX)}
         />
       )}
+      {/* Each panel holds its own part, so each is ruled: a strip with one
+          long grid across it would be a different thing entirely. */}
+      {ink && panels.map((p, i) => {
+        const pad = 2.5;
+        const head = i === 0 ? size.ringMarginMm : pad;
+        return (
+          <PageInk
+            key={`ink${p.atMm}`}
+            // The L's corner is cut out of the inner panels only: the head is
+            // the full width of the strip, and ruling it as if it were not
+            // put lines where there is no paper.
+            box={down
+              ? { x: (i === 0 ? 0 : cut) + pad, y: p.atMm + head, w: W - (i === 0 ? 0 : cut) - pad * 2, h: p.widthMm - head - pad }
+              : { x: p.atMm + head, y: pad, w: p.widthMm - head - pad, h: H - pad * 2 }}
+            cols={1} rows={5} tint={tint} pen={pen}
+          />
+        );
+      })}
       {panels.slice(1).map(p => (
         <line
           key={p.atMm}
