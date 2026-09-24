@@ -882,9 +882,6 @@ function CanvasScreen({ layout, setLayout, onBack }: {
   // so this is a button of its own rather than a gesture competing with those.
   const [zoomed, setZoomed] = useState(false);
   const [print, setPrint] = useState<PrintOptions>(DEFAULT_PRINT);
-  // Set when saving was asked for from an empty place on the paper, so that
-  // the save carries on into "and now make the next one".
-  const [afterSave, setAfterSave] = useState<'new' | null>(null);
   // The paper this will be printed on, worked out here rather than in the
   // export screen: how much of the sheet the design leaves empty is something
   // to know while designing it, not after pressing 書き出す.
@@ -1352,31 +1349,15 @@ function CanvasScreen({ layout, setLayout, onBack }: {
       layout={layout}
       setLayout={setLayout}
       inline={wide}
-      onClose={() => { setSheet(null); setAfterSave(null); }}
+      onClose={() => setSheet(null)}
       onRemove={slot => askRemove(PART_LABEL[layout.surface.placed[slot]], () => removePart(slot))}
       onRemoveSpanning={() => askRemove('マンスリー', () => setLayout(l => ({ ...l, spanning: null })))}
       onLoad={l => { setLayout(() => l); setSheet(null); say('読み込みました'); }}
       onSave={name => {
         const named = { ...layout, name };
-        const ok = saveLayout(named);
-        setSheet(null);
-        // Asked for from an empty place on the paper: what is on screen is
-        // kept, put on that paper, and a fresh refill of the same shape takes
-        // its place in the editor. Only on a save that actually landed --
-        // otherwise this would swap away a design that was not stored.
-        if (afterSave === 'new' && ok) {
-          setPrint(p => ({
-            ...p,
-            also: [...p.also.filter(a => a.id !== named.id), { id: named.id, n: 1 }],
-          }));
-          setLayout(() => blankLike(named));
-          setAfterSave(null);
-          say(`「${name}」を保存しました。同じ紙にもう1つ作ります`);
-          return;
-        }
         setLayout(() => named);
-        setAfterSave(null);
-        say(ok
+        setSheet(null);
+        say(saveLayout(named)
           ? `「${name}」を保存しました`
           : '保存できませんでした。背景の画像が大きいか、保存先がいっぱいです');
       }}
@@ -1384,9 +1365,27 @@ function CanvasScreen({ layout, setLayout, onBack }: {
       onExport={onExport}
       print={print}
       setPrint={setPrint}
-      onSaveAndNew={() => { setAfterSave('new'); setSheet('save'); }}
-      andNew={afterSave === 'new'}
-      onOpenPaper={() => setSheet('paper')}
+      // No dialog on the way: being made to name something is not what
+      // someone pressing an empty square came to do. It keeps the name it
+      // has, or the one the app would have suggested, and 保存 can change it
+      // afterwards.
+      onSaveAndNew={() => {
+        const name = layout.name && layout.name !== '新しいリフィル'
+          ? layout.name
+          : suggestName(layout, size, foldOf(layout, size)?.grain);
+        const named = { ...layout, name };
+        if (!saveLayout(named)) {
+          say('保存できませんでした。背景の画像が大きいか、保存先がいっぱいです');
+          return;
+        }
+        setPrint(p => ({
+          ...p,
+          also: [...p.also.filter(a => a.id !== named.id), { id: named.id, n: 1 }],
+        }));
+        setLayout(() => blankLike(named));
+        setSheet(null);
+        say(`「${name}」を同じ紙に置きました`);
+      }}
       onOpenPrint={() => setSheet('print')}
     />
   );
@@ -2157,12 +2156,8 @@ function suggestName(layout: Layout, size: SizeSpec, grain?: FoldGrain): string 
 // Naming what is being saved. A sheet rather than a dialog, because it is the
 // same shape of question as everything else here and it has to work beside the
 // paper on a desktop.
-function SaveSheet({ layout, size, grain, onSave, andNew = false }: {
+function SaveSheet({ layout, size, grain, onSave }: {
   layout: Layout; size: SizeSpec; grain?: FoldGrain; onSave: (name: string) => void;
-  // Opened from an empty place on the paper: saving is the first half of
-  // "keep this one and make the next one", and the sheet has to say so or it
-  // looks like the ＋ turned into an unrelated save.
-  andNew?: boolean;
 }) {
   const [name, setName] = useState(() => (
     layout.name && layout.name !== '新しいリフィル' ? layout.name : suggestName(layout, size, grain)
@@ -2179,13 +2174,11 @@ function SaveSheet({ layout, size, grain, onSave, andNew = false }: {
         />
       </Field>
       <p className="m-0 text-[11px] leading-snug text-faint">
-        {andNew
-          ? 'このリフィルを保存して同じ紙に置き、続けて新しいリフィルを作ります。あとで枚数を増やしたり外したりできます'
-          : <>保存したリフィルは、読み込みで開けるほか、
-              <strong className="font-semibold text-label">PDF出力で同じ紙に並べて刷れます</strong></>}
+        保存したリフィルは、読み込みで開けるほか、
+        <strong className="font-semibold text-label">PDF出力で同じ紙に並べて刷れます</strong>
       </p>
       <Button variant="cta" onClick={() => onSave(name.trim() || suggestName(layout, size, grain))}>
-        {andNew ? '保存して、新しく作る' : '保存する'}
+        保存する
       </Button>
     </>
   );
@@ -2262,7 +2255,6 @@ function PaperFill({ size, print, setPrint, job, onSaveAndNew, currentName }: {
   // otherwise would be a lie about an order this app does not let anyone
   // choose -- but the square that was pressed is still the one being answered.
   const [picking, setPicking] = useState<number | null>(null);
-  const pickerRef = useRef<HTMLDivElement>(null);
   const wide = plan.paper.widthMm > plan.paper.heightMm;
   const start = Math.max(0, (sheets - 1) * perPaper);
   const canAdd = canShare.length > 0;
@@ -2271,13 +2263,6 @@ function PaperFill({ size, print, setPrint, job, onSaveAndNew, currentName }: {
     const rest = p.also.filter(a => a.id !== l.id);
     return { ...p, also: n > 0 ? [...rest, { id: l.id, n: Math.min(24, n) }] : rest };
   });
-
-  // The whole point of pressing the square is that the answer comes to the
-  // square. In a sheet that scrolls, that has to be asked for.
-  useLayoutEffect(() => {
-    if (picking === null) return;
-    pickerRef.current?.scrollIntoView({ block: 'end', behavior: 'smooth' });
-  }, [picking]);
 
   return (
     <div className="flex flex-col gap-2">
@@ -2344,55 +2329,131 @@ function PaperFill({ size, print, setPrint, job, onSaveAndNew, currentName }: {
 
 
       {picking !== null && (
-        <div
-          ref={pickerRef}
-          className="picker flex flex-col gap-1.5 rounded-[10px] border border-accent bg-accent-soft/40 p-2"
-        >
-          <span className="flex items-center gap-2">
-            <strong className="flex-1 text-[12px] font-normal text-muted">
-              {canAdd ? 'ここに入れるものを選ぶ' : 'ここに入れられる保存済みのリフィルがありません'}
-            </strong>
-            <Button variant="quiet" onClick={() => setPicking(null)}>やめる</Button>
-          </span>
-          <ul className="basket m-0 flex max-h-56 list-none flex-col gap-1.5 overflow-y-auto p-0">
-            {canShare.map(l => {
-              const n = print.also.find(a => a.id === l.id)?.n ?? 0;
-              const adds = imposeCount(l, size, print);
-              return (
-                <li key={l.id}>
-                  <button
-                    className={`flex w-full items-center gap-2.5 rounded-[9px] border p-2 text-left ${
-                      n ? 'border-accent bg-accent-soft' : 'border-line-strong bg-white'
-                    }`}
-                    onClick={() => add(l, 1)}
-                  >
-                    {/* The refill itself, small. A list of names is a list
-                        of names; a list of papers is the thing. */}
-                    <Thumb layout={l} size={size} />
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-[13px]">{l.name}</span>
-                      <span className="block text-[10px] text-faint">
-                        {adds > 1 ? `1つで${adds}面` : '1面'}{n > 0 ? `・${n}つ入れています` : ''}
-                      </span>
-                    </span>
-                    <span className="shrink-0 text-[13px] text-accent">入れる</span>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-          {/* The way out of an empty list, and a shortcut out of a full one.
-              Filling a sheet means having more than one refill, so the place
-              that asks for another one is the place to make another one. */}
-          <Button variant="quiet" className="makenew" onClick={onSaveAndNew}>
-            ＋ 新しいリフィルを作って入れる
-          </Button>
-          <span className="text-[10px] leading-snug text-faint">
-            いまの「{currentName}」を保存してから、同じ紙にもう1つ作ります
-          </span>
-        </div>
+        <AddPicker
+          size={size} print={print} canShare={canShare}
+          onAdd={l => add(l, 1)} onClose={() => setPicking(null)}
+          onSaveAndNew={onSaveAndNew} currentName={currentName}
+        />
       )}
     </div>
+  );
+}
+
+// What an empty place offers, wherever one was pressed. Both pictures of the
+// paper -- the squares on the 用紙 sheet and the printed sheet itself -- open
+// this, so there is one list and one wording to learn.
+function AddPicker({ size, print, canShare, onAdd, onClose, onSaveAndNew, currentName }: {
+  size: SizeSpec;
+  print: PrintOptions;
+  canShare: Layout[];
+  onAdd: (l: Layout) => void;
+  onClose: () => void;
+  onSaveAndNew: () => void;
+  currentName: string;
+}) {
+  const box = useRef<HTMLDivElement>(null);
+  // Pressed there, answered there: in a sheet that scrolls, that has to be
+  // asked for, or on a 900px window the answer opens below the fold and the
+  // press reads as nothing happening.
+  useLayoutEffect(() => {
+    box.current?.scrollIntoView({ block: 'end', behavior: 'smooth' });
+  }, []);
+  return (
+    <div
+      ref={box}
+      className="picker flex flex-col gap-1.5 rounded-[10px] border border-accent bg-accent-soft/40 p-2"
+    >
+      <span className="flex items-center gap-2">
+        <strong className="flex-1 text-[12px] font-normal text-muted">
+          {canShare.length ? 'ここに入れるものを選ぶ' : 'ここに入れられる保存済みのリフィルがありません'}
+        </strong>
+        <Button variant="quiet" onClick={onClose}>やめる</Button>
+      </span>
+      <ul className="basket m-0 flex max-h-56 list-none flex-col gap-1.5 overflow-y-auto p-0">
+        {canShare.map(l => {
+          const n = print.also.find(a => a.id === l.id)?.n ?? 0;
+          const adds = imposeCount(l, size, print);
+          return (
+            <li key={l.id}>
+              <button
+                className={`flex w-full items-center gap-2.5 rounded-[9px] border p-2 text-left ${
+                  n ? 'border-accent bg-accent-soft' : 'border-line-strong bg-white'
+                }`}
+                onClick={() => onAdd(l)}
+              >
+                {/* The refill itself, small. A list of names is a list of
+                    names; a list of papers is the thing. */}
+                <Thumb layout={l} size={size} />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[13px]">{l.name}</span>
+                  <span className="block text-[10px] text-faint">
+                    {adds > 1 ? `1つで${adds}面` : '1面'}{n > 0 ? `・${n}つ入れています` : ''}
+                  </span>
+                </span>
+                <span className="shrink-0 text-[13px] text-accent">入れる</span>
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+      {/* The way out of an empty list, and a shortcut out of a full one.
+          Filling a sheet means having more than one refill, so the place that
+          asks for another one is the place to make another one. Nothing is
+          asked on the way: the one on screen is kept under the name it
+          already has, because being made to name something is not what
+          someone pressing an empty square came to do. */}
+      <Button variant="quiet" className="makenew" onClick={onSaveAndNew}>
+        ＋ 新しいリフィルを作って入れる
+      </Button>
+      <span className="text-[10px] leading-snug text-faint">
+        いまの「{currentName}」をこの紙に置いて、白紙をもう1枚ひらきます
+      </span>
+    </div>
+  );
+}
+
+// The places on a printed sheet that nothing is going on, drawn over the
+// sheet itself. The imposition centres the block and fills it in order, so
+// the empty ones are the last places of the last sheet -- mirrored on a back,
+// because that is what the paper does when it is turned over.
+function SpareSlots({ plan, tile, spare, mirror, scalePercent, onPress }: {
+  plan: TilePlan;
+  tile: { widthMm: number; heightMm: number };
+  spare: number;
+  mirror: boolean;
+  scalePercent: number;
+  onPress: () => void;
+}) {
+  const { paper, cols, perPage, sideMm, endMm } = plan;
+  const k = scalePercent / 100;
+  const pct = (v: number, of: number) => `${(v / of) * 100}%`;
+  return (
+    <>
+      {Array.from({ length: spare }, (_, n) => {
+        const i = perPage - spare + n;
+        const col = mirror ? cols - 1 - (i % cols) : i % cols;
+        const row = Math.floor(i / cols);
+        // The artwork is scaled about the paper's centre, so the places are
+        // too, or the ＋ would sit beside the squares it names.
+        const at = (v: number, centre: number) => centre + (v - centre) * k;
+        const x = at(sideMm + col * tile.widthMm, paper.widthMm / 2);
+        const y = at(endMm + row * tile.heightMm, paper.heightMm / 2);
+        return (
+          <button
+            key={i}
+            className="empty absolute flex items-center justify-center rounded-[2px] border border-dashed border-accent bg-accent-soft/70 text-[13px] text-accent"
+            style={{
+              left: pct(x, paper.widthMm),
+              top: pct(y, paper.heightMm),
+              width: pct(tile.widthMm * k, paper.widthMm),
+              height: pct(tile.heightMm * k, paper.heightMm),
+            }}
+            aria-label="ここに別のリフィルを入れる"
+            onClick={onPress}
+          >＋</button>
+        );
+      })}
+    </>
   );
 }
 
@@ -2418,7 +2479,7 @@ function basketOf(layout: Layout, size: SizeSpec): Layout[] {
 
 function PartSheet({
   target, layout, setLayout, inline, onClose, onRemove, onRemoveSpanning, onLoad, onSave, size,
-  onExport, print, setPrint, onSaveAndNew, andNew, onOpenPaper, onOpenPrint,
+  onExport, print, setPrint, onSaveAndNew, onOpenPrint,
 }: {
   target: Exclude<SheetTarget, null>;
   layout: Layout;
@@ -2440,17 +2501,15 @@ function PartSheet({
   // Keep this one and start another on the same paper: the answer to an empty
   // place when there is nothing saved to put in it.
   onSaveAndNew: () => void;
-  // Whether the save sheet showing is the first half of that.
-  andNew: boolean;
-  // Leave this screen for the picture of the paper, where the empty places
-  // are pressed, and back again for what it comes out as.
-  onOpenPaper: () => void;
+  // From the paper to what it comes out as.
   onOpenPrint: () => void;
 }) {
   const lastMonth = addMonths(layout.year, layout.month, Math.max(1, layout.monthCount) - 1);
   const saved = useMemo(() => target === 'load' ? listLayouts() : [], [target]);
   const job = usePaperJob(layout, size, print);
   const { also, perPaper } = job;
+  // An empty place pressed on the printed sheet itself.
+  const [pickHere, setPickHere] = useState(false);
   const kind = typeof target === 'string' ? null : layout.surface.placed[target.slot];
   // What the months actually come to, for the run this sheet is setting.
   const [firstDay, lastDay] = runDates(layout);
@@ -2462,7 +2521,7 @@ function PartSheet({
     : null;
 
   const title = target === 'load' ? '保存したリフィル'
-    : target === 'save' ? (andNew ? '保存して、もう1つ作る' : '保存')
+    : target === 'save' ? '保存'
     : target === 'print' ? 'PDF出力プレビュー'
     : target === 'paper' ? '用紙'
     : target === 'background' ? '紙の背景'
@@ -2480,10 +2539,7 @@ function PartSheet({
         {target === 'look' && <LookSheet layout={layout} setLayout={setLayout} />}
 
         {target === 'save' && (
-          <SaveSheet
-            layout={layout} size={size} grain={foldOf(layout, size)?.grain}
-            onSave={onSave} andNew={andNew}
-          />
+          <SaveSheet layout={layout} size={size} grain={foldOf(layout, size)?.grain} onSave={onSave} />
         )}
 
         {/* Opening one instead of this one. Putting one BESIDE this one is
@@ -2555,7 +2611,24 @@ function PartSheet({
 
         {target === 'print' && (
           <>
-            <PrintPreview layout={layout} size={size} print={print} also={also} />
+            <PrintPreview
+              layout={layout} size={size} print={print} also={also} job={job}
+              onPlus={() => setPickHere(true)}
+            />
+            {pickHere && (
+              <AddPicker
+                size={size} print={print} canShare={job.canShare}
+                onAdd={l => setPrint(p => {
+                  const n = (p.also.find(a => a.id === l.id)?.n ?? 0) + 1;
+                  return { ...p, also: [...p.also.filter(a => a.id !== l.id), { id: l.id, n }] };
+                })}
+                onClose={() => setPickHere(false)}
+                onSaveAndNew={onSaveAndNew}
+                currentName={layout.name && layout.name !== '新しいリフィル'
+                  ? layout.name
+                  : suggestName(layout, size, foldOf(layout, size)?.grain)}
+              />
+            )}
 
             {/* One picture to a screen. The squares to press are on the 用紙
                 sheet; drawn here as well they read as a second preview of the
@@ -2570,9 +2643,7 @@ function PartSheet({
                     ? `・最後の1枚に${job.spare}面あいています`
                     : '・あきはありません'}
                 </p>
-                <Button variant="quiet" className="tofill shrink-0" onClick={onOpenPaper}>
-                  ＋ あきに足す
-                </Button>
+
               </div>
             )}
 
@@ -2881,12 +2952,17 @@ function PartSheet({
 // Only the first few, because a year of refills is a lot of paper and the
 // pattern is clear by the second sheet.
 const PREVIEW_PAGES = 4;
+// Big enough that a place on the sheet can be pressed. At 110 an A3 of twelve
+// was 18px a place, which is a picture, not a control.
+const PREVIEW_PX = 168;
 
 // Imposed, duplexed sheets look like nonsense until you see them laid out and
 // numbered. Showing them here means the options can be judged before anyone
 // spends ink on them.
-function PrintPreview({ layout, size, print, also }: {
+function PrintPreview({ layout, size, print, also, job, onPlus }: {
   layout: Layout; size: SizeSpec; print: PrintOptions; also: Layout[];
+  job: PaperJob;
+  onPlus: () => void;
 }) {
   const sheets = useMemo(
     () => buildPrintSheets(layout, size, print, also),
@@ -2907,21 +2983,43 @@ function PrintPreview({ layout, size, print, also }: {
     setZoom(false);
     setOpen(o => (o === null ? null : Math.min(sheets.length - 1, Math.max(0, o + n))));
   };
+  // The places nothing is going on, drawn on the sheet they are actually on:
+  // the last one. A schematic of the same paper below this drawing was one
+  // picture too many, and the printed sheet is the truer of the two.
+  const tile = sheetSizeOf(layout, size);
+  const lastSheet = Math.max(0, job.sheets - 1);
+  const spareOn = (i: number) => (
+    print.impose && job.spare > 0 && (print.duplex ? Math.floor(i / 2) : i) === lastSheet
+      ? { mirror: print.duplex && i % 2 === 1 }
+      : null
+  );
 
   return (
     <Field label={`刷り上がり（全${sheets.length}ページ・タップで拡大）`}>
       <div className="preview flex gap-2.5 overflow-x-auto pb-1 pt-0.5">
         {shown.map((sheet, i) => (
           <figure key={i} className="m-0 flex shrink-0 flex-col items-center gap-1">
-            <button className="block p-0" onClick={() => { setZoom(false); setOpen(i); }} aria-label={`${label(i)}を拡大`}>
-              <SheetSvg sheet={sheet} boxPx={110} className="block rounded-sm border border-line-strong bg-white" />
-            </button>
+            {/* The ＋ sit over the sheet rather than inside the button that
+                enlarges it: a button inside a button is not a thing, and the
+                one on top is the one that should win anyway. */}
+            <span className="relative block">
+              <button className="block p-0" onClick={() => { setZoom(false); setOpen(i); }} aria-label={`${label(i)}を拡大`}>
+                <SheetSvg sheet={sheet} boxPx={PREVIEW_PX} className="block rounded-sm border border-line-strong bg-white" />
+              </button>
+              {spareOn(i) && (
+                <SpareSlots
+                  plan={job.plan} tile={tile} spare={job.spare}
+                  mirror={spareOn(i)!.mirror} scalePercent={print.scalePercent}
+                  onPress={onPlus}
+                />
+              )}
+            </span>
             <figcaption className="whitespace-nowrap text-[10px] text-muted">{label(i)}</figcaption>
           </figure>
         ))}
         {sheets.length > shown.length && (
           <button
-            className="flex min-h-[142px] w-[110px] shrink-0 items-center justify-center rounded-sm border border-dashed border-line-strong text-center text-[10px] leading-[1.6] text-faint"
+            className="flex min-h-[142px] w-[110px] shrink-0 items-center justify-center self-start rounded-sm border border-dashed border-line-strong text-center text-[10px] leading-[1.6] text-faint"
             onClick={() => { setZoom(false); setOpen(PREVIEW_PAGES); }}
           >
             ほか<br />{sheets.length - shown.length}ページ
@@ -2953,13 +3051,22 @@ function PrintPreview({ layout, size, print, also }: {
           >
             {/* Both maxima with auto sizing, so the page shrinks to fit whichever
                 runs out first and keeps its proportions. */}
-            <SheetSvg
-              sheet={sheets[open]}
-              boxPx={1400}
-              className={zoom
-                ? 'block w-[calc((100dvw-32px)*2.4)] max-w-none'
-                : 'block h-auto w-auto max-h-[calc(100dvh-128px)] max-w-[calc(100dvw-32px)]'}
-            />
+            <span className="relative block">
+              <SheetSvg
+                sheet={sheets[open]}
+                boxPx={1400}
+                className={zoom
+                  ? 'block w-[calc((100dvw-32px)*2.4)] max-w-none'
+                  : 'block h-auto w-auto max-h-[calc(100dvh-128px)] max-w-[calc(100dvw-32px)]'}
+              />
+              {spareOn(open) && (
+                <SpareSlots
+                  plan={job.plan} tile={tile} spare={job.spare}
+                  mirror={spareOn(open)!.mirror} scalePercent={print.scalePercent}
+                  onPress={() => { setOpen(null); onPlus(); }}
+                />
+              )}
+            </span>
           </div>
           <div className="lightbox-bar flex items-center gap-3.5 text-xs text-white" onClick={e => e.stopPropagation()}>
             <Button variant="quiet" className="min-w-[52px] disabled:opacity-35" disabled={open === 0} onClick={() => step(-1)} aria-label="前のページ">←</Button>

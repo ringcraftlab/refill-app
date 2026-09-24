@@ -88,17 +88,20 @@ check(
   (await page.locator('.picker').textContent()).includes('保存済みのリフィルがありません'),
   '入れられるものが無いことは、押した場所で言う',
 );
+// No dialog on the way: being made to name something is not what someone
+// pressing an empty square came to do, so it keeps the name the app would
+// have suggested and 保存 can change it afterwards.
 await page.locator('.picker .makenew').click();
-await page.locator('.savename').waitFor();
+await page.waitForTimeout(500);
 check(
-  (await page.locator('.sheet').textContent()).includes('保存して、もう1つ作る'),
-  '＋からの保存は「もう1つ作る」と名乗る',
+  await page.locator('.savename').count() === 0,
+  '新しく作るのに名前を聞かれない',
 );
-await page.locator('.savename').fill('最初の月間');
-await page.getByRole('button', { name: '保存して、新しく作る' }).click();
-await page.waitForTimeout(400);
 const after = (await page.locator('.alsonote').textContent().catch(() => '')).replace(/\s+/g, '');
-check(after.includes('最初の月間'), `保存したものが同じ紙に乗って、新しい紙が開く（「${after}」）`);
+check(
+  after.includes('マイクロ5') && after.includes('マンスリー'),
+  `いまのが勝手に同じ紙に乗って、白紙が開く（「${after}」）`,
+);
 check(
   await page.locator('.hitbox.part').count() === 0,
   '新しいほうは白紙（前のリフィルの中身を引きずらない）',
@@ -198,9 +201,9 @@ await page.waitForTimeout(200);
 const also = (await page.locator('.alsonote').textContent().catch(() => '')).replace(/\s+/g, '');
 check(also.includes('メモ') && also.includes('2つ'), `編集画面にも残る（「${also}」）`);
 
-// The export screen is the result, and one picture of the paper is enough on
-// it: the squares live on the 用紙 sheet. What it carries is the number and
-// one press to where the adding is done.
+// The export screen is the刷り上がり itself, and the empty places are on it:
+// a schematic of the same paper underneath was one picture too many, and the
+// printed sheet is the truer of the two.
 await page.getByRole('button', { name: 'PDF出力プレビュー' }).click();
 await page.locator('.preview').waitFor();
 await page.waitForTimeout(300);
@@ -208,23 +211,33 @@ check(
   await page.locator('.sheet .fillmap').count() === 0,
   '書き出し画面に紙の絵は二重に出ない（刷り上がりだけ）',
 );
+const onSheet = page.locator('.preview .empty');
+const plusBox = await onSheet.first().boundingBox();
+check(
+  await onSheet.count() > 0 && plusBox.width >= 20 && plusBox.height >= 20,
+  `刷り上がりの空き面に＋が出て、押せる大きさ（${await onSheet.count()}個・${Math.round(plusBox.width)}×${Math.round(plusBox.height)}px）`,
+);
 const spare = (await note()).match(/(\d+)面あいて/);
 check(!!spare, `あきの数は書き出し画面にも出る（${(await note()).trim()}）`);
-const toFill = await page.locator('.tofill').boundingBox();
-check(
-  !!toFill && toFill.y < 900,
-  `足しに行くボタンが刷り上がりのすぐ下にある（y=${Math.round(toFill?.y ?? -1)}px）`,
-);
 await page.screenshot({ path: `${OUT}/02-書き出し.png` });
-await page.locator('.tofill').click();
-await page.waitForTimeout(400);
+
+// Pressed on the sheet, answered under it.
+await onSheet.first().click();
+await page.waitForTimeout(500);
+const seenHere = await page.locator('.picker').evaluate(el => {
+  const r = el.getBoundingClientRect();
+  return { top: Math.round(r.top), bottom: Math.round(r.bottom), win: innerHeight };
+});
 check(
-  await page.locator('.fillmap .added').count() === 2,
-  'そこから用紙の絵に戻れる（入れたものが入っている）',
+  seenHere.top >= 0 && seenHere.bottom <= seenHere.win,
+  `刷り上がりの＋でも、その場に出る（${seenHere.top}〜${seenHere.bottom}px・窓${seenHere.win}px）`,
 );
-await page.locator('.toprint').click();
-await page.locator('.preview').waitFor();
-await page.waitForTimeout(300);
+const wasSpare = Number((await note()).match(/(\d+)面あいて/)[1]);
+await page.locator('.basket li').filter({ hasText: 'メモ' }).click();
+await page.waitForTimeout(400);
+const nowSpare = Number((await note()).match(/(\d+)面あいて/)?.[1] ?? 0);
+check(nowSpare === wasSpare - 1, `刷り上がりから入れるとあきが減る（${wasSpare} → ${nowSpare}面）`);
+await page.screenshot({ path: `${OUT}/04-刷り上がりから入れた.png` });
 
 const dl = page.waitForEvent('download');
 await page.getByRole('button', { name: '書き出す' }).click();
