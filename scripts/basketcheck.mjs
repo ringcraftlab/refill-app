@@ -63,9 +63,11 @@ async function make(sizeText, form, part, name) {
   return suggested;
 }
 
-// Before anything is saved there is nothing that could go in an empty place,
-// so there is no ＋ on one. A ＋ that answers "there is nothing to add" reads
-// as a broken button, which is exactly what it is.
+// Before anything is saved there is nothing to put in an empty place -- and
+// the ＋ still has to lead somewhere, because the empty place is real and
+// pressing it is how someone asks what to do about it. What it offers is the
+// thing that makes something addable: keep this refill, and start the next
+// one on the same paper.
 await page.goto(BASE);
 await page.locator('.sizerow', { hasText: '62×105mm' }).click();
 await page.locator('.card', { hasText: '片面' }).first().click();
@@ -77,14 +79,38 @@ await page.locator('.sheet').waitFor();
 await page.locator('.sheet').getByRole('button', { name: 'A3', exact: true }).click();
 await page.waitForTimeout(300);
 check(
-  await page.locator('.fillmap .empty').count() === 0
-    && await page.locator('.fillmap .empty-none').count() > 0,
-  `保存が1つも無いときは＋を出さない（空き${await page.locator('.fillmap .empty-none').count()}面・＋${await page.locator('.fillmap .empty').count()}個）`,
+  await page.locator('.fillmap .empty').count() > 0,
+  `保存が1つも無くても空きマスは押せる（${await page.locator('.fillmap .empty').count()}面）`,
 );
+await page.locator('.fillmap .empty').first().click();
+await page.waitForTimeout(500);
 check(
-  (await page.locator('.sheet').textContent()).includes('保存した別のリフィル'),
-  '代わりに、何をすれば入れられるかが書いてある',
+  (await page.locator('.picker').textContent()).includes('保存済みのリフィルがありません'),
+  '入れられるものが無いことは、押した場所で言う',
 );
+await page.locator('.picker .makenew').click();
+await page.locator('.savename').waitFor();
+check(
+  (await page.locator('.sheet').textContent()).includes('保存して、もう1つ作る'),
+  '＋からの保存は「もう1つ作る」と名乗る',
+);
+await page.locator('.savename').fill('最初の月間');
+await page.getByRole('button', { name: '保存して、新しく作る' }).click();
+await page.waitForTimeout(400);
+const after = (await page.locator('.alsonote').textContent().catch(() => '')).replace(/\s+/g, '');
+check(after.includes('最初の月間'), `保存したものが同じ紙に乗って、新しい紙が開く（「${after}」）`);
+check(
+  await page.locator('.hitbox.part').count() === 0,
+  '新しいほうは白紙（前のリフィルの中身を引きずらない）',
+);
+await page.locator('button.paper').click();
+await page.locator('.sheet').waitFor();
+await page.waitForTimeout(300);
+check(
+  await page.locator('.fillmap .added').count() > 0,
+  `保存したぶんが紙の絵に入っている（${await page.locator('.fillmap .added').count()}面）`,
+);
+await page.screenshot({ path: `${OUT}/00-保存してもう1つ作る.png` });
 
 const suggested = await make('62×105mm', '片面', 'メモ', 'メモ');
 check(
@@ -122,7 +148,7 @@ const mine = page.locator('.fillmap .mine');
 const emptied = await empty.count();
 check(emptied > 0, `空いているところが押せる（${emptied}面）`);
 check(await mine.count() > 0, `このリフィルのぶんは埋まって見える（${await mine.count()}面）`);
-await page.screenshot({ path: `${OUT}/00-用紙の空きを押す.png` });
+await page.screenshot({ path: `${OUT}/03-用紙の空きを押す.png` });
 
 await empty.first().click();
 // Pressed here, answered here. The first version put the list at the foot of

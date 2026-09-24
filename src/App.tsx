@@ -281,6 +281,29 @@ function createLayout(): Layout {
   };
 }
 
+// A new refill on the same paper as one already made: same size, same form,
+// same way up, nothing on it. Everything that decides the punched sheet has
+// to carry over or the two could not share a sheet at all -- which is the
+// whole reason this exists. The 体裁 comes too: they are going in the same
+// binder, on the same paper, in the same run.
+function blankLike(base: Layout): Layout {
+  return {
+    ...createLayout(),
+    size: base.size,
+    spread: base.spread,
+    fold: base.fold,
+    foldGrain: base.foldGrain,
+    orientation: base.orientation,
+    year: base.year,
+    month: base.month,
+    monthCount: base.monthCount,
+    weekStart: base.weekStart,
+    words: base.words,
+    tone: base.tone,
+    ruleWeight: base.ruleWeight,
+  };
+}
+
 export function App() {
   const [stage, setStage] = useState<Stage>('size');
   const [layout, setLayout] = useState<Layout>(createLayout);
@@ -859,6 +882,9 @@ function CanvasScreen({ layout, setLayout, onBack }: {
   // so this is a button of its own rather than a gesture competing with those.
   const [zoomed, setZoomed] = useState(false);
   const [print, setPrint] = useState<PrintOptions>(DEFAULT_PRINT);
+  // Set when saving was asked for from an empty place on the paper, so that
+  // the save carries on into "and now make the next one".
+  const [afterSave, setAfterSave] = useState<'new' | null>(null);
   // The paper this will be printed on, worked out here rather than in the
   // export screen: how much of the sheet the design leaves empty is something
   // to know while designing it, not after pressing 書き出す.
@@ -1326,15 +1352,31 @@ function CanvasScreen({ layout, setLayout, onBack }: {
       layout={layout}
       setLayout={setLayout}
       inline={wide}
-      onClose={() => setSheet(null)}
+      onClose={() => { setSheet(null); setAfterSave(null); }}
       onRemove={slot => askRemove(PART_LABEL[layout.surface.placed[slot]], () => removePart(slot))}
       onRemoveSpanning={() => askRemove('マンスリー', () => setLayout(l => ({ ...l, spanning: null })))}
       onLoad={l => { setLayout(() => l); setSheet(null); say('読み込みました'); }}
       onSave={name => {
         const named = { ...layout, name };
-        setLayout(() => named);
+        const ok = saveLayout(named);
         setSheet(null);
-        say(saveLayout(named)
+        // Asked for from an empty place on the paper: what is on screen is
+        // kept, put on that paper, and a fresh refill of the same shape takes
+        // its place in the editor. Only on a save that actually landed --
+        // otherwise this would swap away a design that was not stored.
+        if (afterSave === 'new' && ok) {
+          setPrint(p => ({
+            ...p,
+            also: [...p.also.filter(a => a.id !== named.id), { id: named.id, n: 1 }],
+          }));
+          setLayout(() => blankLike(named));
+          setAfterSave(null);
+          say(`「${name}」を保存しました。同じ紙にもう1つ作ります`);
+          return;
+        }
+        setLayout(() => named);
+        setAfterSave(null);
+        say(ok
           ? `「${name}」を保存しました`
           : '保存できませんでした。背景の画像が大きいか、保存先がいっぱいです');
       }}
@@ -1342,6 +1384,8 @@ function CanvasScreen({ layout, setLayout, onBack }: {
       onExport={onExport}
       print={print}
       setPrint={setPrint}
+      onSaveAndNew={() => { setAfterSave('new'); setSheet('save'); }}
+      andNew={afterSave === 'new'}
     />
   );
 
@@ -2111,8 +2155,12 @@ function suggestName(layout: Layout, size: SizeSpec, grain?: FoldGrain): string 
 // Naming what is being saved. A sheet rather than a dialog, because it is the
 // same shape of question as everything else here and it has to work beside the
 // paper on a desktop.
-function SaveSheet({ layout, size, grain, onSave }: {
+function SaveSheet({ layout, size, grain, onSave, andNew = false }: {
   layout: Layout; size: SizeSpec; grain?: FoldGrain; onSave: (name: string) => void;
+  // Opened from an empty place on the paper: saving is the first half of
+  // "keep this one and make the next one", and the sheet has to say so or it
+  // looks like the ＋ turned into an unrelated save.
+  andNew?: boolean;
 }) {
   const [name, setName] = useState(() => (
     layout.name && layout.name !== '新しいリフィル' ? layout.name : suggestName(layout, size, grain)
@@ -2129,11 +2177,13 @@ function SaveSheet({ layout, size, grain, onSave }: {
         />
       </Field>
       <p className="m-0 text-[11px] leading-snug text-faint">
-        保存したリフィルは、読み込みで開けるほか、
-        <strong className="font-semibold text-label">PDF出力で同じ紙に並べて刷れます</strong>
+        {andNew
+          ? 'このリフィルを保存して同じ紙に置き、続けて新しいリフィルを作ります。あとで枚数を増やしたり外したりできます'
+          : <>保存したリフィルは、読み込みで開けるほか、
+              <strong className="font-semibold text-label">PDF出力で同じ紙に並べて刷れます</strong></>}
       </p>
       <Button variant="cta" onClick={() => onSave(name.trim() || suggestName(layout, size, grain))}>
-        保存する
+        {andNew ? '保存して、新しく作る' : '保存する'}
       </Button>
     </>
   );
@@ -2187,17 +2237,22 @@ type PaperJob = ReturnType<typeof usePaperJob>;
 // about the same picture, so they are the same picture: press the square you
 // want filled and pick what fills it. Nothing here is a number to raise.
 //
-// Two rules about the ＋, both learned the hard way. It is only drawn where
-// pressing it can actually put something in -- a ＋ that answers "there is
-// nothing to add" is worse than no ＋ at all. And what it opens has to arrive
-// where it was pressed: the first version put the list at the bottom of a
-// scrolling sheet, so on a desktop window pressing ＋ looked like nothing
-// happening.
-function PaperFill({ size, print, setPrint, job }: {
+// Two rules about the ＋, both learned the hard way. What it opens has to
+// arrive where it was pressed: the first version put the list at the bottom of
+// a scrolling sheet, so on a desktop window pressing ＋ looked like nothing
+// happening. And pressing it always has to lead somewhere -- when nothing is
+// saved yet it offers the thing that would make something addable, which is
+// to keep this refill and start another one on the same paper. Taking the ＋
+// away in that case was the wrong fix: the empty place is still real, and
+// what to do about it is exactly what someone pressing it wants to know.
+function PaperFill({ size, print, setPrint, job, onSaveAndNew, currentName }: {
   size: SizeSpec;
   print: PrintOptions;
   setPrint: (fn: (p: PrintOptions) => PrintOptions) => void;
   job: PaperJob;
+  // Save what is on the screen and start another refill on this same paper.
+  onSaveAndNew: () => void;
+  currentName: string;
 }) {
   const { canShare, used, plan, perPaper, spare, sheets, owners } = job;
   // Which empty place was pressed. Kept to mark that square while choosing:
@@ -2245,18 +2300,6 @@ function PaperFill({ size, print, setPrint, job }: {
           const owner = filled ? owners[at] : null;
           const ratio = `${plan.paper.widthMm / plan.cols} / ${plan.paper.heightMm / plan.rows}`;
           if (!filled) {
-            // Empty, and nothing saved that could go in it: the place is
-            // drawn as what it is, and the line below says what would make
-            // it fillable. No button, because there is nothing behind it.
-            if (!canAdd) {
-              return (
-                <i
-                  key={i}
-                  className="empty-none block rounded-[3px] border border-dashed border-line-strong"
-                  style={{ aspectRatio: ratio }}
-                />
-              );
-            }
             return (
               <button
                 key={i}
@@ -2297,12 +2340,6 @@ function PaperFill({ size, print, setPrint, job }: {
         })}
       </span>
 
-      {!canAdd && (
-        <p className="m-0 text-[11px] leading-snug text-faint">
-          あいているところに入れられるのは、保存した別のリフィルです。
-          別のリフィルを作って「保存」しておくと、ここに並べて1枚で刷れます
-        </p>
-      )}
 
       {picking !== null && (
         <div
@@ -2310,7 +2347,9 @@ function PaperFill({ size, print, setPrint, job }: {
           className="picker flex flex-col gap-1.5 rounded-[10px] border border-accent bg-accent-soft/40 p-2"
         >
           <span className="flex items-center gap-2">
-            <strong className="flex-1 text-[12px] font-normal text-muted">ここに入れるものを選ぶ</strong>
+            <strong className="flex-1 text-[12px] font-normal text-muted">
+              {canAdd ? 'ここに入れるものを選ぶ' : 'ここに入れられる保存済みのリフィルがありません'}
+            </strong>
             <Button variant="quiet" onClick={() => setPicking(null)}>やめる</Button>
           </span>
           <ul className="basket m-0 flex max-h-56 list-none flex-col gap-1.5 overflow-y-auto p-0">
@@ -2340,6 +2379,15 @@ function PaperFill({ size, print, setPrint, job }: {
               );
             })}
           </ul>
+          {/* The way out of an empty list, and a shortcut out of a full one.
+              Filling a sheet means having more than one refill, so the place
+              that asks for another one is the place to make another one. */}
+          <Button variant="quiet" className="makenew" onClick={onSaveAndNew}>
+            ＋ 新しいリフィルを作って入れる
+          </Button>
+          <span className="text-[10px] leading-snug text-faint">
+            いまの「{currentName}」を保存してから、同じ紙にもう1つ作ります
+          </span>
         </div>
       )}
     </div>
@@ -2368,7 +2416,7 @@ function basketOf(layout: Layout, size: SizeSpec): Layout[] {
 
 function PartSheet({
   target, layout, setLayout, inline, onClose, onRemove, onRemoveSpanning, onLoad, onSave, size,
-  onExport, print, setPrint,
+  onExport, print, setPrint, onSaveAndNew, andNew,
 }: {
   target: Exclude<SheetTarget, null>;
   layout: Layout;
@@ -2387,6 +2435,11 @@ function PartSheet({
   // means -- look at the saved refills, then look at the paper.
   print: PrintOptions;
   setPrint: (fn: (p: PrintOptions) => PrintOptions) => void;
+  // Keep this one and start another on the same paper: the answer to an empty
+  // place when there is nothing saved to put in it.
+  onSaveAndNew: () => void;
+  // Whether the save sheet showing is the first half of that.
+  andNew: boolean;
 }) {
   const lastMonth = addMonths(layout.year, layout.month, Math.max(1, layout.monthCount) - 1);
   const saved = useMemo(() => target === 'load' ? listLayouts() : [], [target]);
@@ -2403,7 +2456,7 @@ function PartSheet({
     : null;
 
   const title = target === 'load' ? '保存したリフィル'
-    : target === 'save' ? '保存'
+    : target === 'save' ? (andNew ? '保存して、もう1つ作る' : '保存')
     : target === 'print' ? 'PDF出力プレビュー'
     : target === 'paper' ? '用紙'
     : target === 'background' ? '紙の背景'
@@ -2421,7 +2474,10 @@ function PartSheet({
         {target === 'look' && <LookSheet layout={layout} setLayout={setLayout} />}
 
         {target === 'save' && (
-          <SaveSheet layout={layout} size={size} grain={foldOf(layout, size)?.grain} onSave={onSave} />
+          <SaveSheet
+            layout={layout} size={size} grain={foldOf(layout, size)?.grain}
+            onSave={onSave} andNew={andNew}
+          />
         )}
 
         {/* Opening one instead of this one. Putting one BESIDE this one is
@@ -2467,7 +2523,13 @@ function PartSheet({
                   onPick={v => setPrint(p => ({ ...p, paper: v as PaperId }))}
                 />
                 <Field label="1枚の紙に並べるもの">
-                  <PaperFill size={size} print={print} setPrint={setPrint} job={job} />
+                  <PaperFill
+                    size={size} print={print} setPrint={setPrint} job={job}
+                    onSaveAndNew={onSaveAndNew}
+                    currentName={layout.name && layout.name !== '新しいリフィル'
+                      ? layout.name
+                      : suggestName(layout, size, foldOf(layout, size)?.grain)}
+                  />
                 </Field>
               </>
             ) : (
@@ -2511,7 +2573,13 @@ function PartSheet({
                 empty is most likely to be noticed. */}
             {print.impose && (
               <Field label="1枚の紙に並べるもの">
-                <PaperFill size={size} print={print} setPrint={setPrint} job={job} />
+                <PaperFill
+                    size={size} print={print} setPrint={setPrint} job={job}
+                    onSaveAndNew={onSaveAndNew}
+                    currentName={layout.name && layout.name !== '新しいリフィル'
+                      ? layout.name
+                      : suggestName(layout, size, foldOf(layout, size)?.grain)}
+                  />
               </Field>
             )}
             {/* The browser's own paragraph margin, kept deliberately: it is the
