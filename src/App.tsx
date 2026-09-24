@@ -315,17 +315,41 @@ function sectionOf(kind: SectionKind, base: Layout): Layout {
   // thing you can ask for by name -- and it keeps that name, because what it
   // is for is not readable from what is on it.
   if (kind === 'cover') {
-    return { ...sheet, name: '表紙', surface: { ...sheet.surface, placed: ['photo'] } };
+    return {
+      ...sheet,
+      name: '表紙',
+      cover: true,
+      // One page, even in a book of spreads: a cover is the outside of the
+      // stack, not a pair of facing pages. A spread and a single page are the
+      // same punched sheet, so it binds in either way -- which is exactly why
+      // this is allowed to differ from the rest of the book.
+      spread: base.fold > 1 ? base.spread : false,
+      surface: { ...sheet.surface, placed: ['photo'] },
+    };
   }
   return { ...sheet, surface: { ...sheet.surface, placed: [kind] } };
+}
+
+// The empty sheet a new book starts with. It is somewhere to draw, not a
+// thing anyone asked to print, so the first real section takes its place
+// rather than printing beside it.
+function isPlaceholder(l: Layout): boolean {
+  return !l.spanning && l.surface.placed.length === 0 && !l.background;
+}
+
+// Where a new section goes, and what it replaces. A cover goes on the front;
+// everything else on the end, where the empty places on the paper are.
+function withSection(sections: Layout[], made: Layout, front: boolean): Layout[] {
+  const rest = sections.length === 1 && isPlaceholder(sections[0]) ? [] : sections;
+  return front ? [made, ...rest] : [...rest, made];
 }
 
 // What a section is called in the contents: what is on it, which is what
 // anyone scanning a list of them is looking for.
 function sectionLabel(l: Layout): string {
-  // A section named on purpose keeps its name: 表紙 is a photo sheet and
-  // would otherwise read as 「写真」, which says what is on it rather than
-  // what it is.
+  // A cover is a cover, not 「写真」: what it is for is not readable from
+  // what is on it.
+  if (l.cover) return '表紙';
   if (l.name && l.name !== '新しいリフィル') return l.name;
   const parts = [
     ...(l.spanning ? ['マンスリー'] : []),
@@ -362,13 +386,19 @@ export function App() {
   // Size and form belong to the book: a section on a different punched sheet
   // could not be bound into it. They are kept on every section because that
   // is all `src/lib` knows how to read.
+  // A cover stays one page whatever the book is folded into, so the form the
+  // picker shows -- and the form it sets -- is the rest of the book's.
+  const body = book.sections.find(l => !l.cover) ?? book.sections[0];
   const every = (fn: (l: Layout) => Layout) =>
-    setBook(b => ({ ...b, sections: b.sections.map(fn) }));
+    setBook(b => ({
+      ...b,
+      sections: b.sections.map(l => (l.cover ? { ...fn(l), spread: l.fold > 1 ? fn(l).spread : false } : fn(l))),
+    }));
 
   if (stage === 'size') {
     return (
       <SizeScreen
-        selected={book.sections[0].size}
+        selected={body.size}
         onPick={(size) => { every(l => ({ ...l, size })); setStage('sides'); }}
       />
     );
@@ -376,10 +406,10 @@ export function App() {
   if (stage === 'sides') {
     return (
       <SidesScreen
-        size={book.sections[0].size}
-        spread={book.sections[0].spread}
-        fold={book.sections[0].fold}
-        foldGrain={book.sections[0].foldGrain}
+        size={body.size}
+        spread={body.spread}
+        fold={body.fold}
+        foldGrain={body.foldGrain}
         onPick={(v) => every(l => ({
           ...l,
           ...v,
@@ -944,6 +974,9 @@ function ContentsScreen({ book, setBook, print, at, onOpen, onBack }: {
   onBack: () => void;
 }) {
   const size = SIZES[book.sections[0].size];
+  // A cover is one page in a book of spreads, so it is not what the form of
+  // the book is read from.
+  const body = book.sections.find(l => !l.cover) ?? book.sections[0];
   const job = usePaperJob(book.sections, size, print);
   const [adding, setAdding] = useState(false);
   const [ask, setAsk] = useState<number | null>(null);
@@ -992,7 +1025,7 @@ function ContentsScreen({ book, setBook, print, at, onOpen, onBack }: {
         <span className="min-w-0 truncate">
           {size.label} {size.widthMm}×{size.heightMm}mm
           <span className="mx-1.5 text-faint">・</span>
-          {formLabel(book.sections[0], foldOf(book.sections[0], size)?.grain)}
+          {formLabel(body, foldOf(body, size)?.grain)}
         </span>
       </header>
       <h1 className="m-0 mb-1 text-[19px]">中身</h1>
@@ -1084,10 +1117,10 @@ function ContentsScreen({ book, setBook, print, at, onOpen, onBack }: {
           onPick={kind => {
             setAdding(false);
             const front = kind === 'cover';
-            setBook(b => {
-              const made = sectionOf(kind, b.sections[0]);
-              return { ...b, sections: front ? [made, ...b.sections] : [...b.sections, made] };
-            });
+            setBook(b => ({
+              ...b,
+              sections: withSection(b.sections, sectionOf(kind, b.sections[0]), front),
+            }));
             // A cover needs a picture before it is a cover, and a blank
             // section needs everything, so both open on what is missing.
             if (front) onOpen(0, 'part0');
@@ -1690,13 +1723,8 @@ function CanvasScreen({ book, at, setBook, onBack, goTo, print, setPrint, openOn
       // thing and it is saved as one thing.
       onAddSection={kind => {
         const made = sectionOf(kind, layout);
-        // A cover goes on the front; everything else on the end, where the
-        // empty places are.
         const front = kind === 'cover';
-        setBook(b => ({
-          ...b,
-          sections: front ? [made, ...b.sections] : [...b.sections, made],
-        }));
+        setBook(b => ({ ...b, sections: withSection(b.sections, made, front) }));
         // A cover is not finished until it has a picture on it, and a blank
         // section is not finished at all, so both open on what is missing.
         if (kind === 'cover') { goTo(0); setSheet({ slot: 0 }); }
@@ -1719,10 +1747,22 @@ function CanvasScreen({ book, at, setBook, onBack, goTo, print, setPrint, openOn
           turned a quarter turn fills the drawing area top to bottom, and a
           button floating in its corner sat on the refill itself. */}
       <header className="flex shrink-0 items-center gap-2 px-4 pb-2 pt-3 text-xs font-semibold text-label">
-        <Button variant="icon" onClick={onBack} aria-label="戻る">←</Button>
+        {/* Says where it goes. An unlabelled ← is read as "undo this screen",
+            and 中身 was the one thing in the app with no word on it anywhere:
+            someone looking for the cover had no reason to press this. */}
+        <Button variant="chip" className="tocontents" onClick={onBack} aria-label="中身へ">
+          <span className="text-[13px] leading-none">←</span>
+          中身{book.sections.length > 1 ? ` ${at + 1}/${book.sections.length}` : ''}
+        </Button>
         {/* The two buttons keep their room; the name gives way. A long size
             name pushing them off the edge is worse than a name cut short. */}
         <span className="min-w-0 truncate">
+          {/* Which section, but only once there is more than one: with a
+              single one the title is the refill itself, and the form it is
+              folded into is what a phone has room to say. */}
+          {book.sections.length > 1 && (
+            <>{sectionLabel(layout)}<span className="mx-1 text-faint">・</span></>
+          )}
           {size.label}
           {/* What gives way, in order, as the screen narrows: the millimetres
               first, then the words on the two chips. The form the refill is
@@ -1970,14 +2010,13 @@ function CanvasScreen({ book, at, setBook, onBack, goTo, print, setPrint, openOn
         </div>
       </div>
 
-      {/* Which of the book this is. One section is the ordinary case and says
-          nothing; from two on, "which one am I editing" is a real question. */}
+      {/* What the rest of the book is, from inside one section of it. */}
       {book.sections.length > 1 && (
         <button
           className="alsonote m-0 shrink-0 px-3.5 pt-1 text-left text-[10px] text-accent"
           onClick={onBack}
         >
-          中身 {at + 1}／{book.sections.length}・{book.sections.map(sectionLabel).join(' → ')}
+          {book.sections.map(sectionLabel).join(' → ')}
         </button>
       )}
 

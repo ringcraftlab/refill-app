@@ -218,6 +218,10 @@ export interface Layout {
   ruleWeight?: RuleWeight;
   // Printed refills usually tuck next month's dates into the spread's index
   // column, so it is on unless the user clears it.
+  // A cover: one page on the outside of the stack, whatever the rest of the
+  // book is folded into. Marked rather than guessed from what is on it,
+  // because a photograph on a sheet is not the same thing as a cover.
+  cover?: boolean;
   // How many identical sheets a section with no dates prints. A note section
   // is "ten sheets of squared paper" -- there is nothing in its content to say
   // how much of it you want, unlike a monthly, which is as long as its months.

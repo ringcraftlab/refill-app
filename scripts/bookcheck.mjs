@@ -51,7 +51,7 @@ await drag(
   await centerOf(page.locator('.page').first()),
 );
 
-await page.getByRole('button', { name: '戻る' }).click();
+await page.locator('.tocontents').click();
 await page.locator('.contents-list').waitFor();
 await page.waitForTimeout(200);
 check(await rows().count() === 1, `作ったものが中身の1つ目になる（${(await names()).join(' → ')}）`);
@@ -91,11 +91,15 @@ check(
   (await page.locator('.sheet h2').textContent().catch(() => '')).includes('写真'),
   `表紙は写真を選ぶところが開く（${await page.locator('.sheet h2').textContent().catch(() => 'なし')}）`,
 );
+check(
+  (await flat('.tocontents')).includes('中身'),
+  `編集画面から中身への道に字がある（「${await flat('.tocontents')}」）`,
+);
 await page.screenshot({ path: `${OUT}/09-表紙を足した.png` });
 await page.locator('.sheet button[aria-label=閉じる]').first().click().catch(() => {});
 await page.locator('.scrim').click({ position: { x: 10, y: 10 } }).catch(() => {});
 await page.waitForTimeout(200);
-await page.getByRole('button', { name: '戻る' }).click();
+await page.locator('.tocontents').click();
 await page.locator('.contents-list').waitFor();
 await page.waitForTimeout(200);
 check((await names())[0] === '表紙', `表紙は先頭に入る（${(await names()).join(' → ')}）`);
@@ -195,7 +199,7 @@ await drag(
   await centerOf(page.locator('.stamp', { hasText: 'ウィークリー' })),
   await centerOf(page.locator('.page').first()),
 );
-await page.getByRole('button', { name: '戻る' }).click();
+await page.locator('.tocontents').click();
 await page.locator('.contents-list').waitFor();
 await page.waitForTimeout(300);
 check(
@@ -252,6 +256,39 @@ check(
   (await flat('.fill-note')).includes('いま3枚'),
   `ここまでにすると、そこで終わる（${was} → ${await flat('.fill-note')}）`,
 );
+
+// ---- a cover in a book of spreads ---------------------------------------
+// A cover is the outside of the stack, not a pair of facing pages -- and a
+// spread and a single page are the same punched sheet, so it binds in either
+// way. It also replaces the empty sheet a new book starts with, which is
+// somewhere to draw rather than something anyone asked to print.
+await page.goto(BASE);
+await page.locator('.sizerow', { hasText: '80×128mm' }).click();
+await page.locator('.card', { hasText: '見開き' }).first().click();
+await page.getByRole('button', { name: 'この構成で作る' }).click();
+await page.locator('.page').first().waitFor();
+check(await page.locator('.page').count() === 2, '見開きは2ページで始まる');
+await page.locator('.tocontents').click();
+await page.locator('.contents-list').waitFor();
+await page.locator('.addsection').click();
+await page.locator('.modal').waitFor();
+await page.locator('.addcover').click();
+await page.waitForTimeout(500);
+check(
+  await page.locator('.page').count() === 1 && await page.locator('.hitbox.part').count() === 1,
+  `見開きの束でも表紙は1ページ（${await page.locator('.page').count()}ページ・写真${await page.locator('.hitbox.part').count()}枠）`,
+);
+await page.locator('.sheet button[aria-label=閉じる]').first().click().catch(() => {});
+await page.locator('.scrim').click({ position: { x: 10, y: 10 } }).catch(() => {});
+await page.waitForTimeout(200);
+await page.locator('.tocontents').click();
+await page.locator('.contents-list').waitFor();
+await page.waitForTimeout(200);
+check(
+  (await names()).join(' → ') === '表紙',
+  `白紙のまま残っていた1枚目は、足したものが引き取る（${(await names()).join(' → ')}）`,
+);
+await page.screenshot({ path: `${OUT}/11-見開きの表紙.png` });
 
 await browser.close();
 if (bad) process.exitCode = 1;
