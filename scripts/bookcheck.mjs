@@ -316,6 +316,28 @@ check(
 );
 await page.screenshot({ path: `${OUT}/34-表紙にマンスリーは置けない.png` });
 
+// Being told no is not the end of it: the way on is in the message.
+check(await page.locator('.tonext').count() === 1, '断るだけで終わらない（次のページに入れる）');
+await page.locator('.tonext').click();
+await page.waitForTimeout(600);
+check(
+  (await flat('.pageno')).startsWith('2\u20133'),
+  `押すと次のページに入って、そこへめくる（${await flat('.pageno')}）`,
+);
+check(
+  await page.locator('.hitbox.part').count() > 0 || await page.locator('.page').count() === 2,
+  '入れたページは見開き',
+);
+await toContents();
+check(
+  (await names())[0] === '表紙',
+  `表紙は消えない（${(await names()).join(' / ')}）`,
+);
+await page.screenshot({ path: `${OUT}/35-次のページに入れた.png` });
+await page.locator('.leaf').nth(1).click();
+await page.locator('.page').first().waitFor();
+await page.waitForTimeout(300);
+
 
 // ---- ＋ puts in, it does not replace -------------------------------------
 // Pressing ＋ on a book that is still blank used to delete the spread on
@@ -339,7 +361,7 @@ check(
   await page.locator('.page').count() === 2,
   `＋の前に見ていた見開きが残っている（${await page.locator('.page').count()}ページ）`,
 );
-await page.screenshot({ path: `${OUT}/35-見開きは消えない.png` });
+await page.screenshot({ path: `${OUT}/36-見開きは消えない.png` });
 
 await browser.close();
 if (bad) process.exitCode = 1;

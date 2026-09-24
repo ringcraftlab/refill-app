@@ -1525,22 +1525,60 @@ function CanvasScreen({ book, at, nth, setBook, onBack, goTo, print, setPrint, o
     return cx >= r.left && cx <= r.right && cy >= r.top && cy <= r.bottom;
   };
 
+  // Where a part goes when the cover cannot take it: the page after the cover,
+  // which is the empty one already sitting there, or a new one if it is not
+  // empty. The cover stays -- nothing the reader made disappears -- and the
+  // book turns to where the part landed, so the answer is on the paper.
+  const putOnNextPage = (kinds: PartKind[]) => {
+    const nextAt = at + 1;
+    const was = book.sections;
+    const base = book.sections.find(l => !l.cover) ?? layout;
+    setToast('');
+    setBook(b => {
+      const here = b.sections[nextAt];
+      const onto = here && isPlaceholder(here) ? here : sectionOf('blank', base);
+      const planned = planPlacement(onto, size, kinds, null);
+      const made = planned ? planned.layout : onto;
+      return {
+        ...b,
+        sections: here && isPlaceholder(here)
+          ? b.sections.map((sec, i) => (i === nextAt ? made : sec))
+          : [...b.sections.slice(0, nextAt), made, ...b.sections.slice(nextAt)],
+      };
+    });
+    goTo(nextAt, 0);
+    say(
+      <>
+        次のページに入れました
+        <button
+          className="undoadd ml-2 underline underline-offset-2"
+          onClick={() => { setBook(b => ({ ...b, sections: was })); goTo(at, 0); setToast(''); }}
+        >取り消す</button>
+      </>,
+      5000,
+    );
+  };
+
   const placeParts = (kinds: PartKind[], at: DropPoint | null) => {
     // A cover is one page in a book of spreads, so a calendar laid on it would
     // print as a single-page run -- twelve months of it, in a form the rest of
-    // the book is not. Refused rather than quietly turned into an ordinary
-    // spread: a cover disappearing under your hands is harder to understand
-    // than being told no.
+    // the book is not. It is refused rather than quietly turned into an
+    // ordinary spread, because a cover disappearing under your hands is harder
+    // to understand than being told no -- but being told no and left holding
+    // the part, with homework about some other screen, is worse than either.
+    // So the way on is in the message: one press and the part is on the page
+    // that can hold it.
     const dated = kinds.find(isDatedKind);
     if (layout.cover && dated) {
       say(
-        <span className="dateoncover block max-w-[260px] whitespace-normal leading-[1.6]">
-          表紙は1ページです。{PART_LABEL[dated]}は{book.sections.some(l => !l.cover && l.spread) ? '見開き' : '中身'}のページに入ります
-          <em className="mt-1 block not-italic text-white/70">
-            表紙をやめるなら、中身の画面で表紙を外してください
-          </em>
+        <span className="dateoncover whitespace-normal">
+          表紙は1ページです
+          <button
+            className="tonext ml-2 underline underline-offset-2"
+            onClick={() => putOnNextPage(kinds)}
+          >次のページに入れる</button>
         </span>,
-        4500,
+        6000,
       );
       return;
     }
