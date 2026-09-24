@@ -324,7 +324,11 @@ function sectionOf(kind: SectionKind, base: Layout): Layout {
       // same punched sheet, so it binds in either way -- which is exactly why
       // this is allowed to differ from the rest of the book.
       spread: base.fold > 1 ? base.spread : false,
-      surface: { ...sheet.surface, placed: ['photo'] },
+      // Nothing on it. A cover is the first page of the book, not a
+      // photograph: what goes on it is a picture for some people, a title for
+      // others, and nothing at all for plenty. Putting a 写真 part on it was
+      // the app's own shortage talking -- there is no way to type a word onto
+      // a page yet, so a photograph was the only content anyone could supply.
     };
   }
   return { ...sheet, surface: { ...sheet.surface, placed: [kind] } };
@@ -1155,7 +1159,7 @@ function ContentsScreen({ book, setBook, print, at, onOpen, onBack }: {
               ...b,
               sections: withSection(b.sections, sectionOf(kind, b.sections[0]), where),
             }));
-            if (kind === 'cover' || kind === 'blank') onOpen(where, kind === 'cover' ? 'part0' : undefined);
+            if (kind === 'cover' || kind === 'blank') onOpen(where);
           }}
           onClose={() => { setAdding(false); setAddAt(null); }}
         />
@@ -1871,11 +1875,8 @@ function CanvasScreen({ book, at, nth, setBook, onBack, goTo, print, setPrint, o
         setBook(b => ({ ...b, sections: withSection(b.sections, made, front) }));
         // A cover is not finished until it has a picture on it, and a blank
         // section is not finished at all, so both open on what is missing.
-        if (kind === 'cover') { goTo(0); setSheet({ slot: 0 }); }
-        else {
-          setSheet(null);
-          if (kind === 'blank') goTo(book.sections.length);
-        }
+        setSheet(null);
+        if (kind === 'cover' || kind === 'blank') goTo(kind === 'cover' ? 0 : book.sections.length);
         say(`${SECTION_LABEL(kind)}を足しました`);
       }}
       say={say}
@@ -1997,38 +1998,44 @@ function CanvasScreen({ book, at, nth, setBook, onBack, goTo, print, setPrint, o
             before it on its left -- and where a page can be put before this
             one, a ＋ sits exactly there. That is where a cover goes, and it
             is on the paper rather than three screens away. */}
-        <span className="turn-left absolute left-0.5 top-1/2 z-10 flex -translate-y-1/2 flex-col gap-1.5">
-          {nth === 0 && (
-            <Button variant="edge" className="addbefore" onClick={() => setAddAt(at)} aria-label="前にページを足す">
-              ＋
-            </Button>
-          )}
+        {/* One ＋, on the left, meaning one thing: a page goes in before
+            this one. Two of them at the two edges of the paper were two
+            buttons that looked the same and were not, which is worse than no
+            button at all. Adding at the end is what the contents is for. */}
+        <span className="turn-left absolute left-1 top-1/2 z-10 flex w-[52px] -translate-y-1/2 flex-col items-center gap-2">
           {cursor > 0 && (
-            <Button
-              variant="edge"
-              className="prevpage"
-              onClick={() => goTo(leaves[cursor - 1].at, leaves[cursor - 1].nth)}
-              aria-label="前のページ"
-            >‹</Button>
+            <span className="flex flex-col items-center gap-0.5">
+              <Button
+                variant="edge"
+                className="prevpage"
+                onClick={() => goTo(leaves[cursor - 1].at, leaves[cursor - 1].nth)}
+                aria-label="前のページ"
+              >‹</Button>
+              <em className="not-italic text-[9px] leading-none text-faint">前へ</em>
+            </span>
+          )}
+          {nth === 0 && (
+            <span className="flex flex-col items-center gap-0.5">
+              <Button variant="edge" className="addbefore" onClick={() => setAddAt(at)} aria-label="前にページを足す">
+                ＋
+              </Button>
+              <em className="not-italic text-[9px] leading-none text-faint">足す</em>
+            </span>
           )}
         </span>
-        <span className="turn-right absolute right-0.5 top-1/2 z-10 flex -translate-y-1/2 flex-col gap-1.5">
+        <span className="turn-right absolute right-1 top-1/2 z-10 flex w-[52px] -translate-y-1/2 flex-col items-center gap-2">
           {cursor >= 0 && cursor < leaves.length - 1 && (
-            <Button
-              variant="edge"
-              className="nextpage"
-              onClick={() => goTo(leaves[cursor + 1].at, leaves[cursor + 1].nth)}
-              aria-label="次のページ"
-            >›</Button>
+            <span className="flex flex-col items-center gap-0.5">
+              <Button
+                variant="edge"
+                className="nextpage"
+                onClick={() => goTo(leaves[cursor + 1].at, leaves[cursor + 1].nth)}
+                aria-label="次のページ"
+              >›</Button>
+              <em className="not-italic text-[9px] leading-none text-faint">次へ</em>
+            </span>
           )}
-          {cursor === leaves.length - 1 && (
-            <Button
-              variant="edge"
-              className="addafter"
-              onClick={() => setAddAt(book.sections.length)}
-              aria-label="後ろにページを足す"
-            >＋</Button>
-          )}
+
         </span>
         <div
           className="flex items-center justify-center"
@@ -2332,7 +2339,6 @@ function CanvasScreen({ book, at, nth, setBook, onBack, goTo, print, setPrint, o
               sections: withSection(b.sections, sectionOf(kind, layout), where),
             }));
             goTo(where, 0);
-            if (kind === 'cover') setSheet({ slot: 0 });
             say(`${SECTION_LABEL(kind)}を足しました`);
           }}
           onClose={() => setAddAt(null)}
@@ -2811,9 +2817,9 @@ function AddSection({ job, print, onPick, onClose }: {
       {/* A cover goes on the front, which is the only place a cover goes, so
           it is said here rather than left as five presses of ↑. */}
       <Button variant="quiet" className="addcover justify-start" onClick={() => onPick('cover')}>
-        <StampIcon kind="photo" />
-        表紙（写真）
-        <em className="not-italic text-faint">先頭に入ります</em>
+        <span className="inline-block h-5 w-[15px] rounded-[2px] border border-line-strong bg-white" />
+        表紙
+        <em className="not-italic text-faint">白紙1ページ・先頭に入ります</em>
       </Button>
 
       {SECTION_MENU.map(group => (

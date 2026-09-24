@@ -101,8 +101,8 @@ await page.screenshot({ path: `${OUT}/21-空きページを押す.png` });
 await page.locator('.addcover').click();
 await page.waitForTimeout(500);
 check(
-  (await page.locator('.sheet h2').textContent().catch(() => '')).includes('写真'),
-  '表紙は写真を選ぶところが開く',
+  await page.locator('.hitbox.part').count() === 0,
+  '表紙は白紙のページ（写真と決めつけない）',
 );
 await shut();
 await toContents();
@@ -226,6 +226,11 @@ check(
     && await page.locator('.turn-right .nextpage').count() === 1,
   '紙の左端に＋、右端にページ送りがある',
 );
+check(
+  (await flat('.turn-left')).includes('足す') && (await flat('.turn-right')).includes('次へ')
+    && await page.locator('.addafter').count() === 0,
+  `＋は左に1つだけ、右はページ送り（左「${await flat('.turn-left')}」右「${await flat('.turn-right')}」）`,
+);
 await page.locator('.nextpage').click();
 await page.waitForTimeout(400);
 check((await pageno()).startsWith('4–5'), `めくると次のページになる（${await pageno()}）`);
@@ -246,8 +251,8 @@ check(
   `左端の＋で入れたものは1ページ目になる（${await pageno()}）`,
 );
 check(
-  (await page.locator('.sheet h2').textContent().catch(() => '')).includes('写真'),
-  '表紙は写真を選ぶところが開く（編集画面から）',
+  await page.locator('.hitbox.part').count() === 0 && await page.locator('.page').count() === 1,
+  '表紙は白紙1ページで開く（編集画面から）',
 );
 await page.screenshot({ path: `${OUT}/33-表紙になった.png` });
 
