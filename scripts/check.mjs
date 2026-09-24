@@ -27,7 +27,7 @@ const CHECKS = [
   { id: 'pdf', script: 'pdfcheck.mjs', out: 'shots/pdf', what: '用紙サイズと面付け' },
   { id: 'shoot', script: 'shoot.mjs', out: 'shots/shoot', what: '主要35場面' },
   { id: 'pc', script: 'pccheck.mjs', out: 'shots/pc', what: 'PCの2カラムとホバー' },
-  { id: 'basket', script: 'basketcheck.mjs', out: 'shots/basket', what: '同じ紙に別のリフィルを足す' },
+  { id: 'book', script: 'bookcheck.mjs', out: 'shots/book', what: '1冊の中身（順番・枚数・保存）' },
   { id: 'ux', script: 'uxcheck.mjs', out: 'shots/ux', what: '×と確認ダイアログ' },
   { id: 'print', script: 'printpreview.mjs', out: 'shots/print', what: '刷り上がりプレビュー' },
   { id: 'multidrop', script: 'multidrop.mjs', out: null, what: 'まとめてドラッグ' },

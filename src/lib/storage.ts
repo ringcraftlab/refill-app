@@ -1,4 +1,4 @@
-import type { Layout } from '../types';
+import type { Book, Layout } from '../types';
 import { SCHEMA_VERSION } from '../types';
 
 // Version 7 kept the orientation inside the calendar: a spread said it through
@@ -12,6 +12,8 @@ const DEFAULT_DAYS_PER_SHEET = 7;
 // The hours a vertical used to be fixed to.
 const DEFAULT_DAY_HOURS = { dayStartHour: 6, dayEndHour: 24 };
 
+// A section, up to the version before books existed. Books are version 14, so
+// nothing here ever returns one; wrapping is the caller's job.
 function migrate(raw: Record<string, unknown>): Layout | null {
   if (raw.version === SCHEMA_VERSION) return raw as unknown as Layout;
 
@@ -49,17 +51,40 @@ function migrate(raw: Record<string, unknown>): Layout | null {
     // 古い紙が黙って別の色で刷られないように、既定は今までの色そのもの。
     out = { ...out, version: 13 };
   }
+  if (out.version === 13) {
+    // 束になった。1つで保存されていたリフィルは、セクション1つの束になる。
+    out = { ...out, version: 14 };
+  }
   return out.version === SCHEMA_VERSION ? (out as unknown as Layout) : null;
+}
+
+// What was saved before version 14 was a single refill. It becomes a book of
+// one section, which is what it always was -- a book nobody had a second
+// section for yet.
+function asBook(raw: Record<string, unknown>): Book | null {
+  if (Array.isArray(raw.sections)) {
+    const sections = (raw.sections as Record<string, unknown>[])
+      .map(migrate).filter((l): l is Layout => l !== null);
+    return sections.length ? { ...(raw as unknown as Book), sections } : null;
+  }
+  const only = migrate(raw);
+  return only && {
+    version: SCHEMA_VERSION,
+    id: only.id,
+    name: only.name,
+    sections: [only],
+    updatedAt: only.updatedAt,
+  };
 }
 
 const KEY = 'refill-app.layouts';
 
-function load(): Layout[] {
+function load(): Book[] {
   try {
     const raw = localStorage.getItem(KEY);
     if (!raw) return [];
     const stored = JSON.parse(raw).layouts as Record<string, unknown>[];
-    return stored.map(migrate).filter((l): l is Layout => l !== null);
+    return stored.map(asBook).filter((b): b is Book => b !== null);
   } catch {
     return [];
   }
@@ -75,9 +100,9 @@ function load(): Layout[] {
 // (photographs included) -- so the answer is cached against this, and saving
 // or deleting one is what makes it stale.
 let revision = 0;
-export const layoutsRevision = (): number => revision;
+export const storeRevision = (): number => revision;
 
-function persist(layouts: Layout[]): boolean {
+function persist(layouts: Book[]): boolean {
   try {
     localStorage.setItem(KEY, JSON.stringify({ layouts }));
     revision++;
@@ -87,20 +112,20 @@ function persist(layouts: Layout[]): boolean {
   }
 }
 
-export function listLayouts(): Layout[] {
+export function listBooks(): Book[] {
   return load().sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 }
 
-export function saveLayout(layout: Layout): boolean {
-  const layouts = load();
-  const next = { ...layout, updatedAt: new Date().toISOString(), version: SCHEMA_VERSION };
-  const i = layouts.findIndex(l => l.id === layout.id);
-  if (i >= 0) layouts[i] = next; else layouts.push(next);
-  return persist(layouts);
+export function saveBook(book: Book): boolean {
+  const books = load();
+  const next = { ...book, updatedAt: new Date().toISOString(), version: SCHEMA_VERSION };
+  const i = books.findIndex(b => b.id === book.id);
+  if (i >= 0) books[i] = next; else books.push(next);
+  return persist(books);
 }
 
-export function deleteLayout(id: string) {
-  persist(load().filter(l => l.id !== id));
+export function deleteBook(id: string) {
+  persist(load().filter(b => b.id !== id));
 }
 
 export function newId(): string {

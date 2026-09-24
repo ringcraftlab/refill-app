@@ -381,7 +381,7 @@ export const datedSlotOf = (layout: Layout): number =>
 // How many sheets the run comes to, which is what the export has to warn
 // about: a year of weeks is 52, a year of single days is 365.
 export const sheetCount = (layout: Layout): number => {
-  if (!hasDatedPart(layout)) return 1;
+  if (!hasDatedPart(layout)) return Math.max(1, layout.pages ?? 1);
   if (isDayPaced(layout)) return sheetStarts(layout).length;
   return Math.ceil(Math.max(1, layout.monthCount) / monthsPerSheet(layout));
 };
@@ -389,7 +389,11 @@ export const sheetCount = (layout: Layout): number => {
 // Every sheet's dates, in order. A weekly paces the refill by days; everything
 // else by months.
 function sheetsOf(layout: Layout): Layout[] {
-  if (!hasDatedPart(layout)) return [layout];
+  // Nothing dated on it: what decides how many sheets come out is how many
+  // were asked for. Ten sheets of squared paper are ten of the same sheet.
+  if (!hasDatedPart(layout)) {
+    return Array.from({ length: Math.max(1, layout.pages ?? 1) }, () => layout);
+  }
   if (isDayPaced(layout)) {
     return sheetStarts(layout).map(start => ({
       ...layout,

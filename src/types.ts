@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 13;
+export const SCHEMA_VERSION = 14;
 
 export type RefillSize =
   | 'MINI3' | 'CARD3' | 'M5' | 'M5SQ' | 'M6' | 'BIBLE' | 'NARROW' | 'A5SLIM' | 'A5';
@@ -218,6 +218,11 @@ export interface Layout {
   ruleWeight?: RuleWeight;
   // Printed refills usually tuck next month's dates into the spread's index
   // column, so it is on unless the user clears it.
+  // How many identical sheets a section with no dates prints. A note section
+  // is "ten sheets of squared paper" -- there is nothing in its content to say
+  // how much of it you want, unlike a monthly, which is as long as its months.
+  // Omitted means one, which is what everything saved before this was.
+  pages?: number;
   showNextMonth: boolean;
   habitCount: number;
   updatedAt: string;
@@ -243,5 +248,20 @@ export type InkTone = 'sepia' | 'grey' | 'indigo' | 'green';
 // 罫線の濃さ。家庭のプリンタで飛ぶ・濃すぎるを直すための軸なので、
 // 文字には効かせない（読めなくなる）。
 export type RuleWeight = 'light' | 'normal' | 'dark';
+
+// 1冊ぶんの中身。市販のリフィルは「年間カレンダー → マンスリー → ウィークリー
+// → ノート」のように**順番のあるセクションの並び**で、1種類のリフィルではない。
+// 束がその並びで、`sections` の順がそのまま紙に置かれる順（＝綴じる順）。
+//
+// サイズ・見開き/片面/蛇腹は束で1つ。同じ穴の紙でないと1冊に綴じられないので、
+// これは制約ではなく事実で、セクションそれぞれが同じ値を持つ（`src/lib` は
+// セクションを1つのリフィルとしてしか見ないので、持たせておくほうが素直）。
+export interface Book {
+  version: number;
+  id: string;
+  name: string;
+  sections: Layout[];
+  updatedAt: string;
+}
 
 export const MAX_PARTS = 4;
