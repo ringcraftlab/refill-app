@@ -75,6 +75,36 @@ check(
   `足したものが末尾に入る（${(await names()).join(' → ')}）`,
 );
 
+// A cover is a picture on a sheet, which nobody arrives at by dropping a
+// 写真 part on a blank section -- so it is on the menu by name, it goes on
+// the front, and it opens on the picture it is still missing.
+await page.locator('.addsection').click();
+await page.locator('.modal').waitFor();
+check(
+  (await flat('.modal')).includes('表紙'),
+  '足すものの中に表紙がある',
+);
+await page.screenshot({ path: `${OUT}/08-中身を足す.png` });
+await page.locator('.addcover').click();
+await page.waitForTimeout(500);
+check(
+  (await page.locator('.sheet h2').textContent().catch(() => '')).includes('写真'),
+  `表紙は写真を選ぶところが開く（${await page.locator('.sheet h2').textContent().catch(() => 'なし')}）`,
+);
+await page.screenshot({ path: `${OUT}/09-表紙を足した.png` });
+await page.locator('.sheet button[aria-label=閉じる]').first().click().catch(() => {});
+await page.locator('.scrim').click({ position: { x: 10, y: 10 } }).catch(() => {});
+await page.waitForTimeout(200);
+await page.getByRole('button', { name: '戻る' }).click();
+await page.locator('.contents-list').waitFor();
+await page.waitForTimeout(200);
+check((await names())[0] === '表紙', `表紙は先頭に入る（${(await names()).join(' → ')}）`);
+await page.screenshot({ path: `${OUT}/10-表紙が先頭.png` });
+await rows().first().locator('button[aria-label=外す]').click();
+await page.locator('.confirm').waitFor();
+await page.locator('.confirm').getByRole('button', { name: '外す' }).click();
+await page.waitForTimeout(300);
+
 // How many of it -- the number someone changes when it turns out to be too
 // much, said in the list rather than three screens away.
 const before = await paper();

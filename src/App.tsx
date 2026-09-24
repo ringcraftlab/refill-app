@@ -290,7 +290,7 @@ function createLayout(): Layout {
 // ruled, dotted, blank) or 'blank', which is an empty sheet for someone to
 // design. The note sections are the answer to "the paper has three places
 // left": they are one sheet each and need nothing decided about them.
-type SectionKind = PartKind | 'blank';
+type SectionKind = PartKind | 'blank' | 'cover';
 
 function sectionOf(kind: SectionKind, base: Layout): Layout {
   const sheet: Layout = {
@@ -310,16 +310,23 @@ function sectionOf(kind: SectionKind, base: Layout): Layout {
     pages: 1,
   };
   if (kind === 'blank') return sheet;
-  return {
-    ...sheet,
-    name: PART_LABEL[kind],
-    surface: { ...sheet.surface, placed: [kind] },
-  };
+  // A cover is a picture filling the sheet. Nobody would arrive at that by
+  // dropping a 写真 part on a blank section and stretching it, so it is a
+  // thing you can ask for by name -- and it keeps that name, because what it
+  // is for is not readable from what is on it.
+  if (kind === 'cover') {
+    return { ...sheet, name: '表紙', surface: { ...sheet.surface, placed: ['photo'] } };
+  }
+  return { ...sheet, surface: { ...sheet.surface, placed: [kind] } };
 }
 
 // What a section is called in the contents: what is on it, which is what
 // anyone scanning a list of them is looking for.
 function sectionLabel(l: Layout): string {
+  // A section named on purpose keeps its name: 表紙 is a photo sheet and
+  // would otherwise read as 「写真」, which says what is on it rather than
+  // what it is.
+  if (l.name && l.name !== '新しいリフィル') return l.name;
   const parts = [
     ...(l.spanning ? ['マンスリー'] : []),
     ...l.surface.placed.map(k => PART_LABEL[k]),
@@ -347,9 +354,11 @@ export function App() {
   // The paper is the book's, not a section's: everything in it is printed in
   // one run, on one kind of paper.
   const [print, setPrint] = useState<PrintOptions>(DEFAULT_PRINT);
-  // Bumped when the editor is entered to change a section's period, so that
-  // the sheet it opens on is the one that was asked for.
-  const [openRange, setOpenRange] = useState(0);
+  // What the editor should open on when it is entered from the contents: the
+  // question that was being asked there, rather than the paper again.
+  const [openOn, setOpenOn] = useState<{ key: number; what: 'range' | 'part0' }>(
+    { key: 0, what: 'range' },
+  );
   // Size and form belong to the book: a section on a different punched sheet
   // could not be bound into it. They are kept on every section because that
   // is all `src/lib` knows how to read.
@@ -401,9 +410,9 @@ export function App() {
         setBook={setBook}
         print={print}
         at={Math.min(at, book.sections.length - 1)}
-        onOpen={(i: number, open?: 'range') => {
+        onOpen={(i: number, open?: 'range' | 'part0') => {
           setAt(i);
-          if (open === 'range') setOpenRange(n => n + 1);
+          if (open) setOpenOn(o => ({ key: o.key + 1, what: open }));
           setStage('canvas');
         }}
         onBack={() => setStage('sides')}
@@ -419,7 +428,7 @@ export function App() {
       goTo={setAt}
       print={print}
       setPrint={setPrint}
-      openRange={openRange}
+      openOn={openOn}
     />
   );
 }
@@ -928,9 +937,10 @@ function ContentsScreen({ book, setBook, print, at, onOpen, onBack }: {
   print: PrintOptions;
   // Which section the editor was on, so that going back goes back.
   at: number;
-  // `'range'` opens that section's period straight away: the number someone
-  // wants to change is the one they just read in this row.
-  onOpen: (i: number, open?: 'range') => void;
+  // `'range'` opens that section's period straight away (the number someone
+  // wants to change is the one they just read in this row); `'part0'` opens
+  // what the section is still missing.
+  onOpen: (i: number, open?: 'range' | 'part0') => void;
   onBack: () => void;
 }) {
   const size = SIZES[book.sections[0].size];
@@ -1073,8 +1083,15 @@ function ContentsScreen({ book, setBook, print, at, onOpen, onBack }: {
           job={job} print={print}
           onPick={kind => {
             setAdding(false);
-            setBook(b => ({ ...b, sections: [...b.sections, sectionOf(kind, b.sections[0])] }));
-            if (kind === 'blank') onOpen(book.sections.length);
+            const front = kind === 'cover';
+            setBook(b => {
+              const made = sectionOf(kind, b.sections[0]);
+              return { ...b, sections: front ? [made, ...b.sections] : [...b.sections, made] };
+            });
+            // A cover needs a picture before it is a cover, and a blank
+            // section needs everything, so both open on what is missing.
+            if (front) onOpen(0, 'part0');
+            else if (kind === 'blank') onOpen(book.sections.length);
           }}
           onClose={() => setAdding(false)}
         />
@@ -1122,7 +1139,7 @@ function sectionSpan(l: Layout): string {
   return `${l.year}年${l.month}月 → ${end.year}年${end.month}月・${runText(l)}`;
 }
 
-function CanvasScreen({ book, at, setBook, onBack, goTo, print, setPrint, openRange }: {
+function CanvasScreen({ book, at, setBook, onBack, goTo, print, setPrint, openOn }: {
   book: Book; at: number; setBook: (fn: (b: Book) => Book) => void;
   onBack: () => void;
   // Editing a different section of the same book -- adding one lands here too.
@@ -1130,8 +1147,8 @@ function CanvasScreen({ book, at, setBook, onBack, goTo, print, setPrint, openRa
   // The paper belongs to the book, so it is held above this screen.
   print: PrintOptions;
   setPrint: (fn: (p: PrintOptions) => PrintOptions) => void;
-  // Changes when the contents asked for this section's period.
-  openRange: number;
+  // Changes when the contents asked to edit something in particular.
+  openOn: { key: number; what: 'range' | 'part0' };
 }) {
   // The section being edited. Everything below this line is written against
   // one refill, exactly as it was before books existed.
@@ -1563,12 +1580,14 @@ function CanvasScreen({ book, at, setBook, onBack, goTo, print, setPrint, openRa
   // lists none either, and their range still has to be reachable.
   const datedSlot = datedSlotOf(layout);
   const monthlyTarget: SheetTarget = layout.spanning ? 'spanning' : { slot: datedSlot };
-  // Arrived from the contents with "shorten this one" in mind: the period is
-  // what that means, so it opens with it.
+  // Arrived from the contents with something in mind: the period of this
+  // section, or the part that is not finished yet (a cover with no picture).
   useLayoutEffect(() => {
-    if (openRange > 0 && (layout.spanning || datedSlot >= 0)) setSheet(monthlyTarget);
+    if (openOn.key === 0) return;
+    if (openOn.what === 'part0') setSheet({ slot: 0 });
+    else if (layout.spanning || datedSlot >= 0) setSheet(monthlyTarget);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [openRange]);
+  }, [openOn.key]);
 
   // One button per removable thing, at the outer top corner of the whole
   // block. A part straddling the gutter is still one part, and its button
@@ -1670,14 +1689,22 @@ function CanvasScreen({ book, at, setBook, onBack, goTo, print, setPrint, openRa
       // places are. Nothing is saved or named on the way: the book is one
       // thing and it is saved as one thing.
       onAddSection={kind => {
-        setBook(b => ({ ...b, sections: [...b.sections, sectionOf(kind, layout)] }));
-        setSheet(null);
-        if (kind === 'blank') {
-          goTo(book.sections.length);
-          say('中身を作ってください');
-        } else {
-          say(`${PART_LABEL[kind]}を1枚足しました`);
+        const made = sectionOf(kind, layout);
+        // A cover goes on the front; everything else on the end, where the
+        // empty places are.
+        const front = kind === 'cover';
+        setBook(b => ({
+          ...b,
+          sections: front ? [made, ...b.sections] : [...b.sections, made],
+        }));
+        // A cover is not finished until it has a picture on it, and a blank
+        // section is not finished at all, so both open on what is missing.
+        if (kind === 'cover') { goTo(0); setSheet({ slot: 0 }); }
+        else {
+          setSheet(null);
+          if (kind === 'blank') goTo(book.sections.length);
         }
+        say(`${SECTION_LABEL(kind)}を足しました`);
       }}
       say={say}
     />
@@ -2508,7 +2535,19 @@ type PaperJob = ReturnType<typeof usePaperJob>;
 //
 // It is a modal because a panel under the press sat off the bottom of a 900px
 // window, and "pressed ＋ and nothing happened" is how that reads.
-const FILLERS: PartKind[] = ['lines', 'grid', 'memo'];
+// What a refill set is made of, in the words the tray already uses. A section
+// starts as one of these rather than as a blank sheet someone has to know how
+// to fill: 表紙 is a picture on a sheet, and nobody arrives at that by
+// guessing. The dated ones come with the book's period, so a weekly is a
+// year of weeks straight away and the contents says how long that is.
+const SECTION_MENU: { title: string; kinds: SectionKind[] }[] = [
+  { title: 'カレンダー', kinds: ['monthly', 'weekhoriz', 'weekvert', 'daylist'] },
+  { title: '書くところ', kinds: ['memo', 'lines', 'grid', 'todo'] },
+];
+
+const SECTION_LABEL = (kind: SectionKind): string => (
+  kind === 'cover' ? '表紙' : kind === 'blank' ? '白紙' : PART_LABEL[kind]
+);
 
 function AddSection({ job, print, onPick, onClose }: {
   job: PaperJob;
@@ -2523,23 +2562,34 @@ function AddSection({ job, print, onPick, onClose }: {
           ? `${PAPERS[print.paper].label}の${job.sheets}枚目に、あとリフィル${job.spare}${job.unit}ぶん入ります`
           : `いまちょうど${PAPERS[print.paper].label}${job.sheets}枚です。足すと紙が増えます`}
       </p>
-      <span className="fillers grid grid-cols-2 gap-1.5">
-        {[...FILLERS, 'blank' as const].map(kind => (
-          <Button
-            key={kind}
-            variant="quiet"
-            className="justify-start"
-            onClick={() => onPick(kind)}
-          >
-            {kind === 'blank' ? '白紙' : PART_LABEL[kind]} 1{job.unit}
-          </Button>
-        ))}
-      </span>
-      <Button variant="cta" className="makenew" onClick={() => onPick('blank')}>
-        自分で作る
+
+      {/* A cover goes on the front, which is the only place a cover goes, so
+          it is said here rather than left as five presses of ↑. */}
+      <Button variant="quiet" className="addcover justify-start" onClick={() => onPick('cover')}>
+        <StampIcon kind="photo" />
+        表紙（写真）
+        <em className="not-italic text-faint">先頭に入ります</em>
+      </Button>
+
+      {SECTION_MENU.map(group => (
+        <span key={group.title} className="flex flex-col gap-1">
+          <strong className="text-[11px] font-normal text-faint">{group.title}</strong>
+          <span className="fillers grid grid-cols-2 gap-1.5">
+            {group.kinds.map(kind => (
+              <Button key={kind} variant="quiet" className="justify-start" onClick={() => onPick(kind)}>
+                <StampIcon kind={kind as PartKind} />
+                {SECTION_LABEL(kind)}
+              </Button>
+            ))}
+          </span>
+        </span>
+      ))}
+
+      <Button variant="quiet" className="makenew justify-start" onClick={() => onPick('blank')}>
+        白紙（自分で作る）
       </Button>
       <span className="text-[10px] leading-snug text-faint">
-        白紙のセクションを足して、そのまま中身を作ります
+        足したものは末尾に入ります（表紙だけ先頭）。順番は中身の ↑↓ で変えられます
       </span>
     </Modal>
   );
