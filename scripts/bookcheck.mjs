@@ -1,15 +1,20 @@
-// A book: several sections, in the order they are bound, on one run of paper.
+// A book: its contents as pages, in the order they are turned.
 //
 //   npm run build && npx vite preview --port 4173 --strictPort &
 //   node scripts/bookcheck.mjs [outDir]
 //
-// What a commercial refill set is: year planner, then monthlies, then
-// weeklies, then notes. The app used to make one refill and treat anything
-// else as a print-time extra, which is why "足す" could never be made clear --
-// the thing being added had nowhere to live. A section does.
+// A planner is a stack of pages. People who own one think 1ページ, 2ページ,
+// and a spread is what two facing pages make -- they never think about which
+// side of which sheet of paper a page is printed on. This app grew the other
+// way round, out of the printing, and every "わかりにくい" traced back to
+// that: 面, 表, 裏, 使わない面 are a printer's words.
 //
-// So this checks the contents: what is in the book, in what order, how long
-// each one runs, and that the paper and the PDF agree with the list.
+// So the contents screen is a page panel: page 1 alone on the right, then
+// 2-3, 4-5, an empty page drawn where the book has one, and the sections
+// above as the things those pages came from. What this checks is that the
+// pages, the sections and the paper all say the same thing -- and in
+// particular that a cover put on page 1 of a spread book costs no paper,
+// because the spread was leaving that page empty anyway.
 import { BASE, launch } from './browser.mjs';
 import { mkdir, readFile } from 'node:fs/promises';
 import { PDFDocument } from 'pdf-lib';
@@ -37,146 +42,135 @@ async function drag(from, to) {
   await page.mouse.up();
 }
 const flat = async (sel) => (await page.locator(sel).textContent()).replace(/\s+/g, ' ').trim();
-const rows = () => page.locator('.contents-list .section');
-const names = async () => (await page.locator('.secname').allTextContents()).map(t => t.trim());
-
-// One section to start with, which is what every refill ever made here was.
-await page.goto(BASE);
-await page.locator('.sizerow', { hasText: '62×105mm' }).click();
-await page.locator('.card', { hasText: '片面' }).first().click();
-await page.getByRole('button', { name: 'この構成で作る' }).click();
-await page.locator('.page').first().waitFor();
-await drag(
-  await centerOf(page.locator('.stamp', { hasText: 'マンスリー' })),
-  await centerOf(page.locator('.page').first()),
-);
-
-await page.locator('.tocontents').click();
-await page.locator('.contents-list').waitFor();
-await page.waitForTimeout(200);
-check(await rows().count() === 1, `作ったものが中身の1つ目になる（${(await names()).join(' → ')}）`);
-check(
-  (await flat('.contents-list')).includes('2026年9月 → 2027年8月'),
-  `セクションは自分の期間を持つ（${(await page.locator('.secspan').first().textContent()).trim()}）`,
-);
+const names = async () => (await page.locator('.sections .secname').allTextContents()).map(t => t.trim());
 const paper = () => flat('.fill-note');
-check((await paper()).includes('A4'), `束が何枚の紙になるかが出ている（${await paper()}）`);
+const leaves = () => page.locator('.contents-list .leaf');
+const shut = async () => {
+  await page.locator('.sheet button[aria-label=閉じる]').first().click().catch(() => {});
+  await page.locator('.scrim').click({ position: { x: 10, y: 10 } }).catch(() => {});
+  await page.waitForTimeout(200);
+};
+const toContents = async () => {
+  await page.locator('.tocontents').click();
+  await page.locator('.contents-list').waitFor();
+  await page.waitForTimeout(400);
+};
+async function start(sizeText, form, part) {
+  await page.goto(BASE);
+  await page.locator('.sizerow', { hasText: sizeText }).click();
+  await page.locator('.card', { hasText: form }).first().click();
+  await page.getByRole('button', { name: 'この構成で作る' }).click();
+  await page.locator('.page').first().waitFor();
+  await drag(
+    await centerOf(page.locator('.stamp', { hasText: part })),
+    await centerOf(page.locator('.page').first()),
+  );
+}
 
-// A note section: one sheet, nothing to decide about it. This is what the
-// leftover places on the paper actually want.
-await page.locator('.addsection').click();
+// ---- a book of spreads: the pages it comes to ---------------------------
+await start('80×128mm', '見開き', 'マンスリー');
+await toContents();
+check((await names()).join(' / ') === 'マンスリー', `作ったものが中身の1つ目になる（${(await names()).join(' / ')}）`);
+const pages = await leaves().count();
+check(pages === 26, `12ヶ月の見開きは26ページ（${pages}ページ）`);
+check(
+  (await flat('h1')).includes(`全${pages}ページ`),
+  `ページ数が出ている（${await flat('h1')}）`,
+);
+// Page 1 is alone on the right: a spread's left page is an even page number.
+const firstRow = page.locator('.spread').first();
+check(
+  await firstRow.locator('.leaf').count() === 1,
+  `1ページ目は単独で右に来る（1行目に${await firstRow.locator('.leaf').count()}ページ）`,
+);
+check(
+  await page.locator('.leaf.empty').count() === 2,
+  `空きページは前と後ろの2つ（${await page.locator('.leaf.empty').count()}つ）`,
+);
+check(
+  (await paper()).includes('13枚'),
+  `紙はページの半分（${await paper()}）`,
+);
+await page.screenshot({ path: `${OUT}/20-ページパネル.png` });
+
+// ---- the cover goes on page 1, and costs no paper -----------------------
+await page.locator('.leaf.empty').first().click();
 await page.locator('.modal').waitFor();
-await page.waitForTimeout(200);
-await page.screenshot({ path: `${OUT}/01-中身を足す.png` });
-await page.locator('.fillers button', { hasText: '方眼' }).click();
 await page.waitForTimeout(300);
-check(
-  await rows().count() === 2 && (await names())[1] === '方眼',
-  `足したものが末尾に入る（${(await names()).join(' → ')}）`,
-);
-
-// A cover is a picture on a sheet, which nobody arrives at by dropping a
-// 写真 part on a blank section -- so it is on the menu by name, it goes on
-// the front, and it opens on the picture it is still missing.
-await page.locator('.addsection').click();
-await page.locator('.modal').waitFor();
-check(
-  (await flat('.modal')).includes('表紙'),
-  '足すものの中に表紙がある',
-);
-await page.screenshot({ path: `${OUT}/08-中身を足す.png` });
+await page.screenshot({ path: `${OUT}/21-空きページを押す.png` });
 await page.locator('.addcover').click();
 await page.waitForTimeout(500);
 check(
   (await page.locator('.sheet h2').textContent().catch(() => '')).includes('写真'),
-  `表紙は写真を選ぶところが開く（${await page.locator('.sheet h2').textContent().catch(() => 'なし')}）`,
+  '表紙は写真を選ぶところが開く',
+);
+await shut();
+await toContents();
+check((await names())[0] === '表紙', `押したページに入る（${(await names()).join(' / ')}）`);
+check(
+  await leaves().count() === pages && await page.locator('.leaf.empty').count() === 1,
+  `ページ数は変わらず、空きが1つ減る（${await leaves().count()}ページ・空き${await page.locator('.leaf.empty').count()}）`,
 );
 check(
-  (await flat('.tocontents')).includes('中身'),
-  `編集画面から中身への道に字がある（「${await flat('.tocontents')}」）`,
+  (await paper()).includes('13枚'),
+  `表紙を入れても紙は増えない（${await paper()}）`,
 );
-await page.screenshot({ path: `${OUT}/09-表紙を足した.png` });
-await page.locator('.sheet button[aria-label=閉じる]').first().click().catch(() => {});
-await page.locator('.scrim').click({ position: { x: 10, y: 10 } }).catch(() => {});
+await page.screenshot({ path: `${OUT}/22-表紙が1ページ目.png` });
+
+// ---- a section's own settings, from its chip ----------------------------
+await page.locator('.sections .section').nth(1).click();
+await page.locator('.modal').waitFor();
 await page.waitForTimeout(200);
-await page.locator('.tocontents').click();
-await page.locator('.contents-list').waitFor();
+check((await flat('.modal .secspan')).includes('12ヶ月'), `チップから期間が読める（${await flat('.modal .secspan')}）`);
+check(await page.locator('.modal .torange').count() === 1, '日付のあるものは期間を変えられる');
+await page.locator('.modal button[aria-label=閉じる]').click();
 await page.waitForTimeout(200);
-check((await names())[0] === '表紙', `表紙は先頭に入る（${(await names()).join(' → ')}）`);
-await page.screenshot({ path: `${OUT}/10-表紙が先頭.png` });
-await rows().first().locator('button[aria-label=外す]').click();
+
+// ---- a note section: how many sheets of it ------------------------------
+await page.locator('.sections .addsection').click();
+await page.locator('.modal').waitFor();
+await page.locator('.fillers button', { hasText: '方眼' }).click();
+await page.waitForTimeout(400);
+check((await names()).includes('方眼'), `足したものが中身に入る（${(await names()).join(' / ')}）`);
+const wasPages = await leaves().count();
+await page.locator('.sections .section', { hasText: '方眼' }).click();
+await page.locator('.modal').waitFor();
+await page.locator('.modal .pages button[aria-label=増やす]').click();
+await page.locator('.modal .pages button[aria-label=増やす]').click();
+await page.waitForTimeout(300);
+check(
+  (await flat('.modal .pages')).includes('3ページ'),
+  `枚数をその場で変えられる（${await flat('.modal .pages')}）`,
+);
+await page.locator('.modal button[aria-label=閉じる]').click();
+await page.waitForTimeout(300);
+check(
+  await leaves().count() > wasPages,
+  `枚数を増やすとページが増える（${wasPages} → ${await leaves().count()}ページ）`,
+);
+await page.screenshot({ path: `${OUT}/23-方眼を3枚.png` });
+
+// ---- order and removal --------------------------------------------------
+await page.locator('.sections .section', { hasText: '方眼' }).click();
+await page.locator('.modal').waitFor();
+await page.locator('.modal button', { hasText: '前へ' }).click();
+await page.waitForTimeout(300);
+check((await names())[1] === '方眼', `並べ替えられる（${(await names()).join(' / ')}）`);
+await page.locator('.modal .dropsec').click();
 await page.locator('.confirm').waitFor();
+check((await flat('.confirm')).includes('外しますか'), '外すときは確認する');
 await page.locator('.confirm').getByRole('button', { name: '外す' }).click();
 await page.waitForTimeout(300);
+check(!(await names()).includes('方眼'), `外れる（${(await names()).join(' / ')}）`);
 
-// How many of it -- the number someone changes when it turns out to be too
-// much, said in the list rather than three screens away.
-const before = await paper();
-await rows().nth(1).locator('.pages button[aria-label=増やす]').click();
-await rows().nth(1).locator('.pages button[aria-label=増やす]').click();
-await page.waitForTimeout(300);
-check(
-  (await flat('.contents-list')).includes('3枚') && (await paper()) !== before,
-  `枚数をその場で変えられる（${before} → ${await paper()}）`,
-);
-await page.screenshot({ path: `${OUT}/02-中身.png` });
-
-// Order is binding order, so it has to be changeable.
-await rows().nth(1).locator('button[aria-label=上へ]').click();
-await page.waitForTimeout(200);
-check((await names())[0] === '方眼', `並べ替えられる（${(await names()).join(' → ')}）`);
-await rows().nth(0).locator('button[aria-label=下へ]').click();
-await page.waitForTimeout(200);
-
-// And removable, with the same confirm as everything else that takes
-// something away.
-await rows().nth(1).locator('button[aria-label=外す]').click();
-await page.locator('.confirm').waitFor();
-check(
-  (await flat('.confirm')).includes('外しますか'),
-  '外すときは確認する',
-);
-await page.getByRole('button', { name: 'やめる' }).click();
-await page.waitForTimeout(200);
-check(await rows().count() === 2, 'やめれば残る');
-
-// The printed sheet, with the whole book on it.
-await page.locator('.section').first().click();
+// ---- what comes out -----------------------------------------------------
+await page.locator('.leaf').nth(2).click();
 await page.locator('.page').first().waitFor();
 await page.getByRole('button', { name: 'PDF出力プレビュー' }).click();
 await page.locator('.preview').waitFor();
 await page.waitForTimeout(400);
 const summary = await flat('.print-summary');
 check(summary.includes('リフィル'), `刷り上がりが束ぶん出ている（${summary}）`);
-await page.screenshot({ path: `${OUT}/03-刷り上がり.png` });
-
-// Saving keeps the book whole: its sections and their order.
-await page.locator('.sheet button[aria-label=閉じる]').first().click().catch(() => {});
-await page.locator('.scrim').click({ position: { x: 10, y: 10 } }).catch(() => {});
-await page.waitForTimeout(200);
-await page.getByRole('button', { name: '保存', exact: true }).click();
-await page.locator('.savename').waitFor();
-const suggested = await page.locator('.savename').inputValue();
-check(
-  suggested.includes('マンスリー') && suggested.includes('方眼'),
-  `名前は中身からできている（「${suggested}」）`,
-);
-await page.getByRole('button', { name: '保存する' }).click();
-await page.waitForTimeout(300);
-await page.getByRole('button', { name: '読み込み' }).click();
-await page.locator('.sheet li').first().waitFor();
-check(
-  (await flat('.sheet li')).includes('マンスリー → 方眼'),
-  '保存した束は中身の並びごと出る',
-);
-await page.screenshot({ path: `${OUT}/04-保存した束.png` });
-await page.locator('.sheet button[aria-label=閉じる]').first().click().catch(() => {});
-await page.locator('.scrim').click({ position: { x: 10, y: 10 } }).catch(() => {});
-await page.waitForTimeout(200);
-
-// What comes out has all of it on it.
-await page.getByRole('button', { name: 'PDF出力プレビュー' }).click();
-await page.locator('.preview').waitFor();
 const dl = page.waitForEvent('download');
 await page.getByRole('button', { name: '書き出す' }).click();
 const file = `${OUT}/book.pdf`;
@@ -186,109 +180,38 @@ const { width, height } = doc.getPage(0).getSize();
 const mm = [width * MM, height * MM].map(Math.round).sort((a, b) => a - b);
 check(mm[0] === 210 && mm[1] === 297, `A4で出る（${mm[1]}×${mm[0]}mm）`);
 console.log(`  ${doc.getPageCount()}ページ`);
+await shut();
 
-// ---- too much of something, and the three ways to cut it back ----------
-// A year of weeks is 53 sheets and spills onto a fourth sheet of paper for
-// five of them, which is exactly when someone wants to shorten it.
-await page.goto(BASE);
-await page.locator('.sizerow', { hasText: '62×105mm' }).click();
-await page.locator('.card', { hasText: '片面' }).first().click();
-await page.getByRole('button', { name: 'この構成で作る' }).click();
-await page.locator('.page').first().waitFor();
-await drag(
-  await centerOf(page.locator('.stamp', { hasText: 'ウィークリー' })),
-  await centerOf(page.locator('.page').first()),
+// ---- saving keeps the book whole ---------------------------------------
+await page.getByRole('button', { name: '保存', exact: true }).click();
+await page.locator('.savename').waitFor();
+const suggested = await page.locator('.savename').inputValue();
+check(
+  suggested.includes('表紙') && suggested.includes('マンスリー'),
+  `名前は中身からできている（「${suggested}」）`,
 );
-await page.locator('.tocontents').click();
-await page.locator('.contents-list').waitFor();
+await page.getByRole('button', { name: '保存する' }).click();
 await page.waitForTimeout(300);
+await page.getByRole('button', { name: '読み込み' }).click();
+await page.locator('.sheet li').first().waitFor();
 check(
-  (await flat('.secspan')).includes('週'),
-  `期間は中身の言葉で出る（${await flat('.secspan')}）`,
+  (await flat('.sheet li')).includes('表紙 → マンスリー'),
+  '保存した束は中身の並びごと出る',
 );
+await page.screenshot({ path: `${OUT}/24-保存した束.png` });
 
-// 2: the paper says what to cut, and cuts it.
-const spilled = await paper();
-check(await page.locator('.trim').count() === 1, `紙から逆算した減らし方が出る（${await flat('.trim')}）`);
-await page.locator('.dotrim').click();
-await page.waitForTimeout(400);
+// ---- single pages: no empty page anywhere ------------------------------
+await start('80×128mm', '片面', 'マンスリー');
+await toContents();
 check(
-  (await paper()).includes('あきはありません'),
-  `そうすると紙が1枚減る（${spilled} → ${await paper()}）`,
+  await page.locator('.leaf.empty').count() === 0,
+  `片面の束には空きページが出ない（${await page.locator('.leaf.empty').count()}）`,
 );
-await page.screenshot({ path: `${OUT}/05-減らす提案.png` });
-
-// 1: the period of a dated section, reached from its row.
-await page.locator('.torange').first().click();
-await page.locator('.sheet').waitFor();
 check(
-  (await flat('.sheet')).includes('終了月'),
-  '「期間」からその中身の期間がすぐ開く',
+  await leaves().count() === 12,
+  `12ヶ月は12ページ（${await leaves().count()}ページ）`,
 );
-await page.locator('.sheet button[aria-label=閉じる]').first().click().catch(() => {});
-await page.locator('.scrim').click({ position: { x: 10, y: 10 } }).catch(() => {});
-await page.waitForTimeout(200);
-
-// 3: the page you are looking at is the one it should stop at.
-await page.getByRole('button', { name: 'PDF出力プレビュー' }).click();
-await page.locator('.preview').waitFor();
-await page.waitForTimeout(400);
-await page.locator('.preview figure button').first().click();
-await page.locator('.lightbox').waitFor();
-await page.waitForTimeout(300);
-check(
-  await page.locator('.lightbox .onpaper').count() > 1,
-  `拡大した紙は1面ずつ押せる（${await page.locator('.lightbox .onpaper').count()}面）`,
-);
-await page.screenshot({ path: `${OUT}/06-拡大.png` });
-await page.locator('.lightbox .onpaper').nth(2).click();
-await page.locator('.modal').waitFor();
-await page.waitForTimeout(300);
-check(
-  (await flat('.pagewhat')).includes('週'),
-  `押した面が何かを言う（${await flat('.pagewhat')}）`,
-);
-await page.screenshot({ path: `${OUT}/07-ここまでにする.png` });
-const was = await flat('.cuthere');
-await page.locator('.cuthere').click();
-await page.waitForTimeout(500);
-check(
-  (await flat('.fill-note')).includes('いま3枚'),
-  `ここまでにすると、そこで終わる（${was} → ${await flat('.fill-note')}）`,
-);
-
-// ---- a cover in a book of spreads ---------------------------------------
-// A cover is the outside of the stack, not a pair of facing pages -- and a
-// spread and a single page are the same punched sheet, so it binds in either
-// way. It also replaces the empty sheet a new book starts with, which is
-// somewhere to draw rather than something anyone asked to print.
-await page.goto(BASE);
-await page.locator('.sizerow', { hasText: '80×128mm' }).click();
-await page.locator('.card', { hasText: '見開き' }).first().click();
-await page.getByRole('button', { name: 'この構成で作る' }).click();
-await page.locator('.page').first().waitFor();
-check(await page.locator('.page').count() === 2, '見開きは2ページで始まる');
-await page.locator('.tocontents').click();
-await page.locator('.contents-list').waitFor();
-await page.locator('.addsection').click();
-await page.locator('.modal').waitFor();
-await page.locator('.addcover').click();
-await page.waitForTimeout(500);
-check(
-  await page.locator('.page').count() === 1 && await page.locator('.hitbox.part').count() === 1,
-  `見開きの束でも表紙は1ページ（${await page.locator('.page').count()}ページ・写真${await page.locator('.hitbox.part').count()}枠）`,
-);
-await page.locator('.sheet button[aria-label=閉じる]').first().click().catch(() => {});
-await page.locator('.scrim').click({ position: { x: 10, y: 10 } }).catch(() => {});
-await page.waitForTimeout(200);
-await page.locator('.tocontents').click();
-await page.locator('.contents-list').waitFor();
-await page.waitForTimeout(200);
-check(
-  (await names()).join(' → ') === '表紙',
-  `白紙のまま残っていた1枚目は、足したものが引き取る（${(await names()).join(' → ')}）`,
-);
-await page.screenshot({ path: `${OUT}/11-見開きの表紙.png` });
+await page.screenshot({ path: `${OUT}/25-片面のページ.png` });
 
 await browser.close();
 if (bad) process.exitCode = 1;

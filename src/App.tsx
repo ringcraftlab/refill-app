@@ -21,8 +21,8 @@ import { nextMonthCell } from './lib/parts';
 import { addDays, addMonths, isoDate, runDates } from './lib/dates';
 import {
   buildPages, buildPrintSheets, datedSlotOf, DEFAULT_PRINT, hasDatedPart, INK_INSET_MM, isDayPaced,
-  duplexFlipOf, imposeCount, MONTH_PACED, paperPlan, punchInset, runEnd, sameSheet, sheetCount,
-  sheetLabel, sheetSizeOf,
+  chainCount, chainOwners, duplexFlipOf, imposeCount, MONTH_PACED, paperPlan, punchInset, runEnd,
+  sameSheet, sheetCount, sheetLabel, sheetSizeOf,
 } from './lib/render/pages';
 import type { BackFill, PrintOptions } from './lib/render/pages';
 import type { TilePlan } from './lib/render/impose';
@@ -337,11 +337,13 @@ function isPlaceholder(l: Layout): boolean {
   return !l.spanning && l.surface.placed.length === 0 && !l.background;
 }
 
-// Where a new section goes, and what it replaces. A cover goes on the front;
-// everything else on the end, where the empty places on the paper are.
-function withSection(sections: Layout[], made: Layout, front: boolean): Layout[] {
+// Where a new section goes, and what it replaces. `where` is the index it
+// lands at -- an empty page knows which one it is, so pressing it puts what
+// is chosen exactly there.
+function withSection(sections: Layout[], made: Layout, where: number | boolean): Layout[] {
   const rest = sections.length === 1 && isPlaceholder(sections[0]) ? [] : sections;
-  return front ? [made, ...rest] : [...rest, made];
+  const at = where === true ? 0 : where === false ? rest.length : Math.min(where, rest.length);
+  return [...rest.slice(0, at), made, ...rest.slice(at)];
 }
 
 // What a section is called in the contents: what is on it, which is what
@@ -980,6 +982,11 @@ function ContentsScreen({ book, setBook, print, at, onOpen, onBack }: {
   const job = usePaperJob(book.sections, size, print);
   const [adding, setAdding] = useState(false);
   const [ask, setAsk] = useState<number | null>(null);
+  // Which section's settings are open, and where a pressed empty page would
+  // put what it is given.
+  const [picked, setPicked] = useState<number | null>(null);
+  const [addAt, setAddAt] = useState<number | null>(null);
+  const pages = useMemo(() => pagesOf(book.sections), [book.sections]);
 
   // The last sheet of paper is mostly empty, and one section is what fills it:
   // saying which one, and by how much, turns "too many" into one press. The
@@ -1028,61 +1035,80 @@ function ContentsScreen({ book, setBook, print, at, onOpen, onBack }: {
           {formLabel(body, foldOf(body, size)?.grain)}
         </span>
       </header>
-      <h1 className="m-0 mb-1 text-[19px]">中身</h1>
+      <h1 className="m-0 mb-0.5 text-[19px]">
+        中身
+        <span className="ml-2 align-middle text-[11px] font-normal text-faint">
+          全{pages.length}ページ
+        </span>
+      </h1>
 
-      <ul className="contents-list m-0 flex min-h-0 list-none flex-col gap-1.5 overflow-y-auto p-0">
+      {/* What the book is made of, above the pages it comes to -- the way a
+          page panel keeps the masters above the pages. Pressing one is how
+          its length, its order and its removal are reached: the pages
+          themselves are the result and are not rearranged one by one. */}
+      <ul className="sections m-0 flex shrink-0 list-none flex-wrap gap-1.5 p-0 pb-1">
         {book.sections.map((sec, i) => (
-          <li
-            key={i}
-            className="section flex items-center gap-2.5 rounded-[11px] border border-line-strong bg-white p-2"
-          >
-            <button className="flex min-w-0 flex-1 items-center gap-2.5 p-0 text-left" onClick={() => onOpen(i)}>
-              <Thumb layout={sec} size={size} />
-              <span className="min-w-0 flex-1">
-                <span className="secname block truncate text-[14px]">{sectionLabel(sec)}</span>
-                <span className={`secspan block text-[11px] ${
-                  hasDatedPart(sec) ? 'text-accent underline decoration-dotted' : 'text-faint'
-                }`}>{sectionSpan(sec)}</span>
-              </span>
-            </button>
-            {/* A note section is "how many sheets of it", and that is the
-                number someone changes when it turns out to be too many. A
-                dated one is as long as its dates, which the range in the
-                editor sets. */}
-            {hasDatedPart(sec) && (
-              <Button variant="quiet" className="torange shrink-0" onClick={() => onOpen(i, 'range')}>
-                期間
-              </Button>
-            )}
-            {!hasDatedPart(sec) && (
-              <span className="pages flex shrink-0 items-center gap-1">
-                <Button
-                  variant="icon"
-                  onClick={() => setPages(i, -1)}
-                  aria-label="減らす"
-                >−</Button>
-                <strong className="min-w-[2.2rem] text-center text-[12px]">
-                  {Math.max(1, sec.pages ?? 1)}枚
-                </strong>
-                <Button variant="icon" onClick={() => setPages(i, 1)} aria-label="増やす">＋</Button>
-              </span>
-            )}
-            <span className="flex shrink-0 flex-col gap-0.5">
-              {i > 0 && <Button variant="icon" onClick={() => move(i, -1)} aria-label="上へ">↑</Button>}
-              {i < book.sections.length - 1 && (
-                <Button variant="icon" onClick={() => move(i, 1)} aria-label="下へ">↓</Button>
-              )}
-            </span>
-            {book.sections.length > 1 && (
-              <Button variant="icon" onClick={() => setAsk(i)} aria-label="外す">×</Button>
-            )}
+          <li key={i}>
+            <Button
+              variant="chip"
+              className={`section ${i === at ? 'border-accent' : ''}`}
+              onClick={() => setPicked(i)}
+            >
+              <span className="text-accent">{sectionMark(book.sections, i)}</span>
+              <span className="secname">{sectionLabel(sec)}</span>
+              <em className="not-italic text-faint">{runText(sec)}</em>
+            </Button>
           </li>
         ))}
+        <li>
+          <Button variant="chip" className="addsection" onClick={() => setAdding(true)}>
+            ＋ 足す
+          </Button>
+        </li>
       </ul>
 
-      <Button variant="quiet" className="addsection mt-1.5" onClick={() => setAdding(true)}>
-        ＋ 中身を足す
-      </Button>
+      {/* The pages, as they are turned: 1 alone on the right, then 2-3, 4-5.
+          An empty page is a page -- press it and something goes there. */}
+      <ul className="contents-list m-0 flex min-h-0 list-none flex-col items-center gap-2 overflow-y-auto p-0 pb-1">
+        {Array.from({ length: Math.ceil((pages.length + 1) / 2) }, (_, row) => {
+          // Row 0 is page 1 by itself; every row after it is a pair.
+          const left = row === 0 ? null : pages[row * 2 - 1];
+          const right = row === 0 ? pages[0] : pages[row * 2];
+          if (!left && !right) return null;
+          return (
+            <li key={row} className="spread flex items-start gap-[3px]">
+              {[left, right].map((leaf, half) => {
+                const no = row === 0 ? (half === 1 ? 1 : 0) : row * 2 + half;
+                if (!leaf) {
+                  return <span key={half} className="w-[62px]" />;
+                }
+                const sec = leaf.at === null ? null : book.sections[leaf.at];
+                return (
+                  <button
+                    key={half}
+                    className={`leaf flex w-[62px] flex-col items-center gap-0.5 p-0 ${
+                      sec ? '' : 'empty'
+                    }`}
+                    onClick={() => (sec ? onOpen(leaf.at!) : setAddAt(leaf.before))}
+                  >
+                    {sec ? (
+                      <Thumb layout={sec} size={size} side={leaf.side} box={{ w: 54, h: 74 }} />
+                    ) : (
+                      <span className="flex h-[74px] w-[54px] items-center justify-center rounded-[3px] border border-dashed border-line-strong text-[15px] text-faint">
+                        ＋
+                      </span>
+                    )}
+                    <span className="text-[9px] leading-none text-faint">
+                      {no}
+                      {sec && <span className="ml-0.5 text-accent">{sectionMark(book.sections, leaf.at!)}</span>}
+                    </span>
+                  </button>
+                );
+              })}
+            </li>
+          );
+        })}
+      </ul>
 
       {/* What the whole book comes to on paper. The number that makes someone
           want to shorten something is this one, so it is here rather than
@@ -1111,23 +1137,59 @@ function ContentsScreen({ book, setBook, print, at, onOpen, onBack }: {
         <Button variant="cta" className="flex-1" onClick={() => onOpen(at)}>編集にもどる</Button>
       </div>
 
-      {adding && (
+      {(adding || addAt !== null) && (
         <AddSection
           job={job} print={print}
           onPick={kind => {
+            // Pressed on an empty page: what is chosen goes at that page,
+            // which is what makes a cover land on page 1 without anything
+            // having to know what a cover is.
+            const where = addAt ?? (kind === 'cover' ? 0 : book.sections.length);
             setAdding(false);
-            const front = kind === 'cover';
+            setAddAt(null);
             setBook(b => ({
               ...b,
-              sections: withSection(b.sections, sectionOf(kind, b.sections[0]), front),
+              sections: withSection(b.sections, sectionOf(kind, b.sections[0]), where),
             }));
-            // A cover needs a picture before it is a cover, and a blank
-            // section needs everything, so both open on what is missing.
-            if (front) onOpen(0, 'part0');
-            else if (kind === 'blank') onOpen(book.sections.length);
+            if (kind === 'cover' || kind === 'blank') onOpen(where, kind === 'cover' ? 'part0' : undefined);
           }}
-          onClose={() => setAdding(false)}
+          onClose={() => { setAdding(false); setAddAt(null); }}
         />
+      )}
+
+      {/* One section's own settings, from its chip: how long it runs, where
+          it sits in the book, and whether it stays. */}
+      {picked !== null && book.sections[picked] && (
+        <Modal title={sectionLabel(book.sections[picked])} onClose={() => setPicked(null)}>
+          <p className="secspan m-0 text-[12px] text-muted">{sectionSpan(book.sections[picked])}</p>
+          {hasDatedPart(book.sections[picked]) ? (
+            <Button variant="quiet" className="torange" onClick={() => onOpen(picked, 'range')}>
+              期間を変える
+            </Button>
+          ) : (
+            <span className="pages flex items-center gap-2">
+              <Button variant="icon" onClick={() => setPages(picked, -1)} aria-label="減らす">−</Button>
+              <strong className="min-w-[3.5rem] text-center text-[13px]">
+                {Math.max(1, book.sections[picked].pages ?? 1)}ページ
+              </strong>
+              <Button variant="icon" onClick={() => setPages(picked, 1)} aria-label="増やす">＋</Button>
+            </span>
+          )}
+          <span className="flex gap-1.5">
+            <Button variant="quiet" className="flex-1" onClick={() => { move(picked, -1); setPicked(picked - 1); }}>
+              ↑ 前へ
+            </Button>
+            <Button variant="quiet" className="flex-1" onClick={() => { move(picked, 1); setPicked(picked + 1); }}>
+              ↓ 後ろへ
+            </Button>
+          </span>
+          <Button variant="quiet" className="open" onClick={() => onOpen(picked)}>中身を編集する</Button>
+          {book.sections.length > 1 && (
+            <Button variant="quiet" className="dropsec" onClick={() => { setAsk(picked); setPicked(null); }}>
+              この中身を外す
+            </Button>
+          )}
+        </Modal>
       )}
       {ask !== null && (
         <Dialog
@@ -1139,6 +1201,54 @@ function ContentsScreen({ book, setBook, print, at, onOpen, onBack }: {
       )}
     </div>
   );
+}
+
+// The book as pages, in the order they are turned. A page is one side of a
+// punched sheet, but nobody who owns a planner thinks of it that way: they
+// think 1ページ, 2ページ, and a spread is what two facing pages make.
+//
+// Facing pages: with the rings on the left, page 1 is alone on the right and
+// pairs run 2-3, 4-5. So a spread section has to start on an even page, and
+// if the page before it is not there, the book has an empty page at that
+// point -- which is a page, not waste: it is where a cover or a year planner
+// goes. Printing is what turns these into sheets, and it is not this
+// screen's business.
+interface Leaf {
+  // Which section this page belongs to, and which sheet of that section.
+  at: number | null;
+  nth: number;
+  // Which page of that sheet: a spread has a left and a right.
+  side: number;
+  // For an empty page: where in the book something put here would go.
+  before: number;
+}
+
+// The letter a page wears to say which section it came from -- A, B, C down
+// the book. A page panel marks its pages this way because at thumbnail size
+// two monthlies and a weekly are the same grey rectangle.
+const sectionMark = (sections: Layout[], at: number): string =>
+  String.fromCharCode(65 + (at % 26));
+
+function pagesOf(sections: Layout[]): Leaf[] {
+  const out: Leaf[] = [];
+  const blank = (before: number) => out.push({ at: null, nth: 0, side: 0, before });
+  sections.forEach((sec, at) => {
+    const n = sheetCount(sec);
+    if (sec.spread && sec.fold <= 1) {
+      // A spread's left page is an even page number, which is an odd index.
+      if (out.length % 2 === 0) blank(at);
+      for (let nth = 0; nth < n; nth++) {
+        out.push({ at, nth, side: 0, before: at });
+        out.push({ at, nth, side: 1, before: at });
+      }
+    } else {
+      for (let nth = 0; nth < n; nth++) out.push({ at, nth, side: 0, before: at });
+    }
+  });
+  // The back of the last sheet is a page too -- the one a set puts its index
+  // or a note page on.
+  if (out.length % 2 === 1) blank(sections.length);
+  return out;
 }
 
 // The smallest change that gets a section down to `want` sheets or fewer.
@@ -1159,7 +1269,10 @@ function shortenTo(l: Layout, want: number): Layout | null {
 // -- a week is a page and two pages share a sheet, so "48枚" for a year of
 // weeks is true of neither the run nor the paper.
 function runText(l: Layout): string {
-  if (!hasDatedPart(l)) return `${Math.max(1, l.pages ?? 1)}枚`;
+  // Pages, because the contents is a list of pages: a note section of three
+  // is three pages of the book, not three sheets of paper (a sheet carries
+  // two). The paper has its own line, in its own unit.
+  if (!hasDatedPart(l)) return `${Math.max(1, l.pages ?? 1)}ページ`;
   if (isDayPaced(l)) return l.daysPerSheet === 7 ? `${sheetCount(l)}週` : `${sheetCount(l)}枚`;
   return `${Math.max(1, l.monthCount)}ヶ月`;
 }
@@ -2542,7 +2655,9 @@ function SaveSheet({ book, size, grain, onSave }: {
 // the export screen does now that the paper can be filled from either.
 function usePaperJob(sections: Layout[], size: SizeSpec, print: PrintOptions) {
   const [first, ...rest] = sections;
-  const used = imposeCount(first, size, print, rest);
+  // The book as one chain, which is what is actually printed: a section that
+  // slots into the face another one was leaving costs no paper at all.
+  const used = chainCount(sections, size, print);
   const plan = paperPlan(size, used, sheetSizeOf(first, size), print.paper);
   const perPaper = plan.perPage;
   // What the last sheet has left over. Zero when it comes out even, which is
@@ -2552,14 +2667,7 @@ function usePaperJob(sections: Layout[], size: SizeSpec, print: PrintOptions) {
   // Which section owns each place on the paper, in the order the imposition
   // lays them down: the book's sections, in order, each one whole. This is
   // what lets a page on the printed sheet say what it is.
-  const owners = useMemo(() => {
-    const out: { at: number; nth: number }[] = [];
-    sections.forEach((l, at) => {
-      const n = imposeCount(l, size, print);
-      for (let nth = 0; nth < n; nth++) out.push({ at, nth });
-    });
-    return out;
-  }, [sections, size, print]);
+  const owners = useMemo(() => chainOwners(sections, size, print), [sections, size, print]);
   // A folded refill is a strip, and a strip is counted in 本 -- the same place
   // on the paper, a different word for what sits in it.
   const unit = first.fold > 1 ? '本' : '枚';
@@ -2729,10 +2837,18 @@ function PageSheet({ book, at, nth, onShorten, onDrop, onClose }: {
 
 // One saved refill, small enough to sit in a list and big enough to tell a
 // calendar from a memo.
-function Thumb({ layout, size }: { layout: Layout; size: SizeSpec }) {
-  const page = useMemo(() => buildPages(layout, size)[0], [layout, size]);
+function Thumb({ layout, size, side = 0, box = { w: 34, h: 46 } }: {
+  layout: Layout;
+  size: SizeSpec;
+  // Which page of the design: a spread has two, and in a list of pages they
+  // are two different pictures.
+  side?: number;
+  box?: { w: number; h: number };
+}) {
+  const pages = useMemo(() => buildPages(layout, size), [layout, size]);
+  const page = pages[Math.min(side, pages.length - 1)];
   if (!page) return null;
-  const scale = Math.min(34 / page.widthMm, 46 / page.heightMm);
+  const scale = Math.min(box.w / page.widthMm, box.h / page.heightMm);
   return (
     <span className="thumb block shrink-0 overflow-hidden rounded-[3px] border border-line-strong bg-white">
       <PageSvg page={page} scale={scale} />

@@ -470,12 +470,12 @@ function facesInOrder(layout: Layout, size: SizeSpec, duplex: boolean): Face[] {
   return faces;
 }
 
-// One design's punched sheets, front and back, in binder order. Pulled out of
-// the imposition so that several designs can be laid out on one paper: the
-// paper does not care whose refill a sheet is, only that they are the same
-// size.
-function sheetsOfLayout(layout: Layout, size: SizeSpec, opts: PrintOptions): Duplexed[] {
-  const faces = facesInOrder(layout, size, opts.duplex);
+// One section's faces, drawn and punched, each knowing which side of the
+// paper it has to land on. Pulled out of the imposition so that a book of
+// several sections can be chained into one run of paper.
+interface Placed { side: Side; sheet: SheetContent }
+
+function placedFaces(layout: Layout, size: SizeSpec, opts: PrintOptions): Placed[] {
   const fold = foldOf(layout, size);
   const sheetSize = sheetSizeOf(layout, size);
   // On a fold the far edge is the turned-over strip, which is what decides
@@ -491,28 +491,114 @@ function sheetsOfLayout(layout: Layout, size: SizeSpec, opts: PrintOptions): Dup
         ]
       : f.primitives,
   });
-  const spare = (side: Side) => asSheet({
-    primitives: fold
-      ? foldFiller(size, fold, opts.backFill, flipped(side), paletteOf(layout))
-      : fillerFace(size, opts.backFill, side, paletteOf(layout)),
-    side,
-  });
+  return facesInOrder(layout, size, opts.duplex)
+    .map(f => ({ side: f.side, sheet: asSheet(f) }));
+}
 
-  const sheets: Duplexed[] = [];
-  const [near, far] = bindingPair(size);
-  if (opts.duplex) {
-    let i = 0;
-    // A spread begins on a back, so only the very first front is spare.
-    if (layout.spread) sheets.push({ front: spare(near), back: asSheet(faces[i++]) });
-    while (i < faces.length) {
-      const front = asSheet(faces[i++]);
-      sheets.push({ front, back: i < faces.length ? asSheet(faces[i++]) : spare(far) });
+// A face with nothing on it, in that section's own hand.
+function spareFace(layout: Layout, size: SizeSpec, opts: PrintOptions, side: Side): Placed {
+  const fold = foldOf(layout, size);
+  const flipped = side === (bindingPair(size)[1] as Side);
+  return {
+    side,
+    sheet: {
+      ...sheetSizeOf(layout, size),
+      primitives: fold
+        ? foldFiller(size, fold, opts.backFill, flipped, paletteOf(layout))
+        : fillerFace(size, opts.backFill, side, paletteOf(layout)),
+    },
+  };
+}
+
+// The whole book as one chain of faces, in the order it is bound.
+//
+// A spread lives on two sheets: its left page is the back of one and its
+// right page is the front of the next. So a run of spreads leaves a face at
+// each end -- and those faces are pages, not waste: a set puts its cover on
+// the first and an index on the last.
+//
+// Which is why the chain belongs to the book rather than to each section.
+// Paired section by section, a cover ahead of a twelve-month spread cost a
+// sheet of its own AND left the spread's first face empty: 14 sheets for what
+// is 13 sheets of refill. Chained, the cover lands on the face the spread was
+// leaving, and nothing is printed for nothing.
+function chainFaces(
+  sections: Layout[], size: SizeSpec, opts: PrintOptions,
+): { faces: Placed[]; owners: (number | null)[] } {
+  const [near, far] = bindingPair(size) as [Side, Side];
+  const faces: Placed[] = [];
+  const owners: (number | null)[] = [];
+  const put = (p: Placed, at: number | null) => { faces.push(p); owners.push(at); };
+
+  sections.forEach((l, at) => {
+    for (const placed of placedFaces(l, size, opts)) {
+      // Duplex decides which side of the paper a face lands on: one that
+      // belongs on a back cannot be printed on a front, so the chain leaves
+      // the front for whoever comes next -- and prints filler if nobody does.
+      if (opts.duplex) {
+        const wantsBack = placed.side === far;
+        if ((faces.length % 2 === 1) !== wantsBack) {
+          put(spareFace(l, size, opts, faces.length % 2 === 0 ? near : far), null);
+        }
+      }
+      put(placed, at);
     }
-  } else {
-    faces.forEach(f => sheets.push({ front: asSheet(f), back: spare(mirror(f.side)) }));
+  });
+  if (opts.duplex && faces.length % 2 === 1) {
+    put(spareFace(sections[sections.length - 1], size, opts, far), null);
+  }
+  return { faces, owners };
+}
+
+// The chain cut into physical sheets: two faces to a sheet when both sides
+// are printed, one and a blank back when only one is.
+function pairUp(
+  faces: Placed[], layout: Layout, size: SizeSpec, opts: PrintOptions,
+): Duplexed[] {
+  const [near, far] = bindingPair(size) as [Side, Side];
+  if (!opts.duplex) {
+    return faces.map(f => ({
+      front: f.sheet,
+      back: spareFace(layout, size, opts, f.side === near ? far : near).sheet,
+    }));
+  }
+  const sheets: Duplexed[] = [];
+  for (let i = 0; i < faces.length; i += 2) {
+    sheets.push({
+      front: faces[i].sheet,
+      back: (faces[i + 1] ?? spareFace(layout, size, opts, far)).sheet,
+    });
   }
   return sheets;
 }
+
+// How many punched sheets the whole book comes to. The chain's length rather
+// than the sum of the sections': a cover ahead of a spread costs nothing,
+// because the spread was leaving that face empty anyway.
+export const chainCount = (
+  sections: Layout[], size: SizeSpec, opts: PrintOptions,
+): number => {
+  const n = chainFaces(sections, size, opts).faces.length;
+  return (opts.duplex ? Math.ceil(n / 2) : n) * Math.max(1, opts.copies);
+};
+
+// Which section each punched sheet belongs to, for saying what a page is when
+// someone presses it on the printed sheet.
+export const chainOwners = (
+  sections: Layout[], size: SizeSpec, opts: PrintOptions,
+): { at: number; nth: number }[] => {
+  const { owners } = chainFaces(sections, size, opts);
+  const step = opts.duplex ? 2 : 1;
+  const out: { at: number; nth: number }[] = [];
+  const seen = new Map<number, number>();
+  for (let i = 0; i < owners.length; i += step) {
+    const at = owners[i] ?? owners[i + 1] ?? out[out.length - 1]?.at ?? 0;
+    const nth = seen.get(at) ?? 0;
+    seen.set(at, nth + 1);
+    out.push({ at, nth });
+  }
+  return out;
+};
 
 // Whether two designs can share one sheet of paper. The tiling lays out one
 // tile size, so what has to match is the punched sheet -- and that is a
@@ -542,8 +628,8 @@ export function buildPrintSheets(
     paper: PAPERS[opts.paper], cutLines: opts.cutLines, scalePercent: opts.scalePercent,
   };
   const sheetSize = sheetSizeOf(layout, size);
-  const sheets = [layout, ...also.filter(l => sameSheet(l, layout, size))]
-    .flatMap(l => sheetsOfLayout(l, size, opts));
+  const sections = [layout, ...also.filter(l => sameSheet(l, layout, size))];
+  const sheets = pairUp(chainFaces(sections, size, opts).faces, layout, size, opts);
 
   const all = Array.from({ length: Math.max(1, opts.copies) }, () => sheets).flat();
 
