@@ -121,6 +121,23 @@ check(
   'パーツの上では掴むカーソル',
 );
 
+// One sheet, one scale. The picker draws the size it was given as big as the
+// window allows, and the card at the top of that screen was drawing the same
+// sheet at the small scale of the screen before -- on a wide window, where the
+// cards get the most room, A5スリム up there read as a thinner paper than the
+// one being chosen.
+await page.goto(BASE);
+await page.locator('.sizerow', { hasText: '110×210mm' }).click();
+await page.locator('.card').first().waitFor();
+await page.waitForTimeout(300);
+const shown = await page.locator('.sizenow svg').boundingBox();
+const single = await page.locator('.card', { hasText: '片面' }).locator('.ruler svg').boundingBox();
+check(
+  Math.abs(shown.width - single.width) < 2,
+  `選んだサイズは、選ばせる絵と同じ縮尺（${Math.round(shown.width)}px / ${Math.round(single.width)}px）`,
+);
+await page.screenshot({ path: `${OUT}/04-構成の画面.png` });
+
 // Narrow again: the phone shape is the one everything else is checked in, so
 // it has to survive the desktop one.
 await page.setViewportSize({ width: 390, height: 844 });

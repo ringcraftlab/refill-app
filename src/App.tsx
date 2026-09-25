@@ -973,12 +973,15 @@ function SidesScreen({ size, spread, fold, foldGrain, onPick, onBack, onConfirm 
           next. It is also the way back, because the thing to press to change
           the size is the size. */}
       <button
-        className="sizenow relative flex w-full min-w-0 items-center gap-1 overflow-hidden rounded-[18px] border-[1.5px] py-2 pl-3 pr-2 text-left"
+        // Full width on a phone, where everything is; on a wide window it
+        // hugs what it holds, because a card the width of the screen with a
+        // name at one end and a sheet at the other is mostly empty room.
+        className="sizenow relative flex w-full min-w-0 items-center gap-3 overflow-hidden rounded-[18px] border-[1.5px] py-2 pl-3 pr-2 text-left lg:w-auto lg:self-start lg:pr-4"
         style={cardSkin(true, color)}
         onClick={onBack}
       >
         <span className="absolute inset-y-0 left-0 w-1.5" style={{ background: color }} />
-        <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <span className="flex min-w-0 flex-1 flex-col gap-0.5 lg:flex-none">
           <strong className={`truncate font-semibold leading-tight ${nameSize(SIZE_NAME[size])}`}>
             {SIZE_NAME[size]}
           </strong>
@@ -990,8 +993,15 @@ function SidesScreen({ size, spread, fold, foldGrain, onPick, onBack, onConfirm 
             {sizeHoles(spec)}
           </span>
         </span>
-        <span className="flex shrink-0 items-center justify-center" style={SHEET_SLOT}>
-          <SizeIcon size={spec} color={color} rings />
+        {/* The same scale as the cards below. At the picker's scale it was the
+            same sheet drawn twice on one screen at two sizes -- and on a wide
+            window, where the cards get the room to draw big, the one up here
+            read as a thinner paper than the one being chosen. */}
+        <span
+          className="flex shrink-0 items-center justify-center"
+          style={{ width: (spec.widthMm + ringOut(spec)) * k, height: spec.heightMm * k }}
+        >
+          <SizeIcon size={spec} color={color} scale={k} rings />
         </span>
         <span className="shrink-0 pr-0.5 text-[10px] text-faint">変更</span>
       </button>
