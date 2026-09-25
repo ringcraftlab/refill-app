@@ -3838,6 +3838,12 @@ function PartSheet({
                 onStep={n => setLayout(l => ({ ...l, swatchFrom: Math.max(1, (l.swatchFrom ?? 1) + n) }))}
               />
             </Field>
+            <Field label="1ページに">
+              <Stepper
+                value={layout.swatchPer ?? 1}
+                onStep={n => setLayout(l => ({ ...l, swatchPer: Math.min(8, Math.max(1, (l.swatchPer ?? 1) + n)) }))}
+              />
+            </Field>
             <Field label="書く行">
               <Stepper
                 value={layout.swatchLines ?? 5}
@@ -3852,8 +3858,9 @@ function PartSheet({
               />
             </Field>
             <p className="m-0 text-[11px] leading-snug text-faint">
-              1枚で1本ぶん。名前も説明も手で書くところなので、刷るのは枠と番号だけです。
-              枚数は中身の画面（このリフィルの「◯ページ」）で増やします
+              カード1枚で1本ぶん。名前も説明も手で書くところなので、刷るのは枠と番号だけです。
+              番号は続けて振られます（1ページに3枚なら、次のページは4から）。
+              何ページ刷るかは中身の画面の「◯ページ」で
             </p>
           </>
         )}

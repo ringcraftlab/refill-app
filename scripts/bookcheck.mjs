@@ -429,5 +429,16 @@ const thirdNo = (await page.locator('.page text').allTextContents()).join(',');
 check(thirdNo === '3', `3枚目は3番（${thirdNo}）`);
 await page.screenshot({ path: `${OUT}/38-インク見本.png` });
 
+// Several to a sheet, and the numbering carries on across sheets rather than
+// starting over: the third sheet of a two-up run is cards five and six.
+await page.locator('.hitbox.part').first().click();
+await page.locator('.sheet').waitFor();
+await page.waitForTimeout(300);
+await page.locator('.sheet').getByRole('button', { name: '増やす' }).nth(1).click();
+await page.waitForTimeout(400);
+const twoUp = (await page.locator('.page text').allTextContents()).join(',');
+check(twoUp === '5,6', `1ページに2枚。3枚目は5番と6番（${twoUp}）`);
+await page.screenshot({ path: `${OUT}/39-1ページに2枚.png` });
+
 await browser.close();
 if (bad) process.exitCode = 1;

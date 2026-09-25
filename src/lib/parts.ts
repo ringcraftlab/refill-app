@@ -330,6 +330,46 @@ export function drawPhoto(area: Rect, layout: Layout): Primitive[] {
 // because dragging four borders to build the same card every time is not
 // designing, it is chores.
 export function drawSwatch(area: Rect, layout: Layout): Primitive[] {
+  const per = Math.max(1, layout.swatchPer ?? 1);
+  if (per === 1) return oneSwatch(area, layout, 0);
+
+  // Several cards to a sheet: a binder page holds three of them, and the run
+  // carries on across sheets rather than starting over on each. The grid is
+  // whichever one leaves each card closest to the shape of a name card --
+  // three down a Bible page, two by two on an A5 held wide.
+  const CARD = 91 / 55;
+  let best = { cols: 1, rows: per, off: Infinity };
+  for (let cols = 1; cols <= per; cols++) {
+    const rows = Math.ceil(per / cols);
+    const off = Math.abs(Math.log((area.w / cols) / (area.h / rows) / CARD));
+    if (off < best.off) best = { cols, rows, off };
+  }
+  const { cols, rows } = best;
+  const out: Primitive[] = [];
+  const cw = area.w / cols, ch = area.h / rows;
+  for (let i = 0; i < per; i++) {
+    const col = i % cols, row = Math.floor(i / cols);
+    const cell = { x: area.x + col * cw, y: area.y + row * ch, w: cw, h: ch };
+    out.push(...oneSwatch(cell, layout, i));
+    // Where one card ends and the next begins. They are separate pieces of
+    // paper in the end, whether they are cut apart or not.
+    if (row > 0) {
+      out.push({
+        type: 'line', x1: cell.x, y1: cell.y, x2: cell.x + cw, y2: cell.y,
+        stroke: paletteOf(layout).ruleLight, strokeMm: 0.15, dashMm: [1.2, 1.2],
+      });
+    }
+    if (col > 0) {
+      out.push({
+        type: 'line', x1: cell.x, y1: cell.y, x2: cell.x, y2: cell.y + ch,
+        stroke: paletteOf(layout).ruleLight, strokeMm: 0.15, dashMm: [1.2, 1.2],
+      });
+    }
+  }
+  return out;
+}
+
+function oneSwatch(area: Rect, layout: Layout, index: number): Primitive[] {
   const pal = paletteOf(layout);
   const { left, right, top, bottom } = inset(area);
   const w = right - left, h = bottom - top;
@@ -338,7 +378,8 @@ export function drawSwatch(area: Rect, layout: Layout): Primitive[] {
   // The number, as big as the card can carry, in the corner a thumb flicks
   // past. It counts up the run: card 10 is the tenth sheet of the section.
   const numH = Math.min(h * 0.26, 9);
-  const no = (layout.swatchFrom ?? 1) + (layout.sheetNo ?? 0);
+  const per = Math.max(1, layout.swatchPer ?? 1);
+  const no = (layout.swatchFrom ?? 1) + (layout.sheetNo ?? 0) * per + index;
   out.push({
     type: 'text', x: left, y: top + numH,
     text: String(no), sizePt: (numH / 0.72) * 2.8346,
