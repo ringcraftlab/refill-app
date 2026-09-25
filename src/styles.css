@@ -14,7 +14,7 @@
    printed on); neither reads a CSS variable, because the print path never
    passes through CSS. */
 @theme {
-  --color-bg: #F1F3F7;
+  --color-bg: #FBF9F5;
   --color-paper: #FFFFFF;
   --color-ink: #23252D;
   --color-muted: #6B7080;

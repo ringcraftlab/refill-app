@@ -720,14 +720,7 @@ function SizeScreen({ selected, onPick }: { selected: RefillSize; onPick: (s: Re
         <div className="mb-auto flex w-full flex-col gap-3 py-0.5">
           {SIZE_GROUPS.map(group => (
             <section key={group.title} className="flex flex-col gap-1.5">
-              <h2 className="m-0 flex items-center gap-1.5 text-[11px] font-bold tracking-[0.04em] text-muted">
-                <span
-                  className="size-1.5 shrink-0 rounded-full"
-                  style={{ background: group === SIZE_GROUPS[0] ? 'var(--color-accent)' : 'var(--color-faint)' }}
-                />
-                {group.title}
-                <em className="not-italic font-normal text-faint">（{group.rows.flat().length}サイズ）</em>
-              </h2>
+              <h2 className="m-0 text-[11px] font-bold tracking-[0.04em] text-muted">{group.title}</h2>
               {/* A grid, not nested flex rows: its columns are exactly half
                   each, where a flex item would refuse to shrink below its own
                   name and the longest one on a row would push the column edge
@@ -742,46 +735,50 @@ function SizeScreen({ selected, onPick }: { selected: RefillSize; onPick: (s: Re
                       <button
                         key={id}
                         onClick={() => onPick(id)}
-                        className="sizerow relative flex min-w-0 flex-col justify-between gap-2.5 overflow-hidden rounded-[18px] border-[1.5px] py-2.5 pl-3 pr-2.5 text-left"
+                        className="sizerow relative flex min-w-0 items-center gap-1 overflow-hidden rounded-[18px] border-[1.5px] py-2 pl-3 pr-1 text-left"
                         style={cardSkin(selected === id, SIZE_TINT[id].line)}
                         aria-pressed={selected === id}
                       >
                         {/* A colour a glance can learn the size by, before the
                             name is read. Flush to the card's own edge and its
-                            full height: a bar with air around it is a shape on
-                            the card, and this is meant to be the card's edge. */}
+                            full height: a bar with air around it is a shape
+                            sitting on the card, and this is meant to be the
+                            card's edge. */}
                         <span
                           className="absolute inset-y-0 left-0 w-1.5"
                           style={{ background: SIZE_TINT[id].line }}
                         />
-                        <span className="flex items-start justify-between gap-1">
-                          <span className="flex shrink-0 items-center justify-center" style={SHEET_SLOT}>
-                            <SizeIcon size={SIZES[id]} tint={SIZE_TINT[id]} />
+                        <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                          <strong className={`truncate font-semibold leading-tight ${nameSize(SIZE_NAME[id])}`}>
+                            {SIZE_NAME[id]}
+                          </strong>
+                          <span className="truncate text-[10px] leading-tight text-faint">
+                            {sizeMm(SIZES[id])}
                           </span>
-                          {/* The hole count carries a fact rather than a label
-                              -- the sizes sharing one are the sizes whose
-                              sheets swap between binders -- so it is set in
-                              the size's colour, on a wash of the same colour,
-                              and darkened to where ten pixels of it can be
-                              read. */}
+                          {/* In the size's own colour, which is the one place
+                              that colour carries a fact rather than a label:
+                              the sizes sharing a hole count are the sizes
+                              whose sheets swap between binders. Darkened to
+                              the point where ten pixels of it can be read. */}
                           <span
-                            className="holes shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold leading-tight"
-                            style={{ background: SIZE_TINT[id].fill, color: SIZE_WORD[id] }}
+                            className="truncate text-[10px] font-semibold leading-tight"
+                            style={{ color: SIZE_WORD[id] }}
                           >
                             {sizeHoles(SIZES[id])}
                           </span>
                         </span>
-                        <span className="flex min-w-0 flex-col gap-0.5">
-                          <strong className={`truncate font-semibold leading-tight ${nameSize(SIZE_NAME[id])}`}>
-                            {SIZE_NAME[id]}
-                          </strong>
-                          {/* The millimetres are the only clue left to someone
-                              who does not know the names, so they never give
-                              way to anything. */}
-                          <span className="truncate text-[10px] leading-tight text-faint">
-                            {sizeMm(SIZES[id])}
-                          </span>
+                        <span className="flex shrink-0 items-center justify-center" style={SHEET_SLOT}>
+                          <SizeIcon size={SIZES[id]} tint={SIZE_TINT[id]} />
                         </span>
+                        {/* Decoration: it says "this opens something", which
+                            the button already says, so it stays out of the
+                            name a screen reader reads -- and off a 320px
+                            screen entirely. It and its gap cost 9px of the
+                            135px card, which at that width is the difference
+                            between "148×210mm" and "148×210m…", and the
+                            millimetres are the only clue left to someone who
+                            does not know the names. */}
+                        <span aria-hidden="true" className="hidden shrink-0 text-[13px] leading-none text-faint min-[360px]:block">›</span>
                       </button>
                     )
                 ))}
