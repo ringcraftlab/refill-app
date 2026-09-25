@@ -880,12 +880,16 @@ function shareColumns(aW: number, bW: number, total: number, allowIndex: boolean
 // with a ring binder between them, so a day must not be cut down the middle:
 // each page takes whole days instead. Parts with nothing to break along, like
 // a memo, return null and are simply trimmed by the page edge.
-export function drawPartAcross(kind: PartKind, a: Rect, b: Rect, layout: Layout): Primitive[] | null {
+export function drawPartAcross(
+  kind: PartKind, a: Rect, b: Rect, layout: Layout, axis?: 'x' | 'y',
+): Primitive[] | null {
   const wider = a.w >= b.w ? a : b;
   // Pages side by side read as one wide page, so a week can run across the
   // gutter. Pages that stack cannot: the far end of the week would sit on the
-  // sheet below, which no calendar does.
-  const stacked = ringsOnTop(layout);
+  // sheet below, which no calendar does. The gutter's two halves are told
+  // apart by where the rings are; a crease says which way it runs, because a
+  // strip folded away from the binding runs sideways whatever edge is punched.
+  const stacked = axis ? axis === 'y' : ringsOnTop(layout);
 
   if (kind === 'monthly') {
     const rows = weekCount(layout);

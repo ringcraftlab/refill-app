@@ -437,5 +437,32 @@ check(
 await shut();
 await page.screenshot({ path: `${OUT}/38-インク見本.png` });
 
+// ---- a crease is a gutter the paper makes for itself --------------------
+// A calendar laid across two panels was drawn as one grid, and the fold came
+// down wherever it came down -- through the middle of a Thursday on A5スリム,
+// because the panels are not the same width. The panels take whole days now,
+// exactly as the two pages of a spread do, so the grid stops at the crease and
+// starts again on the other side.
+await page.goto(BASE);
+await page.locator('.sizerow', { hasText: '110×210mm' }).click();
+await page.locator('.card', { hasText: '蛇腹2面' }).first().click();
+await page.getByRole('button', { name: 'この構成で作る' }).click();
+await page.locator('.page').first().waitFor();
+await drag(
+  await centerOf(page.locator('.stamp', { hasText: 'マンスリー' })),
+  await centerOf(page.locator('.page').first()),
+);
+await page.waitForTimeout(600);
+const verticals = await page.locator('.page line').evaluateAll(els => [...new Set(els
+  .filter(e => Math.abs(+e.getAttribute('x1') - +e.getAttribute('x2')) < 0.01)
+  .map(e => +(+e.getAttribute('x1')).toFixed(1)))].sort((a, b) => a - b));
+const gaps = verticals.slice(1).map((x, i) => x - verticals[i]).sort((a, b) => a - b);
+const mid = gaps[Math.floor(gaps.length / 2)];
+check(
+  gaps[gaps.length - 1] > mid * 1.6,
+  `折り目で列が切れる＝日付を割らない（一番広い隙間${gaps[gaps.length - 1].toFixed(1)}mm / ふつう${mid.toFixed(1)}mm）`,
+);
+await page.screenshot({ path: `${OUT}/40-折り目と曜日.png` });
+
 await browser.close();
 if (bad) process.exitCode = 1;

@@ -2,7 +2,7 @@ import type { Layout, PartKind, SizeSpec } from '../../types';
 import type { Color, Page, Primitive } from '../draw';
 import { clipToBand, flattenToSheet, RING_BAND, RING_HOLE, TRIM } from '../draw';
 import { buildGeometry, foldOf } from '../layout';
-import type { PageGeometry, Rect, SurfaceSlice } from '../layout';
+import type { Geometry, PageGeometry, Rect } from '../layout';
 import { foldPanels } from '../fold';
 import type { FoldPlan } from '../fold';
 import { drawGrid, drawLines, drawMemo, drawPart, drawPartAcross, drawSpanningMonthly } from '../parts';
@@ -38,7 +38,7 @@ export function buildPages(layout: Layout, size: SizeSpec, flipBinding = false):
         if (!region) return;
         // Draw across the part's whole region, then keep this page's piece.
         primitives.push(...clipToBand(
-          drawnPart(kind, region, slotLayout(layout, i), geo.surface.slices),
+          drawnPart(kind, region, slotLayout(layout, i), geo),
           slice.fromMm, slice.toMm,
           slice.ox - slice.fromMm, slice.oy,
         ));
@@ -129,8 +129,31 @@ export const monthsPerSheet = (layout: Layout): number => Math.max(
 // A region that crosses the gutter covers two sheets. The part gets a say in
 // how it breaks there, because trimming a calendar at the page edge would
 // leave a day half on one sheet and half on the other.
-function drawnPart(kind: PartKind, region: Rect, layout: Layout, slices: SurfaceSlice[]): Primitive[] {
-  for (const s of slices) {
+function drawnPart(
+  kind: PartKind, region: Rect, layout: Layout, geo: Geometry,
+): Primitive[] {
+  // A crease is a gutter the paper makes for itself. A calendar laid across
+  // two panels was drawn as one grid and the fold came down wherever it came
+  // down -- through the middle of a Thursday on A5スリム, because the panels
+  // are not the same width. The panels take whole days, exactly as the two
+  // pages of a spread do.
+  for (const at of geo.creases) {
+    const from = geo.foldDown ? region.y : region.x;
+    const span = geo.foldDown ? region.h : region.w;
+    if (from < at - 0.5 && from + span > at + 0.5) {
+      const across = drawPartAcross(
+        kind,
+        geo.foldDown ? { ...region, h: at - region.y } : { ...region, w: at - region.x },
+        geo.foldDown
+          ? { ...region, y: at, h: region.y + region.h - at }
+          : { ...region, x: at, w: region.x + region.w - at },
+        layout,
+        geo.foldDown ? 'y' : 'x',
+      );
+      if (across) return across;
+    }
+  }
+  for (const s of geo.surface.slices) {
     const at = s.toMm;
     if (region.x < at - 0.5 && region.x + region.w > at + 0.5) {
       const across = drawPartAcross(
