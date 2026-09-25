@@ -662,9 +662,47 @@ function inkBox(size: SizeSpec, flip: boolean) {
     : { x: flip ? pad : m, y: pad, w: size.widthMm - m - pad, h: size.heightMm - pad * 2 };
 }
 
-function SizeIcon({ size, tint, flip = false, scale = SHEET_SCALE, ink }: {
+// The binder, drawn where it grips the paper: one bar per hole, from the edge
+// through the hole and a little past it, with the punched hole left white on
+// top. A refill is a thing that gets bound, and a picture of one that shows
+// only the holes leaves the reader to supply the binder -- which is exactly
+// what makes a spread hard to read, because the two pages of a spread are two
+// sheets held by the same rings in the middle.
+// How far a ring stands out past the paper it grips. Drawn only inside the
+// sheet it is a tab, not a ring: what says "ring" is that it goes round the
+// edge -- and on a spread, that the one coming off the left page and the one
+// off the right page are the same ring, seen between them.
+const ringOut = (size: SizeSpec) => size.ringMarginMm * 0.55;
+
+function Rings({ size, tint, flip, pen, holeR }: {
+  size: SizeSpec; tint: { fill: string; line: string }; flip: boolean;
+  pen: (onScreen: number) => number; holeR: number;
+}) {
+  const onTop = size.ringsOn === 'top';
+  const far = onTop ? size.heightMm : size.widthMm;
+  const over = ringOut(size);
+  const reach = size.ringMarginMm * 0.92;
+  const thick = Math.max(holeR * 2.4, pen(3));
+  const from = flip ? far - reach : -over;
+  return (
+    <g fill={tint.line}>
+      {holeCentres(size.holes).map((at, i) => (
+        <rect
+          key={i}
+          x={onTop ? at - thick / 2 : from}
+          y={onTop ? from : at - thick / 2}
+          width={onTop ? thick : reach + over}
+          height={onTop ? reach + over : thick}
+          rx={thick / 2}
+        />
+      ))}
+    </g>
+  );
+}
+
+function SizeIcon({ size, tint, flip = false, scale = SHEET_SCALE, ink, rings = false }: {
   size: SizeSpec; tint: { fill: string; line: string }; flip?: boolean;
-  scale?: number; ink?: { cols: number; rows: number };
+  scale?: number; ink?: { cols: number; rows: number }; rings?: boolean;
 }) {
   const k = scale;
   const pen = (onScreen: number) => onScreen / k;
@@ -678,10 +716,17 @@ function SizeIcon({ size, tint, flip = false, scale = SHEET_SCALE, ink }: {
     margin * 0.75,
   );
   const inset = pen(OUTLINE_PX) / 2;
+  // The paper keeps its scale; the box around it gains the room the rings
+  // stand out into, on the bound side only.
+  const over = rings ? ringOut(size) : 0;
+  const vbX = !onTop && !flip ? -over : 0;
+  const vbY = onTop && !flip ? -over : 0;
+  const vbW = size.widthMm + (onTop ? 0 : over);
+  const vbH = size.heightMm + (onTop ? over : 0);
   return (
     <svg
-      width={size.widthMm * k} height={size.heightMm * k}
-      viewBox={`0 0 ${size.widthMm} ${size.heightMm}`}
+      width={vbW * k} height={vbH * k}
+      viewBox={`${vbX} ${vbY} ${vbW} ${vbH}`}
       className="block shrink-0"
       aria-hidden="true"
     >
@@ -691,6 +736,7 @@ function SizeIcon({ size, tint, flip = false, scale = SHEET_SCALE, ink }: {
         rx={pen(2)} fill={tint.fill} stroke={tint.line} strokeWidth={pen(OUTLINE_PX)}
       />
       {ink && <PageInk box={inkBox(size, flip)} cols={ink.cols} rows={ink.rows} tint={tint} pen={pen} />}
+      {rings && <Rings size={size} tint={tint} flip={flip} pen={pen} holeR={hole} />}
       {holeCentres(size.holes).map((at, i) => (
         <circle
           key={i}
@@ -834,7 +880,11 @@ function SidesScreen({ size, spread, fold, foldGrain, onPick, onBack, onConfirm 
       title: `${g === 'along' ? 'L字' : '蛇腹'}${n}面`,
       // The box you would measure on the table, not the fold's own axis:
       // folding along the binding stands the strip up.
-      note: `広げて${plan.sheetWmm}×${plan.sheetHmm}mm`,
+      // The width is on the drawing now; what is left to say is what it comes
+      // to when it is shut, which is the page it lives as in the binder.
+      note: g === 'along'
+        ? `広げて${plan.sheetWmm}×${plan.sheetHmm}mm`
+        : `畳むと${spec.widthMm}×${spec.heightMm}mm`,
       plan,
     }];
   });
@@ -876,12 +926,15 @@ function SidesScreen({ size, spread, fold, foldGrain, onPick, onBack, onConfirm 
       aria-pressed={choice.on}
       onClick={() => onPick(choice.pick)}
     >
-      <span className="flex items-center justify-center gap-[3px]" style={{ height: tallestMm * k }}>
+      {/* No gap between the two pages of a spread: each page's box already
+          carries the room its own rings stand out into, and what meets in the
+          middle is the one ring the two of them hang on. */}
+      <span className="flex items-center justify-center" style={{ height: tallestMm * k }}>
         {choice.plan
-          ? <FoldIcon size={spec} tint={tint} plan={choice.plan} scale={k} ink />
+          ? <FoldIcon size={spec} tint={tint} plan={choice.plan} scale={k} ink rings />
           : choice.sheets!.map((flip, i) => (
             <SizeIcon
-              key={i} size={spec} tint={tint} flip={flip} scale={k}
+              key={i} size={spec} tint={tint} flip={flip} scale={k} rings
               // A month across a spread is an index column and three days on
               // the left, four days on the right -- which is what the words
               // under the card had to say before the drawing said it.
@@ -952,9 +1005,9 @@ function SidesScreen({ size, spread, fold, foldGrain, onPick, onBack, onConfirm 
 // The strip a fold unfolds into, drawn at the picker's scale so it can be
 // compared with the pages above it. Only the first panel is punched, and the
 // creases are where the paper actually bends.
-function FoldIcon({ size, tint, plan, scale = SHEET_SCALE, ink = false }: {
+function FoldIcon({ size, tint, plan, scale = SHEET_SCALE, ink = false, rings = false }: {
   size: SizeSpec; tint: { fill: string; line: string }; plan: FoldPlan;
-  scale?: number; ink?: boolean;
+  scale?: number; ink?: boolean; rings?: boolean;
 }) {
   const k = scale;
   const pen = (onScreen: number) => onScreen / k;
@@ -973,13 +1026,33 @@ function FoldIcon({ size, tint, plan, scale = SHEET_SCALE, ink = false }: {
   const cut = plan.insetMm;
   const outline = `M ${line} ${line} L ${W - line} ${line} L ${W - line} ${H - line}`
     + ` L ${cut + line} ${H - line} L ${cut + line} ${plan.headMm} L ${line} ${plan.headMm} Z`;
+  // How wide the thing opens is the whole of this choice, and it is the width
+  // of the drawing itself -- so the number goes on the drawing, as the line
+  // anyone measuring it would draw. Only for a strip that opens sideways: the
+  // L folds downward, where a line under it would measure the wrong edge.
+  const dim = down ? 0 : pen(19);
+  const out = rings ? ringOut(size) : 0;
   return (
     <svg
-      width={W * k} height={H * k}
-      viewBox={`0 0 ${W} ${H}`}
+      width={(W + out) * k} height={(H + dim) * k}
+      viewBox={`${-out} 0 ${W + out} ${H + dim}`}
       className="block shrink-0"
       aria-hidden="true"
     >
+      {dim > 0 && (
+        <g stroke={tint.line} strokeWidth={pen(0.9)} fill="none">
+          <line x1={line} y1={H + pen(5)} x2={W - line} y2={H + pen(5)} />
+          <line x1={line} y1={H + pen(2)} x2={line} y2={H + pen(8)} />
+          <line x1={W - line} y1={H + pen(2)} x2={W - line} y2={H + pen(8)} />
+          <text
+            x={W / 2} y={H + pen(16)}
+            fill={tint.line} stroke="none"
+            fontSize={pen(8)} fontWeight={600} textAnchor="middle"
+          >
+            {`${Math.round(W)}mm`}
+          </text>
+        </g>
+      )}
       {down ? (
         <path d={outline} fill={tint.fill} stroke={tint.line} strokeWidth={pen(OUTLINE_PX)} strokeLinejoin="round" />
       ) : (
@@ -1015,6 +1088,21 @@ function FoldIcon({ size, tint, plan, scale = SHEET_SCALE, ink = false }: {
           stroke={tint.line} strokeWidth={pen(OUTLINE_PX * 0.8)} strokeDasharray={`${pen(3)} ${pen(2.4)}`}
         />
       ))}
+      {rings && (
+        <g fill={tint.line}>
+          {holeCentres(size.holes).map((at, i) => {
+            const thick = Math.max(hole * 2.4, pen(3));
+            return (
+              <rect
+                key={i}
+                x={-ringOut(size)} y={at - thick / 2}
+                width={ringOut(size) + size.ringMarginMm * 0.92} height={thick}
+                rx={thick / 2}
+              />
+            );
+          })}
+        </g>
+      )}
       {holeCentres(size.holes).map((at, i) => (
         <circle
           key={i}
