@@ -976,12 +976,18 @@ function SidesScreen({ size, spread, fold, foldGrain, onPick, onBack, onConfirm 
           strip under a caption that says what it is, with a rule under it, and
           the four things to choose from below that. It stays pressable,
           because the thing to press to change the size is the size. */}
+      {/* Everything between the title and the button scrolls, so nothing in it
+          is squeezed to fit. As plain children of the screen's column they all
+          had flex-shrink, and on a short window the strip was the first to
+          give: on Micro5 it went from 97px to 18px and the name and the sheet
+          were clipped away, leaving a bar with 「62×105mm」 in it. */}
+      <div className="flex min-h-0 flex-1 flex-col gap-[18px] overflow-y-auto">
       <span className="m-0 text-[11px] font-bold tracking-[0.04em] text-muted">作るリフィル</span>
       <button
         // Full width on a phone, where everything is; on a wide window it
         // hugs what it holds, because a strip the width of the screen with a
         // name at one end and a sheet at the other is mostly empty room.
-        className="sizenow relative -mt-2 flex w-full min-w-0 items-center gap-3 overflow-hidden rounded-[14px] border border-line py-2 pl-3 pr-2 text-left hover:border-line-strong lg:w-auto lg:self-start lg:pr-4"
+        className="sizenow relative -mt-2 flex w-full min-w-0 shrink-0 items-center gap-3 overflow-hidden rounded-[14px] border border-line py-2 pl-3 pr-2 text-left hover:border-line-strong lg:w-auto lg:self-start lg:pr-4"
         style={{ background: 'rgba(38,36,31,0.04)' }}
         onClick={onBack}
       >
@@ -1011,7 +1017,7 @@ function SidesScreen({ size, spread, fold, foldGrain, onPick, onBack, onConfirm 
         <span className="shrink-0 pr-0.5 text-[10px] text-accent">変更</span>
       </button>
       {/* The line between what is already decided and what is being asked. */}
-      <hr className="m-0 w-full border-0 border-t border-line" />
+      <hr className="m-0 w-full shrink-0 border-0 border-t border-line" />
       {/* Side by side, on the same two-column grid as the picker. A comparison
           reads across, not down: stacked, these were the same drawing seen
           twice in a row instead of one beside the other. Which also settles
@@ -1043,7 +1049,8 @@ function SidesScreen({ size, spread, fold, foldGrain, onPick, onBack, onConfirm 
           inner panels' millimetres, which is a number for laying parts out,
           not for choosing a form -- and the picture of a strip cut into
           numbered panels is what the choice is made on. */}
-      <Button variant="cta" className="mt-auto" onClick={onConfirm}>この構成で作る</Button>
+      </div>
+      <Button variant="cta" className="mt-auto shrink-0" onClick={onConfirm}>この構成で作る</Button>
     </div>
   );
 }

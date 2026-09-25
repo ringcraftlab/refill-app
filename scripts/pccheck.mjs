@@ -138,6 +138,26 @@ check(
 );
 await page.screenshot({ path: `${OUT}/04-構成の画面.png` });
 
+// A short window scrolls; it does not squeeze. Everything on that screen was a
+// plain child of one flex column, so a window too short for it shrank them all
+// -- and the strip at the top, being the shortest, was flattened to a bar with
+// the millimetres in it and the name and the sheet clipped away.
+await page.setViewportSize({ width: 390, height: 500 });
+await page.goto(BASE);
+await page.locator('.sizerow', { hasText: '62×105mm' }).click();
+await page.locator('.card').first().waitFor();
+await page.waitForTimeout(300);
+const strip = await page.locator('.sizenow').boundingBox();
+check(
+  strip.height > 80,
+  `低い窓でも作るリフィルは潰れない（高さ${Math.round(strip.height)}px）`,
+);
+check(
+  await page.locator('.sizenow svg').isVisible(),
+  '低い窓でも紙の絵が残る',
+);
+await page.screenshot({ path: `${OUT}/05-低い窓の構成.png` });
+
 // Narrow again: the phone shape is the one everything else is checked in, so
 // it has to survive the desktop one.
 await page.setViewportSize({ width: 390, height: 844 });
