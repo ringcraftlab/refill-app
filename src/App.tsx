@@ -877,7 +877,6 @@ function SidesScreen({ size, spread, fold, foldGrain, onPick, onBack, onConfirm 
   // one size can do and the rest cannot. Mixed into the run above it read as
   // an ordinary alternative, and the extra cut went unsaid.
   const special = grains.includes('along') ? foldCards('along') : [];
-  const picked = [...choices, ...special].find(c => c.on);
   // The drawing is the choice, so it gets the room: as large as the widest
   // one on this screen can be and still fit a card, and one box only as tall
   // as the tallest of them -- the picker's own slot is A5's, which on
@@ -1029,18 +1028,13 @@ function SidesScreen({ size, spread, fold, foldGrain, onPick, onBack, onConfirm 
           </div>
         </div>
       )}
-      {/* What the fold costs, under the cards rather than inside one: it is the
-          number you check before printing, and it changes with the panel count
-          the card above just set. */}
-      {picked?.plan && (
-        <p className="fold-note m-0 text-[11px] leading-snug text-muted">
-          穴は先頭の面だけ。内側の面は
-          {picked.plan.paperCapped
-            ? `${picked.plan.innerMm}mm（紙で決まり。リングの逃げなら${picked.plan.innerCapMm.toFixed(1)}mmまで）`
-            : `${picked.plan.innerMm}mm（リングの逃げで決まり）`}
-          。畳むと先頭の面に隠れます
-        </p>
-      )}
+      {/* The note that was here said three things about a fold, and the
+          drawing now says two of them better: the rings are on the head panel
+          only because that is where they are drawn, and what it comes to when
+          shut is the card's own line (「畳むと80×128mm」). The third was the
+          inner panels' millimetres, which is a number for laying parts out,
+          not for choosing a form -- and the picture of a strip cut into
+          numbered panels is what the choice is made on. */}
       <Button variant="cta" className="mt-auto" onClick={onConfirm}>この構成で作る</Button>
     </div>
   );
