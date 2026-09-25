@@ -8,7 +8,8 @@ import { MAX_PARTS, SCHEMA_VERSION } from './types';
 import { holeCentres, SIZES } from './lib/sizes';
 import {
   buildGeometry, foldMaxParts, foldOf, isLandscape, MAX_RATIO, MIN_RATIO,
-  photosOf, placeParts as planPlacement, regionAt, removeFromFold, ringsOnTop,
+  eachOf, photosOf, placeParts as planPlacement, regionAt, removeFromFold, ringsOnTop,
+  someEach,
 } from './lib/layout';
 import type { Divider, DropPoint, Geometry, PageGeometry } from './lib/layout';
 import type { Page } from './lib/draw';
@@ -1853,7 +1854,9 @@ function CanvasScreen({ book, at, nth, setBook, onBack, goTo, print, setPrint, o
       // has to carry it along or the photo stays behind on the other part.
       const photos = photosOf(prev.surface);
       [photos[a], photos[b]] = [photos[b], photos[a]];
-      return { ...prev, surface: { ...prev.surface, placed, photos } };
+      const runs = eachOf(prev.surface);
+      [runs[a], runs[b]] = [runs[b], runs[a]];
+      return { ...prev, surface: { ...prev.surface, placed, photos, photoEach: someEach(runs) } };
     });
   };
 
@@ -1865,6 +1868,7 @@ function CanvasScreen({ book, at, nth, setBook, onBack, goTo, print, setPrint, o
       }
       const placed = prev.surface.placed.filter((_, i) => i !== slot);
       const photos = photosOf(prev.surface).filter((_, i) => i !== slot);
+      const photoEach = someEach(eachOf(prev.surface).filter((_, i) => i !== slot));
       return {
         ...prev,
         // With nothing left beside it the calendar takes the page back, rather
@@ -1876,7 +1880,7 @@ function CanvasScreen({ book, at, nth, setBook, onBack, goTo, print, setPrint, o
         // to goes with the part, or the next thing dropped in the middle
         // would still come out on one side.
         surface: {
-          ...prev.surface, placed, photos, ratios: {},
+          ...prev.surface, placed, photos, photoEach, ratios: {},
           page: placed.length === 0 ? undefined : prev.surface.page,
         },
       };
@@ -2170,6 +2174,7 @@ function CanvasScreen({ book, at, nth, setBook, onBack, goTo, print, setPrint, o
   const sheetEl = sheet && (
     <PartSheet
       target={sheet}
+      nth={nth}
       book={book}
       setBook={setBook}
       layout={layout}
@@ -2683,8 +2688,14 @@ function CanvasScreen({ book, at, nth, setBook, onBack, goTo, print, setPrint, o
 // The picture for one photo stamp. The bytes are kept on the surface next to
 // the part they belong to, so moving the part moves its picture and taking it
 // off takes the picture with it.
-function PhotoField({ layout, setLayout, size, slot }: {
-  layout: Layout; setLayout: (fn: (l: Layout) => Layout) => void; size: SizeSpec; slot: number;
+// A picture on a run of sheets is two different wishes. One is a band or a
+// mark that belongs on every month; the other is this month's photograph, and
+// next month's is a different one. Both are real, so the slot says which it is
+// -- and the one being looked at is the one being set, because the page on
+// screen is the page whose picture this is.
+function PhotoField({ layout, setLayout, size, slot, nth }: {
+  layout: Layout; setLayout: (fn: (l: Layout) => Layout) => void; size: SizeSpec;
+  slot: number; nth: number;
 }) {
   const file = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState('');
@@ -2692,7 +2703,10 @@ function PhotoField({ layout, setLayout, size, slot }: {
   // for it rather than showing an empty frame.
   const [shown, setShown] = useState('');
   const [failed, setFailed] = useState('');
-  const src = layout.surface.photos?.[slot] ?? null;
+  const run = sheetCount(layout);
+  const mine = layout.surface.photoEach?.[slot] ?? null;
+  const src = (mine ? mine[nth] : layout.surface.photos?.[slot]) ?? null;
+  const filled = mine ? mine.filter(Boolean).length : 0;
   // The area this stamp actually occupies on the paper, which is what the
   // picture has to be big enough for -- a stamp on a quarter of a Micro5 does
   // not need the pixels a full A5 does.
@@ -2702,9 +2716,35 @@ function PhotoField({ layout, setLayout, size, slot }: {
   }, [layout, size, slot]);
 
   const set = (next: string | null) => setLayout(l => {
+    const runs = eachOf(l.surface);
+    if (runs[slot]) {
+      const own = [...runs[slot]!];
+      own[nth] = next;
+      runs[slot] = own;
+      return { ...l, surface: { ...l.surface, photoEach: someEach(runs) } };
+    }
     const photos = photosOf(l.surface);
     photos[slot] = next;
     return { ...l, surface: { ...l.surface, photos } };
+  });
+
+  // Switching does not lose the picture on screen: going per-page keeps it on
+  // this page and leaves the rest of the run empty (copying it onto all twelve
+  // would be twelve times the bytes to save, for pictures nobody asked for),
+  // and coming back keeps the one being looked at.
+  const setEach = (on: boolean) => setLayout(l => {
+    const runs = eachOf(l.surface);
+    const photos = photosOf(l.surface);
+    if (on) {
+      const own = Array.from({ length: run }, () => null as string | null);
+      own[nth] = photos[slot] ?? null;
+      runs[slot] = own;
+      photos[slot] = null;
+    } else {
+      photos[slot] = runs[slot]?.[nth] ?? null;
+      runs[slot] = null;
+    }
+    return { ...l, surface: { ...l.surface, photos, photoEach: someEach(runs) } };
   });
 
   const pick = async (f: File | undefined) => {
@@ -2728,6 +2768,20 @@ function PhotoField({ layout, setLayout, size, slot }: {
 
   return (
     <Field label="写真">
+      {run > 1 && (
+        <>
+          <Segmented
+            options={[{ v: 'all', label: '全ページ同じ' }, { v: 'each', label: 'ページごと' }]}
+            value={mine ? 'each' : 'all'}
+            onPick={v => setEach(v === 'each')}
+          />
+          <p className="photo-where m-0 text-[11px] leading-snug text-muted">
+            {mine
+              ? `いま${nth + 1}枚目の写真です（${run}枚中${filled}枚に入っています）`
+              : `${run}枚ぜんぶに同じ写真が刷られます`}
+          </p>
+        </>
+      )}
       <input
         ref={file}
         type="file"
@@ -3285,9 +3339,11 @@ function Thumb({ layout, size, side = 0, box = { w: 34, h: 46 } }: {
 
 function PartSheet({
   target, book, layout, setLayout, inline, onClose, onRemove, onRemoveSpanning, onLoad, onSave,
-  size, onExport, print, setPrint, onAddSection, setBook, say,
+  size, onExport, print, setPrint, onAddSection, setBook, say, nth,
 }: {
   target: Exclude<SheetTarget, null>;
+  // Which sheet of the run is on screen: a per-page photo belongs to it.
+  nth: number;
   // The whole book, because the paper carries all of it.
   book: Book;
   setBook: (fn: (b: Book) => Book) => void;
@@ -3646,7 +3702,7 @@ function PartSheet({
         )}
 
         {kind === 'photo' && typeof target !== 'string' && (
-          <PhotoField layout={layout} setLayout={setLayout} size={size} slot={target.slot} />
+          <PhotoField layout={layout} setLayout={setLayout} size={size} slot={target.slot} nth={nth} />
         )}
 
         {kind && layout.surface.placed.length >= 2 && (

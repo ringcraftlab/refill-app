@@ -393,15 +393,32 @@ export const sheetCount = (layout: Layout): number => {
 
 // Every sheet's dates, in order. A weekly paces the refill by days; everything
 // else by months.
+// The picture a slot shows on the nth sheet of the run. Most slots hold one
+// picture that prints on every sheet; a slot with a run of its own holds one
+// per sheet, and this is where the two meet.
+function photosAt(layout: Layout, nth: number): Layout {
+  const each = layout.surface.photoEach;
+  if (!each?.some(Boolean)) return layout;
+  return {
+    ...layout,
+    surface: {
+      ...layout.surface,
+      photos: layout.surface.placed.map(
+        (_, i) => each[i]?.[nth] ?? layout.surface.photos?.[i] ?? null,
+      ),
+    },
+  };
+}
+
 function sheetsOf(layout: Layout): Layout[] {
   // Nothing dated on it: what decides how many sheets come out is how many
   // were asked for. Ten sheets of squared paper are ten of the same sheet.
   if (!hasDatedPart(layout)) {
-    return Array.from({ length: Math.max(1, layout.pages ?? 1) }, () => layout);
+    return Array.from({ length: Math.max(1, layout.pages ?? 1) }, (_, i) => photosAt(layout, i));
   }
   if (isDayPaced(layout)) {
-    return sheetStarts(layout).map(start => ({
-      ...layout,
+    return sheetStarts(layout).map((start, i) => ({
+      ...photosAt(layout, i),
       // The month a sheet belongs to is the month it starts in, which is what
       // a calendar printed beside the week should show.
       year: start.getFullYear(),
@@ -411,7 +428,7 @@ function sheetsOf(layout: Layout): Layout[] {
   }
   const per = monthsPerSheet(layout);
   return Array.from({ length: Math.ceil(Math.max(1, layout.monthCount) / per) },
-    (_, i) => ({ ...layout, ...addMonths(layout.year, layout.month, i * per) }));
+    (_, i) => ({ ...photosAt(layout, i), ...addMonths(layout.year, layout.month, i * per) }));
 }
 
 // What one sheet of a section is, said the way its dates would be read. The

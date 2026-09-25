@@ -346,5 +346,58 @@ check(
 );
 await page.screenshot({ path: `${OUT}/36-見開きは消えない.png` });
 
+// ---- one picture for the run, or one per sheet --------------------------
+// A photo on a twelve-month run is two different wishes: a mark that belongs
+// on every month, and this month's photograph. Both are real, so the slot says
+// which -- and the sheet on screen is the sheet whose picture is being set.
+await start('80×128mm', '片面', 'マンスリー');
+await drag(
+  await centerOf(page.locator('.stamp', { hasText: '写真' })),
+  await centerOf(page.locator('.page').first()),
+);
+await page.locator('.sheet').waitFor();
+await page.waitForTimeout(300);
+check(
+  (await flat('.photo-where')).includes('12枚ぜんぶに同じ'),
+  `既定は全ページ同じ（${await flat('.photo-where')}）`,
+);
+await page.evaluate(async () => {
+  const c = document.createElement('canvas');
+  c.width = 300; c.height = 200;
+  const x = c.getContext('2d');
+  x.fillStyle = '#2f6f8f'; x.fillRect(0, 0, 300, 200);
+  const blob = await new Promise(r => c.toBlob(r, 'image/png'));
+  const dt = new DataTransfer();
+  dt.items.add(new File([blob], 'test.png', { type: 'image/png' }));
+  const input = document.querySelector('.sheet input[type=file]');
+  input.files = dt.files;
+  input.dispatchEvent(new Event('change', { bubbles: true }));
+});
+await page.locator('.photo-size').waitFor();
+await page.locator('.sheet').getByRole('button', { name: 'ページごと' }).click();
+await page.waitForTimeout(400);
+check(
+  (await flat('.photo-where')).includes('1枚目') && (await flat('.photo-where')).includes('12枚中1枚'),
+  `ページごとにすると、いま見ているページの写真になる（${await flat('.photo-where')}）`,
+);
+await shut();
+check(await page.locator('.page image').count() === 1, '1枚目には写真がある');
+await page.locator('.nextpage').click();
+await page.waitForTimeout(400);
+check(
+  await page.locator('.page image').count() === 0,
+  `2枚目は空（${await flat('.pageno')}）`,
+);
+await page.screenshot({ path: `${OUT}/37-ページごとの写真.png` });
+await page.locator('.hitbox.part').last().click();
+await page.locator('.sheet').waitFor();
+await page.waitForTimeout(300);
+await page.locator('.sheet').getByRole('button', { name: '全ページ同じ' }).click();
+await page.waitForTimeout(400);
+check(
+  (await flat('.photo-where')).includes('12枚ぜんぶに同じ'),
+  '全ページ同じに戻せる',
+);
+
 await browser.close();
 if (bad) process.exitCode = 1;

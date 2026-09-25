@@ -147,6 +147,14 @@ export interface Surface {
   // -- but it does mean every place that adds, removes or swaps a part has to
   // do the same here.
   photos?: (string | null)[];
+  // A photo that changes from sheet to sheet, in the same order as `placed`:
+  // one picture per sheet of the run for that slot, or null/absent when the
+  // slot's picture is the same on every sheet (which is what `photos` holds).
+  // A twelve-month run prints one photo twelve times or twelve photos once
+  // each, and both are things people want; which one this slot is, is this.
+  // Same parallel-list rule as `photos` -- every insert, remove and swap has
+  // to move it too.
+  photoEach?: ((string | null)[] | null)[];
   // Which page of a spread the parts live on. Omitted -- which is what every
   // layout saved before this said -- means both, the surface running across
   // the gutter as one. Set by dropping against a spread's outer edge, which

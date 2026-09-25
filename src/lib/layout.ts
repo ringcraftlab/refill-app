@@ -194,10 +194,29 @@ export const splitFor = (w: number, h: number): 'h' | 'v' => (w >= h ? 'v' : 'h'
 export const photosOf = (s: Surface): (string | null)[] =>
   s.placed.map((_, i) => s.photos?.[i] ?? null);
 
+// The same list for the slots whose picture changes from sheet to sheet. It
+// moves with `photos` everywhere, or a run of pictures ends up under someone
+// else's part.
+export const eachOf = (s: Surface): ((string | null)[] | null)[] =>
+  s.placed.map((_, i) => s.photoEach?.[i] ?? null);
+
+// An empty run list is the ordinary case; keeping it off the layout keeps it
+// out of what gets saved.
+export const someEach = (runs: ((string | null)[] | null)[]) =>
+  (runs.some(Boolean) ? runs : undefined);
+
 const withNulls = (s: Surface, at: number, count: number): (string | null)[] => {
   const out = photosOf(s);
   out.splice(at, 0, ...Array.from({ length: count }, () => null));
   return out;
+};
+
+// The same insertion for the per-sheet runs, so a slot's run stays under the
+// slot it belongs to.
+const eachNulls = (s: Surface, at: number, count: number) => {
+  const out = eachOf(s);
+  out.splice(at, 0, ...Array.from({ length: count }, () => null));
+  return someEach(out);
 };
 
 const cut = (r: Rect, ratio: number, vertical: boolean): [Rect, Rect] => vertical
@@ -706,6 +725,7 @@ export function removeFromFold(surface: Surface, panels: number, slot: number): 
   const groups = foldLayoutOf(surface, panels);
   const placed = surface.placed.filter((_, i) => i !== slot);
   const photos = photosOf(surface).filter((_, i) => i !== slot);
+  const photoEach = someEach(eachOf(surface).filter((_, i) => i !== slot));
   let seen = 0;
   const next: FoldGroup[] = [];
   for (const g of groups) {
@@ -720,7 +740,7 @@ export function removeFromFold(surface: Surface, panels: number, slot: number): 
     }
     next.push({ ...g, parts, ratios: mine ? {} : g.ratios });
   }
-  return { ...surface, placed, photos, fold: placed.length ? next : undefined };
+  return { ...surface, placed, photos, photoEach, fold: placed.length ? next : undefined };
 }
 
 // A fold fills panels, so placing is a question of which panel rather than of
@@ -756,16 +776,17 @@ function placeOnFold(
   }
 
   const photos = photosOf(prev.surface);
+  const runs = eachOf(prev.surface);
   // Every added part went in at a known index, so the pictures move with the
   // parts they belong to rather than sliding along behind them.
-  for (const at of added) photos.splice(at, 0, null);
+  for (const at of added) { photos.splice(at, 0, null); runs.splice(at, 0, null); }
 
   const layout: Layout = {
     ...prev,
     // The band is a spread's way of holding one calendar across two pages. A
     // fold has no seam to cross, so the calendar is an ordinary part.
     spanning: null,
-    surface: { ...prev.surface, placed, photos, fold: groups, page: undefined },
+    surface: { ...prev.surface, placed, photos, photoEach: someEach(runs), fold: groups, page: undefined },
   };
   if (!everyPartFits(layout, size)) return null;
   return { layout, overflow: kinds.length - toAdd.length, landed };
@@ -812,6 +833,7 @@ export function placeParts(
         ...prev.surface,
         placed: ['monthly', ...prev.surface.placed],
         photos: withNulls(prev.surface, 0, 1),
+        photoEach: eachNulls(prev.surface, 0, 1),
         ratios: {},
       },
     };
@@ -894,6 +916,7 @@ function attempt(
         ...cur,
         placed: first ? [incoming, ...cur.placed] : [...cur.placed, incoming],
         photos: withNulls(cur, first ? 0 : cur.placed.length, 1),
+        photoEach: eachNulls(cur, first ? 0 : cur.placed.length, 1),
         ratios: {},
         split,
       });
@@ -910,6 +933,7 @@ function attempt(
           ...cur,
           placed: [...cur.placed, ...order],
           photos: withNulls(cur, cur.placed.length, order.length),
+          photoEach: eachNulls(cur, cur.placed.length, order.length),
           ratios: {}, split,
         });
       }
