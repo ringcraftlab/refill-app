@@ -42,11 +42,28 @@ console.log('pages:', await page.locator('.field-label').filter({ hasText: '刷�
 console.log('captions:', await page.locator('.preview figcaption').allTextContents());
 await page.screenshot({ path: `${OUT}/01-刷り上がりプレビュー.png` });
 
+// The face numbers: the whole point is that the two sides of one sheet agree,
+// so they are read in the order the eye reads them -- left to right, top to
+// bottom -- and the back has to run the other way, because the paper does.
+const numbersOn = async (n) => {
+  const marks = page.locator('.preview figure').nth(n).locator('.faceno');
+  const read = [];
+  for (let i = 0; i < await marks.count(); i++) {
+    const b = await marks.nth(i).boundingBox();
+    read.push({ t: (await marks.nth(i).textContent()).trim(), x: b.x, y: b.y });
+  }
+  return read.sort((a, b) => (Math.abs(a.y - b.y) > 4 ? a.y - b.y : a.x - b.x)).map(r => r.t);
+};
+console.log('面番号 1枚目表:', (await numbersOn(0)).join(' '));
+console.log('面番号 1枚目裏:', (await numbersOn(1)).join(' '));
+console.log('面番号 2枚目表:', (await numbersOn(2)).join(' '));
+
 // Turning duplex off has to change what is shown, live.
 await page.getByRole('button', { name: '片面' }).click();
 await page.waitForTimeout(400);
 console.log('single-sided:', await page.locator('.field-label').filter({ hasText: '刷り上がり' }).textContent());
 console.log('captions:', await page.locator('.preview figcaption').allTextContents());
+console.log('片面の面番号 1枚目:', (await numbersOn(0)).join(' '));
 await page.screenshot({ path: `${OUT}/02-片面にすると変わる.png` });
 
 // A thumbnail is too small to read, so any of them opens full size.
@@ -54,6 +71,7 @@ await page.getByRole('button', { name: '両面' }).click();
 await page.locator('.preview figure button').nth(1).click();
 await page.locator('.lightbox svg').waitFor();
 console.log('enlarged:', await page.locator('.lightbox-bar span').textContent());
+console.log('拡大にも面番号:', await page.locator('.lightbox .faceno').allTextContents());
 await page.screenshot({ path: `${OUT}/03-タップで拡大.png` });
 await page.getByRole('button', { name: '次へ', exact: true }).click();
 console.log('next:', await page.locator('.lightbox-bar span').textContent());
