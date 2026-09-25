@@ -503,22 +503,43 @@ const SHEET_SLOT = {
 // A colour per size, spread around the wheel rather than clustered: the four
 // common sizes take four plain hues, and the rest fill the gaps. Muted enough
 // to still look like paper on the warm background.
-// Nine colours a glance can tell apart, at full strength for the line and
-// weak for the fill: the line is the size's badge, the fill is paper seen
-// through it, and a drawn sheet that is as loud as its own label stops looking
-// like paper. Between two sizes that would otherwise share a colour, the more
-// common one keeps the plainer name for it (Mini6 amber, M5スクエア burnt).
+// The nine colours of the sizes, each named: テラコッタレッド, アンバー
+// オレンジ, スカイブルー, ラベンダーパープル, ライムグリーン, フォレスト
+// グリーン, シナモンオレンジ, ローズマゼンタ, サンイエロー. The line is the
+// size's badge -- bars, outlines, the border of the chosen card -- and the
+// fill is the same colour mixed 80% into white, because it stands for paper
+// seen through it: a drawn sheet as loud as its own label stops looking like
+// paper.
 const SIZE_TINT: Record<RefillSize, { fill: string; line: string }> = {
-  M5: { fill: '#FCDADF', line: '#E23B51' },
-  M6: { fill: '#FDE9C6', line: '#EE9F1B' },
-  BIBLE: { fill: '#D9E9FC', line: '#2E8AE0' },
-  A5: { fill: '#E4DDFB', line: '#7A56E0' },
-  MINI3: { fill: '#CFEFDB', line: '#16A34A' },
-  CARD3: { fill: '#E3F4CE', line: '#74B830' },
-  M5SQ: { fill: '#FCE0C9', line: '#E8720C' },
-  NARROW: { fill: '#FCD9E9', line: '#E0407F' },
-  A5SLIM: { fill: '#FBEDC0', line: '#D2A007' },
+  M5: { fill: '#F4D8D9', line: '#C93A40' },
+  M6: { fill: '#F8EACF', line: '#DE9610' },
+  BIBLE: { fill: '#E0EEFA', line: '#65ACE4' },
+  A5: { fill: '#EADFEC', line: '#9460A0' },
+  MINI3: { fill: '#DDEDE0', line: '#56A764' },
+  CARD3: { fill: '#ECF3D7', line: '#A0C238' },
+  M5SQ: { fill: '#F6E1D0', line: '#D16B16' },
+  NARROW: { fill: '#F5DCE8', line: '#CC528B' },
+  A5SLIM: { fill: '#FCF5CC', line: '#F2CF01' },
 };
+
+// The same colour, dark enough to be read as words on white. A colour can be
+// a bar, an outline or a fill at any lightness, but 「6穴」 set in サンイエロー
+// is 1.5 times the lightness of the paper behind it and simply is not there;
+// ライムグリーン and スカイブルー are not much better. So the label darkens the
+// hue until it reads, and nothing else does -- the badge colour stays the
+// colour that was chosen. Computed rather than listed, so a new size's colour
+// cannot arrive without its readable form.
+const srgb = (v: number) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4);
+const luminance = (c: number[]) =>
+  0.2126 * srgb(c[0] / 255) + 0.7152 * srgb(c[1] / 255) + 0.0722 * srgb(c[2] / 255);
+const readable = (hex: string, ratio = 4): string => {
+  let c = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16));
+  for (let i = 0; i < 40 && 1.05 / (luminance(c) + 0.05) < ratio; i++) c = c.map(v => v * 0.94);
+  return `#${c.map(v => Math.round(v).toString(16).padStart(2, '0')).join('')}`;
+};
+const SIZE_WORD: Record<string, string> = Object.fromEntries(
+  Object.entries(SIZE_TINT).map(([id, t]) => [id, readable(t.line)]),
+);
 // One name per size: the one people say. Three of these used to be a code
 // with its reading underneath -- M5 over マイクロ5 -- which spent a line of
 // the card saying the same size twice and left the reader to work out that
@@ -736,10 +757,11 @@ function SizeScreen({ selected, onPick }: { selected: RefillSize; onPick: (s: Re
                           {/* In the size's own colour, which is the one place
                               that colour carries a fact rather than a label:
                               the sizes sharing a hole count are the sizes
-                              whose sheets swap between binders. */}
+                              whose sheets swap between binders. Darkened to
+                              the point where ten pixels of it can be read. */}
                           <span
                             className="truncate text-[10px] font-semibold leading-tight"
-                            style={{ color: SIZE_TINT[id].line }}
+                            style={{ color: SIZE_WORD[id] }}
                           >
                             {sizeHoles(SIZES[id])}
                           </span>
