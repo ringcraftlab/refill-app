@@ -495,31 +495,36 @@ const SHEET_SCALE = 0.34;
 // screen after it. That box is the ruler: a sheet filling it is A5, one
 // filling a third of it is a third of A5, and that reads without moving the
 // eye off the card.
+// How far a ring stands out past the paper it grips. Drawn only inside the
+// sheet it is a tab, not a ring: what says "ring" is that it goes round the
+// edge -- and on a spread, that the one coming off the left page and the one
+// off the right page are the same ring, seen between them.
+const ringOut = (size: SizeSpec) => size.ringMarginMm * 0.55;
+
 const SHEET_SLOT = {
-  width: Math.max(...Object.values(SIZES).map(s => s.widthMm)) * SHEET_SCALE,
+  width: Math.max(...Object.values(SIZES).map(s => s.widthMm + ringOut(s))) * SHEET_SCALE,
   height: Math.max(...Object.values(SIZES).map(s => s.heightMm)) * SHEET_SCALE,
 };
 
-// A colour per size, spread around the wheel rather than clustered: the four
-// common sizes take four plain hues, and the rest fill the gaps. Muted enough
-// to still look like paper on the warm background.
 // The nine colours of the sizes, each named: テラコッタレッド, アンバー
 // オレンジ, スカイブルー, ラベンダーパープル, ライムグリーン, フォレスト
-// グリーン, シナモンオレンジ, ローズマゼンタ, サンイエロー. The line is the
-// size's badge -- bars, outlines, the border of the chosen card -- and the
-// fill is the same colour mixed 80% into white, because it stands for paper
-// seen through it: a drawn sheet as loud as its own label stops looking like
-// paper.
+// グリーン, シナモンオレンジ, ローズマゼンタ, サンイエロー.
+//
+// The line is the size's badge -- bars, outlines, rings, the border of the
+// chosen card. The fill is the same colour mixed 92% into white, which is to
+// say paper: a sheet is white, and a sheet flooded with its own label colour
+// stops being paper and becomes a swatch. The colour belongs on the rings,
+// where it is the binder holding the paper.
 const SIZE_TINT: Record<RefillSize, { fill: string; line: string }> = {
-  M5: { fill: '#F4D8D9', line: '#C93A40' },
-  M6: { fill: '#F8EACF', line: '#DE9610' },
-  BIBLE: { fill: '#E0EEFA', line: '#65ACE4' },
-  A5: { fill: '#EADFEC', line: '#9460A0' },
-  MINI3: { fill: '#DDEDE0', line: '#56A764' },
-  CARD3: { fill: '#ECF3D7', line: '#A0C238' },
-  M5SQ: { fill: '#F6E1D0', line: '#D16B16' },
-  NARROW: { fill: '#F5DCE8', line: '#CC528B' },
-  A5SLIM: { fill: '#FCF5CC', line: '#F2CF01' },
+  M5: { fill: '#F6EFF0', line: '#C93A40' },
+  M6: { fill: '#F9F2EC', line: '#DE9610' },
+  BIBLE: { fill: '#F3F8FD', line: '#65ACE4' },
+  A5: { fill: '#F6F2F7', line: '#9460A0' },
+  MINI3: { fill: '#F2F7F3', line: '#56A764' },
+  CARD3: { fill: '#F8FAEF', line: '#A0C238' },
+  M5SQ: { fill: '#FBF3EC', line: '#D16B16' },
+  NARROW: { fill: '#FBF1F6', line: '#CC528B' },
+  A5SLIM: { fill: '#FDFBEB', line: '#F2CF01' },
 };
 
 // The same colour, dark enough to be read as words on white. A colour can be
@@ -633,7 +638,7 @@ function PageInk({ box, cols, rows, tint, pen }: {
 }) {
   const at = (i: number, from: number, span: number, of: number) => from + (span / of) * i;
   return (
-    <g stroke={tint.line} strokeWidth={pen(0.7)} opacity={0.5}>
+    <g stroke={tint.line} strokeWidth={pen(0.7)} opacity={0.34}>
       {Array.from({ length: cols - 1 }, (_, i) => (
         <line
           key={`v${i}`}
@@ -668,12 +673,6 @@ function inkBox(size: SizeSpec, flip: boolean) {
 // only the holes leaves the reader to supply the binder -- which is exactly
 // what makes a spread hard to read, because the two pages of a spread are two
 // sheets held by the same rings in the middle.
-// How far a ring stands out past the paper it grips. Drawn only inside the
-// sheet it is a tab, not a ring: what says "ring" is that it goes round the
-// edge -- and on a spread, that the one coming off the left page and the one
-// off the right page are the same ring, seen between them.
-const ringOut = (size: SizeSpec) => size.ringMarginMm * 0.55;
-
 function Rings({ size, tint, flip, pen, holeR }: {
   size: SizeSpec; tint: { fill: string; line: string }; flip: boolean;
   pen: (onScreen: number) => number; holeR: number;
@@ -814,7 +813,7 @@ function SizeScreen({ selected, onPick }: { selected: RefillSize; onPick: (s: Re
                           </span>
                         </span>
                         <span className="flex shrink-0 items-center justify-center" style={SHEET_SLOT}>
-                          <SizeIcon size={SIZES[id]} tint={SIZE_TINT[id]} />
+                          <SizeIcon size={SIZES[id]} tint={SIZE_TINT[id]} rings />
                         </span>
                         {/* Decoration: it says "this opens something", which
                             the button already says, so it stays out of the
