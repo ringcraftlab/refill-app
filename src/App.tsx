@@ -916,6 +916,30 @@ function SidesScreen({ size, spread, fold, foldGrain, onPick, onBack, onConfirm 
   const widestMm = Math.max(...all.map(c => (c.plan ? c.plan.sheetWmm : spec.widthMm * c.sheets!.length)));
   const tallestMm = Math.max(...all.map(c => (c.plan ? c.plan.sheetHmm : spec.heightMm)));
   const k = Math.min(SHEET_SCALE * 2.2, (wide ? 190 : 140) / widestMm);
+  // The box the sheets are drawn in, ruled like graph paper and the same on
+  // every card: one constant area of table, so a sheet that fills more of it
+  // is a bigger sheet. The slot was already this ruler -- drawing it makes the
+  // comparison visible instead of leaving it to be noticed.
+  const field = {
+    width: (widestMm + ringOut(spec)) * k,
+    height: tallestMm * k,
+    backgroundColor: 'rgba(38,36,31,0.022)',
+    backgroundImage: 'radial-gradient(var(--color-line-strong) 1px, transparent 1px)',
+    backgroundSize: '7px 7px',
+  } as const;
+  // How wide the thing is when it is open, said under the drawing as the line
+  // anyone measuring it would draw. The L folds downward, where a line under
+  // it would be measuring the wrong edge, so it keeps to its note.
+  const span = (c: Choice) => {
+    if (c.plan) {
+      return c.plan.grain === 'along'
+        ? null
+        : { mm: c.plan.sheetWmm, text: `広げて${Math.round(c.plan.sheetWmm)}mm` };
+    }
+    // Just the number: the title above already says how many pages it is.
+    const mm = spec.widthMm * c.sheets!.length;
+    return { mm, text: `${mm}mm` };
+  };
 
   const card = (choice: Choice) => (
     <button
@@ -928,7 +952,7 @@ function SidesScreen({ size, spread, fold, foldGrain, onPick, onBack, onConfirm 
       {/* No gap between the two pages of a spread: each page's box already
           carries the room its own rings stand out into, and what meets in the
           middle is the one ring the two of them hang on. */}
-      <span className="flex items-center justify-center" style={{ height: tallestMm * k }}>
+      <span className="ruler flex items-center justify-center rounded-[10px]" style={field}>
         {choice.plan
           ? <FoldIcon size={spec} tint={tint} plan={choice.plan} scale={k} ink rings />
           : choice.sheets!.map((flip, i) => (
@@ -941,6 +965,18 @@ function SidesScreen({ size, spread, fold, foldGrain, onPick, onBack, onConfirm 
             />
           ))}
       </span>
+      {span(choice) && (
+        <span className="dim -mt-1 flex flex-col items-center" style={{ color: tint.line }}>
+          <svg width={Math.round(span(choice)!.mm * k)} height={7} aria-hidden="true" className="block">
+            <g stroke="currentColor" strokeWidth={1}>
+              <line x1={0.5} y1={3.5} x2={span(choice)!.mm * k - 0.5} y2={3.5} />
+              <line x1={0.5} y1={0.5} x2={0.5} y2={6.5} />
+              <line x1={span(choice)!.mm * k - 0.5} y1={0.5} x2={span(choice)!.mm * k - 0.5} y2={6.5} />
+            </g>
+          </svg>
+          <em className="not-italic text-[9px] font-semibold leading-tight">{span(choice)!.text}</em>
+        </span>
+      )}
       <span className="flex flex-col gap-0.5">
         <strong className="text-[13px] font-semibold leading-tight">{choice.title}</strong>
         <span className="text-[10px] leading-tight text-faint">{choice.note}</span>
@@ -1025,33 +1061,14 @@ function FoldIcon({ size, tint, plan, scale = SHEET_SCALE, ink = false, rings = 
   const cut = plan.insetMm;
   const outline = `M ${line} ${line} L ${W - line} ${line} L ${W - line} ${H - line}`
     + ` L ${cut + line} ${H - line} L ${cut + line} ${plan.headMm} L ${line} ${plan.headMm} Z`;
-  // How wide the thing opens is the whole of this choice, and it is the width
-  // of the drawing itself -- so the number goes on the drawing, as the line
-  // anyone measuring it would draw. Only for a strip that opens sideways: the
-  // L folds downward, where a line under it would measure the wrong edge.
-  const dim = down ? 0 : pen(19);
   const out = rings ? ringOut(size) : 0;
   return (
     <svg
-      width={(W + out) * k} height={(H + dim) * k}
-      viewBox={`${-out} 0 ${W + out} ${H + dim}`}
+      width={(W + out) * k} height={H * k}
+      viewBox={`${-out} 0 ${W + out} ${H}`}
       className="block shrink-0"
       aria-hidden="true"
     >
-      {dim > 0 && (
-        <g stroke={tint.line} strokeWidth={pen(0.9)} fill="none">
-          <line x1={line} y1={H + pen(5)} x2={W - line} y2={H + pen(5)} />
-          <line x1={line} y1={H + pen(2)} x2={line} y2={H + pen(8)} />
-          <line x1={W - line} y1={H + pen(2)} x2={W - line} y2={H + pen(8)} />
-          <text
-            x={W / 2} y={H + pen(16)}
-            fill={tint.line} stroke="none"
-            fontSize={pen(8)} fontWeight={600} textAnchor="middle"
-          >
-            {`${Math.round(W)}mm`}
-          </text>
-        </g>
-      )}
       {down ? (
         <path d={outline} fill={tint.fill} stroke={tint.line} strokeWidth={pen(OUTLINE_PX)} strokeLinejoin="round" />
       ) : (
@@ -1079,6 +1096,20 @@ function FoldIcon({ size, tint, plan, scale = SHEET_SCALE, ink = false, rings = 
           />
         );
       })}
+      {/* Which panel is which. A strip with two dashed lines on it says there
+          are three of something; the numbers say the three are the pages you
+          will be laying parts on. */}
+      {ink && panels.length > 1 && panels.map((p, i) => (
+        <text
+          key={`n${p.atMm}`}
+          x={down ? W / 2 : p.atMm + p.widthMm / 2}
+          y={down ? p.atMm + p.widthMm / 2 : H - pen(4)}
+          fill={tint.line} opacity={0.75}
+          fontSize={pen(8)} fontWeight={700} textAnchor="middle"
+        >
+          {i + 1}
+        </text>
+      ))}
       {panels.slice(1).map(p => (
         <line
           key={p.atMm}
