@@ -320,6 +320,85 @@ export function drawPhoto(area: Rect, layout: Layout): Primitive[] {
   return [];
 }
 
+// One card for one ink, which is how people who keep ink actually keep it: a
+// name-card-sized sheet per bottle, numbered, with the colour painted into a
+// drawn bottle and the name and notes written by hand. Nothing here prints a
+// word -- the words are the owner's handwriting, and that is why this can be a
+// part at all rather than waiting on a way to type text.
+//
+// It is one part, not five, because five is more than a surface can hold and
+// because dragging four borders to build the same card every time is not
+// designing, it is chores.
+export function drawSwatch(area: Rect, layout: Layout): Primitive[] {
+  const pal = paletteOf(layout);
+  const { left, right, top, bottom } = inset(area);
+  const w = right - left, h = bottom - top;
+  const out: Primitive[] = [];
+
+  // The number, as big as the card can carry, in the corner a thumb flicks
+  // past. It counts up the run: card 10 is the tenth sheet of the section.
+  const numH = Math.min(h * 0.26, 9);
+  const no = (layout.swatchFrom ?? 1) + (layout.sheetNo ?? 0);
+  out.push({
+    type: 'text', x: left, y: top + numH,
+    text: String(no), sizePt: (numH / 0.72) * 2.8346,
+    color: pal.inkSoft, align: 'left',
+  });
+  const numW = numH * 0.62 * String(no).length + h * 0.06;
+
+  // The name goes on a rule beside the number, heavier than the note rules
+  // because it is the one thing every card has.
+  const nameY = top + numH;
+  out.push({
+    type: 'line', x1: left + numW, y1: nameY, x2: right, y2: nameY,
+    stroke: pal.rule, strokeMm: 0.25,
+  });
+  // A short rule above it for the series or the maker, which is what the
+  // shop-bought cards keep up there.
+  out.push({
+    type: 'line', x1: left + numW + w * 0.18, y1: top + numH * 0.42,
+    x2: right - w * 0.04, y2: top + numH * 0.42,
+    stroke: pal.ruleLight, strokeMm: 0.15,
+  });
+
+  // The bottle: a cap, a shoulder and a body, drawn as the outline of the
+  // thing the ink came in. What goes inside it is a brush stroke of the ink,
+  // so the body is left empty -- the part draws the frame, the owner paints.
+  const bodyW = Math.min(w * 0.22, h * 0.46);
+  const bodyH = bodyW * 0.78;
+  // Sat on the floor of the card it read as furniture; it belongs in the block
+  // under the name, beside what is written about it.
+  const bx = left + w * 0.01;
+  const by = nameY + (bottom - nameY - bodyH) * 0.62;
+  const bottle = layout.swatchBottle !== false;
+  if (bottle) {
+    const capW = bodyW * 0.42, capH = bodyH * 0.26;
+    out.push({
+      type: 'rect', x: bx + (bodyW - capW) / 2, y: by - capH, w: capW, h: capH,
+      stroke: pal.rule, strokeMm: 0.25,
+    });
+    out.push({
+      type: 'rect', x: bx, y: by, w: bodyW, h: bodyH,
+      stroke: pal.rule, strokeMm: 0.25,
+    });
+  }
+
+  // The notes, to the right of the bottle and under the name.
+  const notesLeft = bottle ? bx + bodyW + w * 0.05 : left;
+  const lines = Math.max(1, layout.swatchLines ?? 5);
+  const from = nameY + h * 0.12;
+  const pitch = (bottom - from) / lines;
+  for (let i = 1; i <= lines; i++) {
+    const y = from + pitch * i;
+    if (y > bottom + 0.01) break;
+    out.push({
+      type: 'line', x1: notesLeft, y1: y, x2: right, y2: y,
+      stroke: pal.ruleLight, strokeMm: 0.15,
+    });
+  }
+  return out;
+}
+
 export const drawMemo = (area: Rect, pal: Palette): Primitive[] => ruled(area, 'MEMO', 5, pal);
 export const drawLines = (area: Rect, pal: Palette): Primitive[] => ruled(area, null, 6, pal);
 
@@ -714,6 +793,7 @@ export function drawPart(kind: PartKind, area: Rect, layout: Layout): Primitive[
     case 'grid': return drawGrid(area, pal);
     case 'lines': return drawLines(area, pal);
     case 'memo': return drawMemo(area, pal);
+    case 'swatch': return drawSwatch(area, layout);
     // Everything with a date on an axis was handled above.
     default: return [];
   }

@@ -398,9 +398,10 @@ export const sheetCount = (layout: Layout): number => {
 // per sheet, and this is where the two meet.
 function photosAt(layout: Layout, nth: number): Layout {
   const each = layout.surface.photoEach;
-  if (!each?.some(Boolean)) return layout;
+  if (!each?.some(Boolean)) return { ...layout, sheetNo: nth };
   return {
     ...layout,
+    sheetNo: nth,
     surface: {
       ...layout.surface,
       photos: layout.surface.placed.map(

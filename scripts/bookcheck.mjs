@@ -399,5 +399,35 @@ check(
   '全ページ同じに戻せる',
 );
 
+// ---- one card per ink, numbered down the run ----------------------------
+// The way people actually keep ink swatches is a name-card-sized sheet per
+// bottle, numbered, with the colour painted into a drawn bottle and everything
+// else in their own hand. 横長ミニ3穴 is 91×55mm, which is that card.
+await start('91×55mm', '片面', 'インク見本');
+check(await page.locator('.hitbox.part').count() === 1, 'インク見本が置ける');
+const firstNo = (await page.locator('.page text').allTextContents()).join(',');
+check(firstNo === '1', `1枚目は1番（${firstNo}）`);
+await toContents();
+await page.locator('.sections .section').first().click();
+await page.locator('.modal').waitFor();
+await page.locator('.modal .pages button[aria-label=増やす]').click();
+await page.locator('.modal .pages button[aria-label=増やす]').click();
+await page.waitForTimeout(300);
+await page.locator('.modal button[aria-label=閉じる]').click();
+await page.waitForTimeout(300);
+// Three cards and, because three is odd, the back of the last sheet.
+const cards = await page.locator('.contents-list .leaf:not(.empty)').count();
+check(cards === 3, `枚数のぶんだけカードになる（${cards}枚）`);
+// The panel says which page it is showing, so pressing the third one opens the
+// third one -- it used to open the first sheet of the section whichever page
+// was pressed.
+await page.locator('.leaf').nth(2).click();
+await page.locator('.page').first().waitFor();
+await page.waitForTimeout(400);
+check((await pageno()).startsWith('3/'), `押したページが開く（${await pageno()}）`);
+const thirdNo = (await page.locator('.page text').allTextContents()).join(',');
+check(thirdNo === '3', `3枚目は3番（${thirdNo}）`);
+await page.screenshot({ path: `${OUT}/38-インク見本.png` });
+
 await browser.close();
 if (bad) process.exitCode = 1;

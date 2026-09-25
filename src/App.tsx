@@ -162,6 +162,18 @@ function StampIcon({ kind }: { kind: PartKind }) {
   // The shape a picture makes in a frame: a horizon and a sun. Drawn rather
   // than ruled, because this is the one stamp that holds something that is
   // not lines.
+  // A card for one ink: the number and its name on a rule, the bottle to paint
+  // in, and the lines to write on. The bottle is what tells it apart from the
+  // memo at this size.
+  if (kind === 'swatch') {
+    cells.push(line(7.5, 4.6, ICON_W - 2, 4.6, 0));
+    cells.push(<rect key="cap" x={4.1} y={7.4} width={2.4} height={1.6} rx={0.5} />);
+    cells.push(<rect key="bot" x={2.4} y={9} width={5.8} height={5.4} rx={0.8} />);
+    cells.push(line(10.5, 9.4, ICON_W - 2, 9.4, 1));
+    cells.push(line(10.5, 12, ICON_W - 2, 12, 2));
+    cells.push(line(10.5, 14.6, ICON_W - 2, 14.6, 3));
+  }
+
   if (kind === 'photo') {
     cells.push(<circle key="sun" cx={8} cy={6} r={1.8} />);
     cells.push(<path key="hill" d={`M 2 ${ICON_H - 3.5} L 9 8 L 14 13 L 17 10 L ${ICON_W - 2} ${ICON_H - 3.5} Z`} />);
@@ -197,6 +209,7 @@ const TRAY: { kind: PartKind; label: string }[] = [
   { kind: 'lines', label: '罫線' },
   { kind: 'memo', label: 'メモ' },
   { kind: 'photo', label: '写真' },
+  { kind: 'swatch', label: 'インク見本' },
 ];
 
 const TAUGHT_KEY = 'ringcraft.dividerTaught';
@@ -253,7 +266,7 @@ const PART_LABEL: Record<PartKind, string> = {
   weekvert: '週間バーチカル', weekhoriz: '週間ホリゾンタル', gantt: 'ガントチャート',
   habit: 'ハビットトラッカー', todo: 'TODOリスト',
   goal: '今月の目標', budget: '家計', grid: '方眼', lines: '罫線', memo: 'メモ',
-  photo: '写真',
+  photo: '写真', swatch: 'インク見本',
 };
 
 function createLayout(): Layout {
@@ -450,8 +463,8 @@ export function App() {
         setBook={setBook}
         print={print}
         at={Math.min(at, book.sections.length - 1)}
-        onOpen={(i: number, open?: 'range' | 'part0') => {
-          goTo(i);
+        onOpen={(i: number, open?: 'range' | 'part0', sheet = 0) => {
+          goTo(i, sheet);
           if (open) setOpenOn(o => ({ key: o.key + 1, what: open }));
           setStage('canvas');
         }}
@@ -1204,7 +1217,9 @@ function ContentsScreen({ book, setBook, print, at, onOpen, onBack }: {
   // `'range'` opens that section's period straight away (the number someone
   // wants to change is the one they just read in this row); `'part0'` opens
   // what the section is still missing.
-  onOpen: (i: number, open?: 'range' | 'part0') => void;
+  // The sheet as well as the section: pressing the ninth page of a run and
+  // landing on its first one is the panel lying about what it just did.
+  onOpen: (i: number, open?: 'range' | 'part0', sheet?: number) => void;
   onBack: () => void;
 }) {
   const size = SIZES[book.sections[0].size];
@@ -1321,7 +1336,7 @@ function ContentsScreen({ book, setBook, print, at, onOpen, onBack }: {
                     className={`leaf flex w-[62px] flex-col items-center gap-0.5 p-0 ${
                       sec ? '' : 'empty'
                     }`}
-                    onClick={() => (sec ? onOpen(leaf.at!) : setAddAt(leaf.before))}
+                    onClick={() => (sec ? onOpen(leaf.at!, undefined, leaf.nth) : setAddAt(leaf.before))}
                   >
                     {sec ? (
                       <Thumb layout={sec} size={size} side={leaf.side} box={{ w: 54, h: 74 }} />
@@ -3809,6 +3824,38 @@ function PartSheet({
               onStep={n => setLayout(l => ({ ...l, habitCount: Math.min(8, Math.max(1, l.habitCount + n)) }))}
             />
           </Field>
+        )}
+
+        {kind === 'swatch' && (
+          <>
+            {/* The number counts up the run, so what is set is where it starts
+                -- card 10 is the tenth of a section that begins at 1, and a
+                second set of cards can carry on from where the first stopped
+                rather than starting over. */}
+            <Field label="始まりの番号">
+              <Stepper
+                value={layout.swatchFrom ?? 1}
+                onStep={n => setLayout(l => ({ ...l, swatchFrom: Math.max(1, (l.swatchFrom ?? 1) + n) }))}
+              />
+            </Field>
+            <Field label="書く行">
+              <Stepper
+                value={layout.swatchLines ?? 5}
+                onStep={n => setLayout(l => ({ ...l, swatchLines: Math.min(12, Math.max(1, (l.swatchLines ?? 5) + n)) }))}
+              />
+            </Field>
+            <Field label="ボトル">
+              <Segmented
+                options={[{ v: 'on', label: '描く' }, { v: 'off', label: '描かない' }]}
+                value={layout.swatchBottle === false ? 'off' : 'on'}
+                onPick={v => setLayout(l => ({ ...l, swatchBottle: v === 'on' }))}
+              />
+            </Field>
+            <p className="m-0 text-[11px] leading-snug text-faint">
+              1枚で1本ぶん。名前も説明も手で書くところなので、刷るのは枠と番号だけです。
+              枚数は中身の画面（このリフィルの「◯ページ」）で増やします
+            </p>
+          </>
         )}
 
         {typeof target !== 'string' && (

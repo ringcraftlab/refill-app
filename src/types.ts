@@ -51,7 +51,8 @@ export type WeekStart = 0 | 1;
 
 export type PartKind =
   | 'monthly' | 'daylist' | 'weekvert' | 'weekhoriz' | 'gantt'
-  | 'habit' | 'todo' | 'goal' | 'budget' | 'grid' | 'lines' | 'memo' | 'photo';
+  | 'habit' | 'todo' | 'goal' | 'budget' | 'grid' | 'lines' | 'memo' | 'photo'
+  | 'swatch';
 
 // What a part needs to stay usable, and which way it wants to be shaped. The
 // habit tracker carries 31 day columns, so it needs width or its ticks become
@@ -85,6 +86,10 @@ export const PART_FIT: Record<PartKind, PartFit> = {
   // A column per day of the month, so it needs the width a habit grid does.
   gantt: { minWMm: 76, minHMm: 26, prefer: 'wide' },
   habit:   { minWMm: 76, minHMm: 18, prefer: 'wide' },
+  // One card for one ink: a number, a rule for its name, a bottle to paint in
+  // and rules to write about it on. Below this the bottle is a smudge and the
+  // name has nowhere to go.
+  swatch:  { minWMm: 44, minHMm: 30, prefer: 'wide' },
   todo:    { minWMm: 18, minHMm: 28, prefer: 'tall' },
   goal:    { minWMm: 26, minHMm: 18, prefer: 'any' },
   budget:  { minWMm: 34, minHMm: 20, prefer: 'any' },
@@ -235,6 +240,16 @@ export interface Layout {
   // how much of it you want, unlike a monthly, which is as long as its months.
   // Omitted means one, which is what everything saved before this was.
   pages?: number;
+  // Which sheet of the run this is, counted from 0. Set when a run is cut into
+  // sheets, not stored: it is how a part that counts -- an ink card numbered
+  // 10, 11, 12 down the binder -- knows which one it is on, the same way a
+  // dated part knows its month.
+  sheetNo?: number;
+  // The ink swatch card: the number it starts counting from, how many rules it
+  // leaves to write on, and whether it draws a bottle to paint in.
+  swatchFrom?: number;
+  swatchLines?: number;
+  swatchBottle?: boolean;
   showNextMonth: boolean;
   habitCount: number;
   updatedAt: string;
