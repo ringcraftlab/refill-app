@@ -250,9 +250,14 @@ export interface Layout {
   swatchFrom?: number;
   swatchLines?: number;
   swatchBottle?: boolean;
-  // How many cards one sheet carries. A binder page holds three name cards,
-  // and the numbering carries on across sheets rather than starting over.
+  // How many cards this part holds. Each one stays the shape of a name card,
+  // so the part is as many cards as were asked for and the rest of the surface
+  // belongs to whatever else is on it.
   swatchPer?: number;
+  // Whether the cards are numbered at all. Off unless asked for: a collection
+  // that is already fifteen bottles deep does not start again at one, and the
+  // number is the owner's to write if they want it.
+  swatchNo?: boolean;
   showNextMonth: boolean;
   habitCount: number;
   updatedAt: string;

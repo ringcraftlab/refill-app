@@ -20,6 +20,10 @@ function Primitives({ items }: { items: Primitive[] }) {
               fill={p.fill ? rgb(p.fill) : 'none'}
               stroke={p.stroke ? rgb(p.stroke) : 'none'}
               strokeWidth={p.strokeMm ?? 0}
+              // The PDF has drawn a dashed border since cut lines existed; the
+              // screen was drawing it solid, which is the screen and the paper
+              // disagreeing about the same figure.
+              strokeDasharray={p.dashMm?.join(' ')}
             />
           );
         }

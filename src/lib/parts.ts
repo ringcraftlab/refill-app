@@ -331,7 +331,6 @@ export function drawPhoto(area: Rect, layout: Layout): Primitive[] {
 // designing, it is chores.
 export function drawSwatch(area: Rect, layout: Layout): Primitive[] {
   const per = Math.max(1, layout.swatchPer ?? 1);
-  if (per === 1) return oneSwatch(area, layout, 0);
 
   // Several cards to a sheet: a binder page holds three of them, and the run
   // carries on across sheets rather than starting over on each. The grid is
@@ -347,24 +346,29 @@ export function drawSwatch(area: Rect, layout: Layout): Primitive[] {
   const { cols, rows } = best;
   const out: Primitive[] = [];
   const cw = area.w / cols, ch = area.h / rows;
+  // A card is a name card, whatever room it is given. Stretched to fill the
+  // cell it stops being the thing that goes in the sleeve; so it keeps its
+  // shape, takes the biggest size that fits, and sits in the middle of what
+  // it was given. The room left over is for whatever else is on the surface.
+  const fit = Math.min(cw, ch * CARD);
+  const cardW = fit, cardH = fit / CARD;
   for (let i = 0; i < per; i++) {
     const col = i % cols, row = Math.floor(i / cols);
-    const cell = { x: area.x + col * cw, y: area.y + row * ch, w: cw, h: ch };
+    const cell = {
+      x: area.x + col * cw + (cw - cardW) / 2,
+      y: area.y + row * ch + (ch - cardH) / 2,
+      w: cardW, h: cardH,
+    };
     out.push(...oneSwatch(cell, layout, i));
     // Where one card ends and the next begins. They are separate pieces of
     // paper in the end, whether they are cut apart or not.
-    if (row > 0) {
-      out.push({
-        type: 'line', x1: cell.x, y1: cell.y, x2: cell.x + cw, y2: cell.y,
-        stroke: paletteOf(layout).ruleLight, strokeMm: 0.15, dashMm: [1.2, 1.2],
-      });
-    }
-    if (col > 0) {
-      out.push({
-        type: 'line', x1: cell.x, y1: cell.y, x2: cell.x, y2: cell.y + ch,
-        stroke: paletteOf(layout).ruleLight, strokeMm: 0.15, dashMm: [1.2, 1.2],
-      });
-    }
+    // Where one card ends and the next begins, drawn round the card itself:
+    // they are separate pieces of paper in the end, whether they are cut
+    // apart or not.
+    out.push({
+      type: 'rect', x: cell.x, y: cell.y, w: cell.w, h: cell.h,
+      stroke: paletteOf(layout).ruleLight, strokeMm: 0.15, dashMm: [1.2, 1.2],
+    });
   }
   return out;
 }
@@ -380,12 +384,15 @@ function oneSwatch(area: Rect, layout: Layout, index: number): Primitive[] {
   const numH = Math.min(h * 0.26, 9);
   const per = Math.max(1, layout.swatchPer ?? 1);
   const no = (layout.swatchFrom ?? 1) + (layout.sheetNo ?? 0) * per + index;
-  out.push({
-    type: 'text', x: left, y: top + numH,
-    text: String(no), sizePt: (numH / 0.72) * 2.8346,
-    color: pal.inkSoft, align: 'left',
-  });
-  const numW = numH * 0.62 * String(no).length + h * 0.06;
+  const numbered = layout.swatchNo === true;
+  if (numbered) {
+    out.push({
+      type: 'text', x: left, y: top + numH,
+      text: String(no), sizePt: (numH / 0.72) * 2.8346,
+      color: pal.inkSoft, align: 'left',
+    });
+  }
+  const numW = numbered ? numH * 0.62 * String(no).length + h * 0.06 : 0;
 
   // The name goes on a rule beside the number, heavier than the note rules
   // because it is the one thing every card has.

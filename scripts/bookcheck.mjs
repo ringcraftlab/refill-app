@@ -399,46 +399,41 @@ check(
   '全ページ同じに戻せる',
 );
 
-// ---- one card per ink, numbered down the run ----------------------------
-// The way people actually keep ink swatches is a name-card-sized sheet per
-// bottle, numbered, with the colour painted into a drawn bottle and everything
-// else in their own hand. 横長ミニ3穴 is 91×55mm, which is that card.
-await start('91×55mm', '片面', 'インク見本');
-check(await page.locator('.hitbox.part').count() === 1, 'インク見本が置ける');
-const firstNo = (await page.locator('.page text').allTextContents()).join(',');
-check(firstNo === '1', `1枚目は1番（${firstNo}）`);
-await toContents();
-await page.locator('.sections .section').first().click();
-await page.locator('.modal').waitFor();
-await page.locator('.modal .pages button[aria-label=増やす]').click();
-await page.locator('.modal .pages button[aria-label=増やす]').click();
-await page.waitForTimeout(300);
-await page.locator('.modal button[aria-label=閉じる]').click();
-await page.waitForTimeout(300);
-// Three cards and, because three is odd, the back of the last sheet.
-const cards = await page.locator('.contents-list .leaf:not(.empty)').count();
-check(cards === 3, `枚数のぶんだけカードになる（${cards}枚）`);
-// The panel says which page it is showing, so pressing the third one opens the
-// third one -- it used to open the first sheet of the section whichever page
-// was pressed.
-await page.locator('.leaf').nth(2).click();
-await page.locator('.page').first().waitFor();
-await page.waitForTimeout(400);
-check((await pageno()).startsWith('3/'), `押したページが開く（${await pageno()}）`);
-const thirdNo = (await page.locator('.page text').allTextContents()).join(',');
-check(thirdNo === '3', `3枚目は3番（${thirdNo}）`);
-await page.screenshot({ path: `${OUT}/38-インク見本.png` });
-
-// Several to a sheet, and the numbering carries on across sheets rather than
-// starting over: the third sheet of a two-up run is cards five and six.
+// ---- one card per ink ---------------------------------------------------
+// The way people keep ink swatches is a name-card-sized sheet per bottle, the
+// colour painted into a drawn bottle and everything else in their own hand.
+// One part is one card, however many of them are asked for, and it keeps the
+// shape of a name card rather than stretching to the room it is given.
+await start('95×170mm', '見開き', 'インク見本');
+// A part on a spread has a hitbox per page it reaches.
+check(await page.locator('.hitbox.part').count() >= 1, 'インク見本が置ける');
+check(
+  (await page.locator('.page text').allTextContents()).join(',') === '',
+  '番号は既定ではつかない（15本目から始める人のほうが多い）',
+);
 await page.locator('.hitbox.part').first().click();
 await page.locator('.sheet').waitFor();
 await page.waitForTimeout(300);
-await page.locator('.sheet').getByRole('button', { name: '増やす' }).nth(1).click();
+const cardsOf = async () => page.locator('.page rect[stroke-dasharray]').count();
+const one = await cardsOf();
+await page.locator('.sheet').getByRole('button', { name: '増やす' }).first().click();
+await page.locator('.sheet').getByRole('button', { name: '増やす' }).first().click();
 await page.waitForTimeout(400);
-const twoUp = (await page.locator('.page text').allTextContents()).join(',');
-check(twoUp === '5,6', `1ページに2枚。3枚目は5番と6番（${twoUp}）`);
-await page.screenshot({ path: `${OUT}/39-1ページに2枚.png` });
+check(await cardsOf() > one, `枚数で増やせる（${one} → ${await cardsOf()}枚が見えている）`);
+const shape = await page.locator('.page rect[stroke-dasharray]').first().evaluate(
+  el => (+el.getAttribute('width')) / (+el.getAttribute('height')));
+check(
+  Math.abs(shape - 91 / 55) < 0.05,
+  `カードは名刺の形のまま（1:${shape.toFixed(2)}）`,
+);
+await page.locator('.sheet').getByRole('button', { name: 'つける' }).click();
+await page.waitForTimeout(400);
+check(
+  (await page.locator('.page text').allTextContents()).join(',').startsWith('1'),
+  `番号をつけると1から（${(await page.locator('.page text').allTextContents()).join(',')}）`,
+);
+await shut();
+await page.screenshot({ path: `${OUT}/38-インク見本.png` });
 
 await browser.close();
 if (bad) process.exitCode = 1;

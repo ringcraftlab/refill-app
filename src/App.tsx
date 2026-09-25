@@ -3828,17 +3828,7 @@ function PartSheet({
 
         {kind === 'swatch' && (
           <>
-            {/* The number counts up the run, so what is set is where it starts
-                -- card 10 is the tenth of a section that begins at 1, and a
-                second set of cards can carry on from where the first stopped
-                rather than starting over. */}
-            <Field label="始まりの番号">
-              <Stepper
-                value={layout.swatchFrom ?? 1}
-                onStep={n => setLayout(l => ({ ...l, swatchFrom: Math.max(1, (l.swatchFrom ?? 1) + n) }))}
-              />
-            </Field>
-            <Field label="1ページに">
+            <Field label="枚数">
               <Stepper
                 value={layout.swatchPer ?? 1}
                 onStep={n => setLayout(l => ({ ...l, swatchPer: Math.min(8, Math.max(1, (l.swatchPer ?? 1) + n)) }))}
@@ -3857,10 +3847,27 @@ function PartSheet({
                 onPick={v => setLayout(l => ({ ...l, swatchBottle: v === 'on' }))}
               />
             </Field>
+            {/* Off unless asked for: a collection that is already fifteen
+                bottles deep does not start again at one. */}
+            <Field label="番号">
+              <Segmented
+                options={[{ v: 'off', label: 'つけない' }, { v: 'on', label: 'つける' }]}
+                value={layout.swatchNo ? 'on' : 'off'}
+                onPick={v => setLayout(l => ({ ...l, swatchNo: v === 'on' }))}
+              />
+            </Field>
+            {layout.swatchNo && (
+              <Field label="始まりの番号">
+                <Stepper
+                  value={layout.swatchFrom ?? 1}
+                  onStep={n => setLayout(l => ({ ...l, swatchFrom: Math.max(1, (l.swatchFrom ?? 1) + n) }))}
+                />
+              </Field>
+            )}
             <p className="m-0 text-[11px] leading-snug text-faint">
-              カード1枚で1本ぶん。名前も説明も手で書くところなので、刷るのは枠と番号だけです。
-              番号は続けて振られます（1ページに3枚なら、次のページは4から）。
-              何ページ刷るかは中身の画面の「◯ページ」で
+              カード1枚で1本ぶん、名刺の大きさのまま並びます。名前も説明も手で書く
+              ところなので、刷るのは枠だけです。余った紙はつまみを動かして、メモや
+              方眼に分けられます
             </p>
           </>
         )}
