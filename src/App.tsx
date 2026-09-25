@@ -965,18 +965,24 @@ function SidesScreen({ size, spread, fold, foldGrain, onPick, onBack, onConfirm 
         <h1 className="text-[19px] font-bold">ページ構成を選ぶ</h1>
         <p className="m-0 mt-1 text-[12px] text-muted">この紙を、どう開く形にしますか</p>
       </div>
-      {/* The size just chosen, as the card it was chosen on -- the same bar,
-          the same sheet, the same selected outline, carried across. Said in a
-          line of grey text instead, the second screen looked like a different
-          app: the colour and the paper both vanished between one tap and the
-          next. It is also the way back, because the thing to press to change
-          the size is the size. */}
+      {/* The size just chosen, carried across with its bar and its sheet: said
+          in a line of grey text instead, the second screen looked like a
+          different app, because the colour and the paper both vanished between
+          one tap and the next.
+          //
+          It is not one of the choices, though, and wearing the chosen card's
+          skin -- white card, colour border, glow -- it read as one that had
+          already been picked. So it is settled into the page instead: a grey
+          strip under a caption that says what it is, with a rule under it, and
+          the four things to choose from below that. It stays pressable,
+          because the thing to press to change the size is the size. */}
+      <span className="m-0 text-[11px] font-bold tracking-[0.04em] text-muted">作るリフィル</span>
       <button
         // Full width on a phone, where everything is; on a wide window it
-        // hugs what it holds, because a card the width of the screen with a
+        // hugs what it holds, because a strip the width of the screen with a
         // name at one end and a sheet at the other is mostly empty room.
-        className="sizenow relative flex w-full min-w-0 items-center gap-3 overflow-hidden rounded-[18px] border-[1.5px] py-2 pl-3 pr-2 text-left lg:w-auto lg:self-start lg:pr-4"
-        style={cardSkin(true, color)}
+        className="sizenow relative -mt-2 flex w-full min-w-0 items-center gap-3 overflow-hidden rounded-[14px] border border-line py-2 pl-3 pr-2 text-left hover:border-line-strong lg:w-auto lg:self-start lg:pr-4"
+        style={{ background: 'rgba(38,36,31,0.04)' }}
         onClick={onBack}
       >
         <span className="absolute inset-y-0 left-0 w-1.5" style={{ background: color }} />
@@ -1002,8 +1008,10 @@ function SidesScreen({ size, spread, fold, foldGrain, onPick, onBack, onConfirm 
         >
           <SizeIcon size={spec} color={color} scale={k} rings />
         </span>
-        <span className="shrink-0 pr-0.5 text-[10px] text-faint">変更</span>
+        <span className="shrink-0 pr-0.5 text-[10px] text-accent">変更</span>
       </button>
+      {/* The line between what is already decided and what is being asked. */}
+      <hr className="m-0 w-full border-0 border-t border-line" />
       {/* Side by side, on the same two-column grid as the picker. A comparison
           reads across, not down: stacked, these were the same drawing seen
           twice in a row instead of one beside the other. Which also settles
