@@ -332,26 +332,32 @@ export function drawPhoto(area: Rect, layout: Layout): Primitive[] {
 export function drawSwatch(area: Rect, layout: Layout): Primitive[] {
   const per = Math.max(1, layout.swatchPer ?? 1);
 
-  // Several cards to a sheet: a binder page holds three of them, and the run
-  // carries on across sheets rather than starting over on each. The grid is
-  // whichever one leaves each card closest to the shape of a name card --
-  // three down a Bible page, two by two on an A5 held wide.
+  // A card is a card-shaped thing, not a name card to the millimetre: it lies
+  // down, it is wider than it is tall, and beyond that it settles into the
+  // room it was given. Locked to 91:55 it left air above and below every card
+  // for the sake of a number nobody is going to measure.
   const CARD = 91 / 55;
+  const WIDE = [1.4, 2.0];
+  const settle = (a: number) => Math.min(WIDE[1], Math.max(WIDE[0], a));
+  // The grid to cut the area into: the one whose cells are already card-shaped
+  // wins, because then nothing is left over; among those, the one nearest a
+  // name card.
   let best = { cols: 1, rows: per, off: Infinity };
   for (let cols = 1; cols <= per; cols++) {
     const rows = Math.ceil(per / cols);
-    const off = Math.abs(Math.log((area.w / cols) / (area.h / rows) / CARD));
+    const a = (area.w / cols) / (area.h / rows);
+    const off = Math.abs(Math.log(a / settle(a))) * 10
+      + Math.abs(Math.log(settle(a) / CARD));
     if (off < best.off) best = { cols, rows, off };
   }
   const { cols, rows } = best;
   const out: Primitive[] = [];
   const cw = area.w / cols, ch = area.h / rows;
-  // A card is a name card, whatever room it is given. Stretched to fill the
-  // cell it stops being the thing that goes in the sleeve; so it keeps its
-  // shape, takes the biggest size that fits, and sits in the middle of what
-  // it was given. The room left over is for whatever else is on the surface.
-  const fit = Math.min(cw, ch * CARD);
-  const cardW = fit, cardH = fit / CARD;
+  // Fills its cell when the cell is already lying down; keeps a card's shape
+  // and centres itself when it is not.
+  const a = settle(cw / ch);
+  const cardW = Math.min(cw, ch * a);
+  const cardH = cardW / a;
   for (let i = 0; i < per; i++) {
     const col = i % cols, row = Math.floor(i / cols);
     const cell = {
@@ -360,8 +366,6 @@ export function drawSwatch(area: Rect, layout: Layout): Primitive[] {
       w: cardW, h: cardH,
     };
     out.push(...oneSwatch(cell, layout, i));
-    // Where one card ends and the next begins. They are separate pieces of
-    // paper in the end, whether they are cut apart or not.
     // Where one card ends and the next begins, drawn round the card itself:
     // they are separate pieces of paper in the end, whether they are cut
     // apart or not.

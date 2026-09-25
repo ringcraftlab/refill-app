@@ -420,11 +420,13 @@ await page.locator('.sheet').getByRole('button', { name: '増やす' }).first().
 await page.locator('.sheet').getByRole('button', { name: '増やす' }).first().click();
 await page.waitForTimeout(400);
 check(await cardsOf() > one, `枚数で増やせる（${one} → ${await cardsOf()}枚が見えている）`);
+// Not a name card to the millimetre -- a card-shaped thing. It lies down and
+// it settles into the room it is given, between 1.4 and 2.0 wide to tall.
 const shape = await page.locator('.page rect[stroke-dasharray]').first().evaluate(
   el => (+el.getAttribute('width')) / (+el.getAttribute('height')));
 check(
-  Math.abs(shape - 91 / 55) < 0.05,
-  `カードは名刺の形のまま（1:${shape.toFixed(2)}）`,
+  shape >= 1.39 && shape <= 2.01,
+  `カードは横長のまま枠になじむ（1:${shape.toFixed(2)}）`,
 );
 await page.locator('.sheet').getByRole('button', { name: 'つける' }).click();
 await page.waitForTimeout(400);
