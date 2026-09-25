@@ -36,7 +36,7 @@ const VARIANT: Record<ButtonVariant, string> = {
   danger: 'rounded-[10px] border border-line-strong bg-white p-3 text-[13px] font-semibold text-danger',
   icon: 'px-1 text-lg leading-none',
   chip: 'flex shrink-0 items-center gap-1 rounded-full border border-line-strong bg-white px-2.5 py-1 text-[11px] font-normal text-label',
-  edge: 'size-9 rounded-full border border-line-strong bg-white text-[17px] leading-none text-muted shadow-[0_2px_6px_rgba(58,54,46,0.16)] hover:border-accent hover:text-accent disabled:opacity-35',
+  edge: 'size-9 rounded-full border border-line-strong bg-white text-[17px] leading-none text-muted shadow-[0_2px_6px_rgba(35,37,45,0.16)] hover:border-accent hover:text-accent disabled:opacity-35',
 };
 
 interface Props extends ButtonHTMLAttributes<HTMLButtonElement> {

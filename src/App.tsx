@@ -503,16 +503,21 @@ const SHEET_SLOT = {
 // A colour per size, spread around the wheel rather than clustered: the four
 // common sizes take four plain hues, and the rest fill the gaps. Muted enough
 // to still look like paper on the warm background.
+// Nine colours a glance can tell apart, at full strength for the line and
+// weak for the fill: the line is the size's badge, the fill is paper seen
+// through it, and a drawn sheet that is as loud as its own label stops looking
+// like paper. Between two sizes that would otherwise share a colour, the more
+// common one keeps the plainer name for it (Mini6 amber, M5スクエア burnt).
 const SIZE_TINT: Record<RefillSize, { fill: string; line: string }> = {
-  M5: { fill: '#F2D2C4', line: '#C2765A' },
-  M6: { fill: '#F8E4BC', line: '#C09442' },
-  BIBLE: { fill: '#D2E1F2', line: '#6B8FB8' },
-  A5: { fill: '#E0D9F2', line: '#7C6FB0' },
-  MINI3: { fill: '#CCE4E1', line: '#4F948D' },
-  CARD3: { fill: '#D9E8CB', line: '#74965A' },
-  M5SQ: { fill: '#E6DAC8', line: '#9C8058' },
-  NARROW: { fill: '#F0D4E2', line: '#AD6A8F' },
-  A5SLIM: { fill: '#E3DBDB', line: '#8E7B7B' },
+  M5: { fill: '#FCDADF', line: '#E23B51' },
+  M6: { fill: '#FDE9C6', line: '#EE9F1B' },
+  BIBLE: { fill: '#D9E9FC', line: '#2E8AE0' },
+  A5: { fill: '#E4DDFB', line: '#7A56E0' },
+  MINI3: { fill: '#CFEFDB', line: '#16A34A' },
+  CARD3: { fill: '#E3F4CE', line: '#74B830' },
+  M5SQ: { fill: '#FCE0C9', line: '#E8720C' },
+  NARROW: { fill: '#FCD9E9', line: '#E0407F' },
+  A5SLIM: { fill: '#FBEDC0', line: '#D2A007' },
 };
 // One name per size: the one people say. Three of these used to be a code
 // with its reading underneath -- M5 over マイクロ5 -- which spent a line of
@@ -574,7 +579,7 @@ const nameSize = (name: string) =>
 // crisp ring around the first read as a stroke rather than as light, so there
 // is one wide soft shadow in the colour and then the card's own, which stays
 // so a selected card still sits on the page rather than floating off it.
-const CARD_SHADOW = '0 1px 3px rgba(58,54,46,0.07)';
+const CARD_SHADOW = '0 1px 3px rgba(35,37,45,0.07)';
 const cardSkin = (on: boolean, line: string) =>
   ({
     borderColor: on ? line : 'var(--color-line)',
@@ -2286,19 +2291,19 @@ function CanvasScreen({ book, at, nth, setBook, onBack, goTo, print, setPrint, o
               // is the shadow of the box, which is not what the paper is.
               className={`page relative shrink-0 touch-none overflow-hidden bg-white ${
                 pg.notch ? 'notched' : folded
-                  ? 'shadow-[0_10px_30px_rgba(58,54,46,0.10)]'
-                  : 'rounded-sm shadow-[0_10px_30px_rgba(58,54,46,0.16)]'
+                  ? 'shadow-[0_10px_30px_rgba(35,37,45,0.10)]'
+                  : 'rounded-sm shadow-[0_10px_30px_rgba(35,37,45,0.16)]'
               }`}
               style={{
                 width: pageW(i), height: pageH(i),
                 clipPath: notchClip(pg),
-                filter: pg.notch ? 'drop-shadow(0 6px 14px rgba(58,54,46,0.14))' : undefined,
+                filter: pg.notch ? 'drop-shadow(0 6px 14px rgba(35,37,45,0.14))' : undefined,
               }}
             >
               <PageSvg page={pages[i]} scale={scale} showGuides />
               {pg.spanRect && (
                 <button
-                  className="hitbox absolute cursor-pointer p-0 hover:bg-[rgba(193,115,74,0.05)]"
+                  className="hitbox absolute cursor-pointer p-0 hover:bg-[rgba(224,106,15,0.05)]"
                   onClick={() => setSheet('spanning')}
                   style={{
                     left: pg.spanRect.x * scale, top: pg.spanRect.y * scale,
@@ -2341,7 +2346,7 @@ function CanvasScreen({ book, at, nth, setBook, onBack, goTo, print, setPrint, o
             return (
               <div
                 key={b.key}
-                className={`hitbox part absolute cursor-grab touch-none p-0 hover:bg-[rgba(193,115,74,0.05)] active:cursor-grabbing active:bg-[rgba(193,115,74,0.08)] ${
+                className={`hitbox part absolute cursor-grab touch-none p-0 hover:bg-[rgba(224,106,15,0.05)] active:cursor-grabbing active:bg-[rgba(224,106,15,0.08)] ${
                   waiting ? 'flex items-center justify-center rounded-[3px] border border-dashed border-line-strong' : ''
                 }`}
                 style={{ left: b.left, top: b.top, width: b.width, height: b.height }}
@@ -2454,7 +2459,7 @@ function CanvasScreen({ book, at, nth, setBook, onBack, goTo, print, setPrint, o
               className={`stamp relative flex w-[60px] shrink-0 cursor-grab touch-pan-x flex-col items-center gap-[3px] rounded-xl border-[1.5px] py-[8px] text-[9px] font-semibold active:cursor-grabbing lg:w-full lg:gap-1 lg:py-3 lg:text-[11px] ${
                 idx >= 0
                   ? 'border-accent bg-accent-soft'
-                  : 'border-line bg-white hover:border-line-strong hover:shadow-[0_2px_8px_rgba(58,54,46,0.12)]'
+                  : 'border-line bg-white hover:border-line-strong hover:shadow-[0_2px_8px_rgba(35,37,45,0.12)]'
               }`}
               onPointerDown={e => startDrag(e, idx >= 0 && traySelected.length > 1 ? [...traySelected] : [t.kind], null)}
               onPointerMove={moveDrag}
@@ -2845,7 +2850,7 @@ function RoundButton({ left, top, label, onClick, hook = 'clearmini', children }
 }) {
   return (
     <button
-      className={`${hook} absolute z-[5] size-4 rounded-full bg-[rgba(58,54,46,0.34)] p-0 text-[10px] leading-4 text-white hover:bg-[rgba(58,54,46,0.55)] active:bg-[rgba(58,54,46,0.7)]`}
+      className={`${hook} absolute z-[5] size-4 rounded-full bg-[rgba(35,37,45,0.34)] p-0 text-[10px] leading-4 text-white hover:bg-[rgba(35,37,45,0.55)] active:bg-[rgba(35,37,45,0.7)]`}
       style={{ left, top }}
       onClick={onClick}
       aria-label={label}
@@ -2877,7 +2882,7 @@ function DividerHandle({ box, teach, onDown, onMove, onUp }: {
       <i className={`block rounded-sm bg-line-strong group-hover:bg-accent group-active:bg-accent ${
         horizontal ? 'h-[3px] w-full' : 'h-full w-[3px]'
       }`} />
-      <b className={`absolute flex items-center justify-center gap-0.5 rounded-[7px] border bg-white shadow-[0_1px_3px_rgba(58,54,46,0.18)] group-hover:border-accent group-active:border-accent ${
+      <b className={`absolute flex items-center justify-center gap-0.5 rounded-[7px] border bg-white shadow-[0_1px_3px_rgba(35,37,45,0.18)] group-hover:border-accent group-active:border-accent ${
         horizontal ? 'h-[13px] w-[34px] flex-col' : 'h-[34px] w-[13px]'
       } ${teach ? 'animate-knob border-accent' : 'border-line-strong'}`}>
         {[0, 1].map(i => (

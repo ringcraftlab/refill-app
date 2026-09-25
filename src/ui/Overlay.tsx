@@ -56,7 +56,7 @@ export function Modal({ title, onClose, children }: {
 }) {
   return (
     <>
-      <div className="modal-scrim absolute inset-0 z-40 bg-[rgba(58,54,46,0.34)]" onClick={onClose} />
+      <div className="modal-scrim absolute inset-0 z-40 bg-[rgba(35,37,45,0.34)]" onClick={onClose} />
       <div className="modal absolute left-1/2 top-1/2 z-[41] flex max-h-[82%] w-[min(360px,calc(100%-32px))] -translate-x-1/2 -translate-y-1/2 flex-col gap-2.5 overflow-y-auto rounded-2xl bg-white px-4 pb-4 pt-3.5 shadow-[0_12px_32px_rgba(0,0,0,0.2)]">
         <div className="flex shrink-0 items-center gap-2">
           <h2 className="m-0 text-sm font-bold">{title}</h2>
@@ -105,5 +105,5 @@ export function Toast({ children }: { children: ReactNode }) {
 }
 
 function Scrim({ onClick }: { onClick: () => void }) {
-  return <div className="scrim absolute inset-0 z-30 bg-[rgba(58,54,46,0.28)]" onClick={onClick} />;
+  return <div className="scrim absolute inset-0 z-30 bg-[rgba(35,37,45,0.28)]" onClick={onClick} />;
 }
