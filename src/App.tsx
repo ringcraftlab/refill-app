@@ -634,52 +634,12 @@ const HOLE_RING_PX = 0.9;
 // would break out through the edge of the paper it is punched in.
 const HOLE_MIN_PX = 1;
 
-// The faint ruling inside a drawn sheet: a month's columns and weeks. On the
-// form picker this is the choice itself -- 「左右セットで1ヶ月分」 is a claim in
-// words, and the same thing drawn is the thing. Lines only, no dates: at this
-// size a date would be a smudge, and the shape of the grid is what differs.
-function PageInk({ box, cols, rows, color, pen }: {
-  box: { x: number; y: number; w: number; h: number };
-  cols: number; rows: number;
-  color: string; pen: (onScreen: number) => number;
-}) {
-  const at = (i: number, from: number, span: number, of: number) => from + (span / of) * i;
-  return (
-    <g stroke={color} strokeWidth={pen(0.7)} opacity={0.34}>
-      {Array.from({ length: cols - 1 }, (_, i) => (
-        <line
-          key={`v${i}`}
-          x1={at(i + 1, box.x, box.w, cols)} y1={box.y}
-          x2={at(i + 1, box.x, box.w, cols)} y2={box.y + box.h}
-        />
-      ))}
-      {Array.from({ length: rows - 1 }, (_, i) => (
-        <line
-          key={`h${i}`}
-          x1={box.x} y1={at(i + 1, box.y, box.h, rows)}
-          x2={box.x + box.w} y2={at(i + 1, box.y, box.h, rows)}
-        />
-      ))}
-    </g>
-  );
-}
-
-// The area of a sheet a part is drawn on: everything but the margin the rings
-// run down (or across the top, on the one size bound that way) and a little
-// air at the other edges.
-function inkBox(size: SizeSpec, flip: boolean) {
-  const m = size.ringMarginMm, pad = 2.5;
-  return size.ringsOn === 'top'
-    ? { x: pad, y: flip ? pad : m, w: size.widthMm - pad * 2, h: size.heightMm - m - pad }
-    : { x: flip ? pad : m, y: pad, w: size.widthMm - m - pad, h: size.heightMm - pad * 2 };
-}
-
-// The binder, drawn where it grips the paper: one bar per hole, from the edge
-// through the hole and a little past it, with the punched hole left white on
-// top. A refill is a thing that gets bound, and a picture of one that shows
-// only the holes leaves the reader to supply the binder -- which is exactly
-// what makes a spread hard to read, because the two pages of a spread are two
-// sheets held by the same rings in the middle.
+// The binder, drawn where it grips the paper: one bar per hole, from a little
+// outside the edge through the hole and a little past it, with the punched
+// hole left white on top. A refill is a thing that gets bound, and a picture
+// of one that shows only the holes leaves the reader to supply the binder --
+// which is what made a spread hard to read, because the two pages of a spread
+// are two sheets held by the same rings in the middle.
 function Rings({ size, color, flip, pen, holeR }: {
   size: SizeSpec; color: string; flip: boolean;
   pen: (onScreen: number) => number; holeR: number;
@@ -706,9 +666,9 @@ function Rings({ size, color, flip, pen, holeR }: {
   );
 }
 
-function SizeIcon({ size, color, flip = false, scale = SHEET_SCALE, ink, rings = false }: {
+function SizeIcon({ size, color, flip = false, scale = SHEET_SCALE, rings = false }: {
   size: SizeSpec; color: string; flip?: boolean;
-  scale?: number; ink?: { cols: number; rows: number }; rings?: boolean;
+  scale?: number; rings?: boolean;
 }) {
   const k = scale;
   const pen = (onScreen: number) => onScreen / k;
@@ -741,7 +701,6 @@ function SizeIcon({ size, color, flip = false, scale = SHEET_SCALE, ink, rings =
         width={size.widthMm - inset * 2} height={size.heightMm - inset * 2}
         rx={pen(2)} fill={PAPER} stroke={color} strokeWidth={pen(OUTLINE_PX)}
       />
-      {ink && <PageInk box={inkBox(size, flip)} cols={ink.cols} rows={ink.rows} color={color} pen={pen} />}
       {rings && <Rings size={size} color={color} flip={flip} pen={pen} holeR={hole} />}
       {holeCentres(size.holes).map((at, i) => (
         <circle
@@ -928,9 +887,12 @@ function SidesScreen({ size, spread, fold, foldGrain, onPick, onBack, onConfirm 
   // already this ruler -- shading it makes the comparison visible instead of
   // leaving it to be noticed. Plain grey, not ruled: a field of dots behind a
   // ruled sheet is two grids arguing, and the one that matters is the sheet's.
+  // A margin of table around even the widest sheet: with the box cut exactly
+  // to the widest one, that card's grey never showed, and a ruler you cannot
+  // see on the longest thing you are measuring is not a ruler.
   const field = {
-    width: (widestMm + ringOut(spec)) * k,
-    height: tallestMm * k,
+    width: (widestMm + ringOut(spec)) * k + 16,
+    height: tallestMm * k + 12,
     backgroundColor: 'rgba(38,36,31,0.05)',
   } as const;
   // How wide the thing is when it is open, said under the drawing as the line
@@ -960,14 +922,10 @@ function SidesScreen({ size, spread, fold, foldGrain, onPick, onBack, onConfirm 
           middle is the one ring the two of them hang on. */}
       <span className="ruler flex items-center justify-center rounded-[10px]" style={field}>
         {choice.plan
-          ? <FoldIcon size={spec} color={color} plan={choice.plan} scale={k} ink rings />
+          ? <FoldIcon size={spec} color={color} plan={choice.plan} scale={k} rings />
           : choice.sheets!.map((flip, i) => (
             <SizeIcon
               key={i} size={spec} color={color} flip={flip} scale={k} rings
-              // A month across a spread is an index column and three days on
-              // the left, four days on the right -- which is what the words
-              // under the card had to say before the drawing said it.
-              ink={{ cols: choice.sheets!.length > 1 ? 4 : 7, rows: 6 }}
             />
           ))}
       </span>
@@ -1046,9 +1004,9 @@ function SidesScreen({ size, spread, fold, foldGrain, onPick, onBack, onConfirm 
 // The strip a fold unfolds into, drawn at the picker's scale so it can be
 // compared with the pages above it. Only the first panel is punched, and the
 // creases are where the paper actually bends.
-function FoldIcon({ size, color, plan, scale = SHEET_SCALE, ink = false, rings = false }: {
+function FoldIcon({ size, color, plan, scale = SHEET_SCALE, rings = false }: {
   size: SizeSpec; color: string; plan: FoldPlan;
-  scale?: number; ink?: boolean; rings?: boolean;
+  scale?: number; rings?: boolean;
 }) {
   const k = scale;
   const pen = (onScreen: number) => onScreen / k;
@@ -1084,28 +1042,10 @@ function FoldIcon({ size, color, plan, scale = SHEET_SCALE, ink = false, rings =
           rx={pen(2)} fill={PAPER} stroke={color} strokeWidth={pen(OUTLINE_PX)}
         />
       )}
-      {/* Each panel holds its own part, so each is ruled: a strip with one
-          long grid across it would be a different thing entirely. */}
-      {ink && panels.map((p, i) => {
-        const pad = 2.5;
-        const head = i === 0 ? size.ringMarginMm : pad;
-        return (
-          <PageInk
-            key={`ink${p.atMm}`}
-            // The L's corner is cut out of the inner panels only: the head is
-            // the full width of the strip, and ruling it as if it were not
-            // put lines where there is no paper.
-            box={down
-              ? { x: (i === 0 ? 0 : cut) + pad, y: p.atMm + head, w: W - (i === 0 ? 0 : cut) - pad * 2, h: p.widthMm - head - pad }
-              : { x: p.atMm + head, y: pad, w: p.widthMm - head - pad, h: H - pad * 2 }}
-            cols={1} rows={5} color={color} pen={pen}
-          />
-        );
-      })}
       {/* Which panel is which. A strip with two dashed lines on it says there
           are three of something; the numbers say the three are the pages you
           will be laying parts on. */}
-      {ink && panels.length > 1 && panels.map((p, i) => (
+      {panels.length > 1 && panels.map((p, i) => (
         <text
           key={`n${p.atMm}`}
           x={down ? W / 2 : p.atMm + p.widthMm / 2}
