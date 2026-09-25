@@ -610,14 +610,19 @@ const nameSize = (name: string) =>
 //
 // The border is the only hard edge; everything outside it is blur. A second
 // crisp ring around the first read as a stroke rather than as light, so there
-// is one wide soft shadow in the colour and then the card's own, which stays
-// so a selected card still sits on the page rather than floating off it.
+// is one soft shadow in the colour and then the card's own, which stays so a
+// selected card still sits on the page rather than floating off it.
+//
+// It was 22px of blur spread 6px wide at 36% -- weather around the card
+// rather than a mark on it, and on the picker, where the chosen card sits
+// among others, the haze reached them too. Enough to see, not enough to be
+// the loudest thing on the screen.
 const CARD_SHADOW = '0 1px 3px rgba(38,36,31,0.07)';
 const cardSkin = (on: boolean, line: string) =>
   ({
     borderColor: on ? line : 'var(--color-line)',
     background: '#fff',
-    boxShadow: on ? `0 0 22px 6px ${line}5C, ${CARD_SHADOW}` : CARD_SHADOW,
+    boxShadow: on ? `0 0 8px 0 ${line}33, ${CARD_SHADOW}` : CARD_SHADOW,
   }) as const;
 
 // The paper is in millimetres and scaled as a whole to fit the box -- that is
@@ -950,6 +955,13 @@ function SidesScreen({ size, spread, fold, foldGrain, onPick, onBack, onConfirm 
 
   return (
     <div className={PICK_SCREEN}>
+      {/* The card below is the size and can be pressed to change it, but a way
+          back has to be where a way back is looked for. Leaving it to the card
+          meant leaving it to be discovered, and it was not. */}
+      <Button variant="chip" className="self-start" onClick={onBack}>
+        <span className="text-[13px] leading-none">←</span>
+        サイズを選び直す
+      </Button>
       <div>
         <h1 className="text-[19px] font-bold">ページ構成を選ぶ</h1>
         <p className="m-0 mt-1 text-[12px] text-muted">この紙を、どう開く形にしますか</p>
@@ -981,9 +993,7 @@ function SidesScreen({ size, spread, fold, foldGrain, onPick, onBack, onConfirm 
         <span className="flex shrink-0 items-center justify-center" style={SHEET_SLOT}>
           <SizeIcon size={spec} color={color} rings />
         </span>
-        <span className="flex shrink-0 items-center gap-0.5 text-[10px] text-muted">
-          変更<span aria-hidden="true" className="text-[13px] leading-none text-faint">›</span>
-        </span>
+        <span className="shrink-0 pr-0.5 text-[10px] text-faint">変更</span>
       </button>
       {/* Side by side, on the same two-column grid as the picker. A comparison
           reads across, not down: stacked, these were the same drawing seen
