@@ -626,7 +626,7 @@ const cardSkin = (on: boolean, line: string) =>
 // on A5, so the bigger the sheet the fainter its own outline, and A5 came out
 // as a wash with no edge and no visible punch at all. `pen` turns a thickness
 // on screen back into millimetres, which gives all nine sheets one line.
-const OUTLINE_PX = 1.2;
+const OUTLINE_PX = 0.8;
 const HOLE_RING_PX = 0.9;
 // The punch shrinks the same way: 5.5mm on A5 is a 0.7px dot. A hole keeps
 // its true size wherever that still reads, and stops shrinking below a dot
@@ -923,16 +923,15 @@ function SidesScreen({ size, spread, fold, foldGrain, onPick, onBack, onConfirm 
   const widestMm = Math.max(...all.map(c => (c.plan ? c.plan.sheetWmm : spec.widthMm * c.sheets!.length)));
   const tallestMm = Math.max(...all.map(c => (c.plan ? c.plan.sheetHmm : spec.heightMm)));
   const k = Math.min(SHEET_SCALE * 2.2, (wide ? 190 : 140) / widestMm);
-  // The box the sheets are drawn in, ruled like graph paper and the same on
-  // every card: one constant area of table, so a sheet that fills more of it
-  // is a bigger sheet. The slot was already this ruler -- drawing it makes the
-  // comparison visible instead of leaving it to be noticed.
+  // The box the sheets are drawn in: one constant area, the same on every
+  // card, so a sheet that fills more of it is a bigger sheet. The slot was
+  // already this ruler -- shading it makes the comparison visible instead of
+  // leaving it to be noticed. Plain grey, not ruled: a field of dots behind a
+  // ruled sheet is two grids arguing, and the one that matters is the sheet's.
   const field = {
     width: (widestMm + ringOut(spec)) * k,
     height: tallestMm * k,
-    backgroundColor: 'rgba(38,36,31,0.022)',
-    backgroundImage: 'radial-gradient(var(--color-line-strong) 1px, transparent 1px)',
-    backgroundSize: '7px 7px',
+    backgroundColor: 'rgba(38,36,31,0.05)',
   } as const;
   // How wide the thing is when it is open, said under the drawing as the line
   // anyone measuring it would draw. The L folds downward, where a line under
