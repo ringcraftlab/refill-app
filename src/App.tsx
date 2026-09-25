@@ -515,17 +515,24 @@ const SHEET_SLOT = {
 // say paper: a sheet is white, and a sheet flooded with its own label colour
 // stops being paper and becomes a swatch. The colour belongs on the rings,
 // where it is the binder holding the paper.
-const SIZE_TINT: Record<RefillSize, { fill: string; line: string }> = {
-  M5: { fill: '#F6EFF0', line: '#C93A40' },
-  M6: { fill: '#F9F2EC', line: '#DE9610' },
-  BIBLE: { fill: '#F3F8FD', line: '#65ACE4' },
-  A5: { fill: '#F6F2F7', line: '#9460A0' },
-  MINI3: { fill: '#F2F7F3', line: '#56A764' },
-  CARD3: { fill: '#F8FAEF', line: '#A0C238' },
-  M5SQ: { fill: '#FBF3EC', line: '#D16B16' },
-  NARROW: { fill: '#FBF1F6', line: '#CC528B' },
-  A5SLIM: { fill: '#FDFBEB', line: '#F2CF01' },
+const SIZE_COLOR: Record<RefillSize, string> = {
+  M5: '#C93A40',
+  M6: '#DE9610',
+  BIBLE: '#65ACE4',
+  A5: '#9460A0',
+  MINI3: '#56A764',
+  CARD3: '#A0C238',
+  M5SQ: '#D16B16',
+  NARROW: '#CC528B',
+  A5SLIM: '#F2CF01',
 };
+
+// Paper is white. It was drawn in a wash of the size's own colour, which made
+// every sheet on the picker a swatch of its label rather than a sheet -- and
+// the app prints on white, so a tinted sheet on screen was a promise the
+// paper cannot keep. The colour goes on the rings, the outline and the bar,
+// where it stands for the binder and the badge rather than the paper.
+const PAPER = '#fff';
 
 // The same colour, dark enough to be read as words on white. A colour can be
 // a bar, an outline or a fill at any lightness, but 「6穴」 set in サンイエロー
@@ -543,7 +550,7 @@ const readable = (hex: string, ratio = 4): string => {
   return `#${c.map(v => Math.round(v).toString(16).padStart(2, '0')).join('')}`;
 };
 const SIZE_WORD: Record<string, string> = Object.fromEntries(
-  Object.entries(SIZE_TINT).map(([id, t]) => [id, readable(t.line)]),
+  Object.entries(SIZE_COLOR).map(([id, c]) => [id, readable(c)]),
 );
 // One name per size: the one people say. Three of these used to be a code
 // with its reading underneath -- M5 over マイクロ5 -- which spent a line of
@@ -631,14 +638,14 @@ const HOLE_MIN_PX = 1;
 // form picker this is the choice itself -- 「左右セットで1ヶ月分」 is a claim in
 // words, and the same thing drawn is the thing. Lines only, no dates: at this
 // size a date would be a smudge, and the shape of the grid is what differs.
-function PageInk({ box, cols, rows, tint, pen }: {
+function PageInk({ box, cols, rows, color, pen }: {
   box: { x: number; y: number; w: number; h: number };
   cols: number; rows: number;
-  tint: { line: string }; pen: (onScreen: number) => number;
+  color: string; pen: (onScreen: number) => number;
 }) {
   const at = (i: number, from: number, span: number, of: number) => from + (span / of) * i;
   return (
-    <g stroke={tint.line} strokeWidth={pen(0.7)} opacity={0.34}>
+    <g stroke={color} strokeWidth={pen(0.7)} opacity={0.34}>
       {Array.from({ length: cols - 1 }, (_, i) => (
         <line
           key={`v${i}`}
@@ -673,8 +680,8 @@ function inkBox(size: SizeSpec, flip: boolean) {
 // only the holes leaves the reader to supply the binder -- which is exactly
 // what makes a spread hard to read, because the two pages of a spread are two
 // sheets held by the same rings in the middle.
-function Rings({ size, tint, flip, pen, holeR }: {
-  size: SizeSpec; tint: { fill: string; line: string }; flip: boolean;
+function Rings({ size, color, flip, pen, holeR }: {
+  size: SizeSpec; color: string; flip: boolean;
   pen: (onScreen: number) => number; holeR: number;
 }) {
   const onTop = size.ringsOn === 'top';
@@ -684,7 +691,7 @@ function Rings({ size, tint, flip, pen, holeR }: {
   const thick = Math.max(holeR * 2.4, pen(3));
   const from = flip ? far - reach : -over;
   return (
-    <g fill={tint.line}>
+    <g fill={color}>
       {holeCentres(size.holes).map((at, i) => (
         <rect
           key={i}
@@ -699,8 +706,8 @@ function Rings({ size, tint, flip, pen, holeR }: {
   );
 }
 
-function SizeIcon({ size, tint, flip = false, scale = SHEET_SCALE, ink, rings = false }: {
-  size: SizeSpec; tint: { fill: string; line: string }; flip?: boolean;
+function SizeIcon({ size, color, flip = false, scale = SHEET_SCALE, ink, rings = false }: {
+  size: SizeSpec; color: string; flip?: boolean;
   scale?: number; ink?: { cols: number; rows: number }; rings?: boolean;
 }) {
   const k = scale;
@@ -732,16 +739,16 @@ function SizeIcon({ size, tint, flip = false, scale = SHEET_SCALE, ink, rings = 
       <rect
         x={inset} y={inset}
         width={size.widthMm - inset * 2} height={size.heightMm - inset * 2}
-        rx={pen(2)} fill={tint.fill} stroke={tint.line} strokeWidth={pen(OUTLINE_PX)}
+        rx={pen(2)} fill={PAPER} stroke={color} strokeWidth={pen(OUTLINE_PX)}
       />
-      {ink && <PageInk box={inkBox(size, flip)} cols={ink.cols} rows={ink.rows} tint={tint} pen={pen} />}
-      {rings && <Rings size={size} tint={tint} flip={flip} pen={pen} holeR={hole} />}
+      {ink && <PageInk box={inkBox(size, flip)} cols={ink.cols} rows={ink.rows} color={color} pen={pen} />}
+      {rings && <Rings size={size} color={color} flip={flip} pen={pen} holeR={hole} />}
       {holeCentres(size.holes).map((at, i) => (
         <circle
           key={i}
           cx={onTop ? at : band} cy={onTop ? band : at}
           r={hole}
-          fill="#fff" stroke={tint.line} strokeWidth={pen(HOLE_RING_PX)}
+          fill="#fff" stroke={color} strokeWidth={pen(HOLE_RING_PX)}
         />
       ))}
     </svg>
@@ -781,7 +788,7 @@ function SizeScreen({ selected, onPick }: { selected: RefillSize; onPick: (s: Re
                         key={id}
                         onClick={() => onPick(id)}
                         className="sizerow relative flex min-w-0 items-center gap-1 overflow-hidden rounded-[18px] border-[1.5px] py-2 pl-3 pr-1 text-left"
-                        style={cardSkin(selected === id, SIZE_TINT[id].line)}
+                        style={cardSkin(selected === id, SIZE_COLOR[id])}
                         aria-pressed={selected === id}
                       >
                         {/* A colour a glance can learn the size by, before the
@@ -791,7 +798,7 @@ function SizeScreen({ selected, onPick }: { selected: RefillSize; onPick: (s: Re
                             card's edge. */}
                         <span
                           className="absolute inset-y-0 left-0 w-1.5"
-                          style={{ background: SIZE_TINT[id].line }}
+                          style={{ background: SIZE_COLOR[id] }}
                         />
                         <span className="flex min-w-0 flex-1 flex-col gap-0.5">
                           <strong className={`truncate font-semibold leading-tight ${nameSize(SIZE_NAME[id])}`}>
@@ -813,7 +820,7 @@ function SizeScreen({ selected, onPick }: { selected: RefillSize; onPick: (s: Re
                           </span>
                         </span>
                         <span className="flex shrink-0 items-center justify-center" style={SHEET_SLOT}>
-                          <SizeIcon size={SIZES[id]} tint={SIZE_TINT[id]} rings />
+                          <SizeIcon size={SIZES[id]} color={SIZE_COLOR[id]} rings />
                         </span>
                         {/* Decoration: it says "this opens something", which
                             the button already says, so it stays out of the
@@ -854,7 +861,7 @@ function SidesScreen({ size, spread, fold, foldGrain, onPick, onBack, onConfirm 
 }) {
   const wide = useWide();
   const spec = SIZES[size];
-  const tint = SIZE_TINT[size];
+  const color = SIZE_COLOR[size];
   const flat = fold <= 1;
   const grains = foldGrainsOf(spec);
   const grain = foldGrain && grains.includes(foldGrain) ? foldGrain : grains[0];
@@ -945,7 +952,7 @@ function SidesScreen({ size, spread, fold, foldGrain, onPick, onBack, onConfirm 
     <button
       key={choice.key}
       className="card flex flex-col items-center gap-2 rounded-[18px] border-[1.5px] px-2 py-3 text-center"
-      style={cardSkin(choice.on, tint.line)}
+      style={cardSkin(choice.on, color)}
       aria-pressed={choice.on}
       onClick={() => onPick(choice.pick)}
     >
@@ -954,10 +961,10 @@ function SidesScreen({ size, spread, fold, foldGrain, onPick, onBack, onConfirm 
           middle is the one ring the two of them hang on. */}
       <span className="ruler flex items-center justify-center rounded-[10px]" style={field}>
         {choice.plan
-          ? <FoldIcon size={spec} tint={tint} plan={choice.plan} scale={k} ink rings />
+          ? <FoldIcon size={spec} color={color} plan={choice.plan} scale={k} ink rings />
           : choice.sheets!.map((flip, i) => (
             <SizeIcon
-              key={i} size={spec} tint={tint} flip={flip} scale={k} rings
+              key={i} size={spec} color={color} flip={flip} scale={k} rings
               // A month across a spread is an index column and three days on
               // the left, four days on the right -- which is what the words
               // under the card had to say before the drawing said it.
@@ -966,7 +973,7 @@ function SidesScreen({ size, spread, fold, foldGrain, onPick, onBack, onConfirm 
           ))}
       </span>
       {span(choice) && (
-        <span className="dim -mt-1 flex flex-col items-center" style={{ color: tint.line }}>
+        <span className="dim -mt-1 flex flex-col items-center" style={{ color: color }}>
           <svg width={Math.round(span(choice)!.mm * k)} height={7} aria-hidden="true" className="block">
             <g stroke="currentColor" strokeWidth={1}>
               <line x1={0.5} y1={3.5} x2={span(choice)!.mm * k - 0.5} y2={3.5} />
@@ -1040,8 +1047,8 @@ function SidesScreen({ size, spread, fold, foldGrain, onPick, onBack, onConfirm 
 // The strip a fold unfolds into, drawn at the picker's scale so it can be
 // compared with the pages above it. Only the first panel is punched, and the
 // creases are where the paper actually bends.
-function FoldIcon({ size, tint, plan, scale = SHEET_SCALE, ink = false, rings = false }: {
-  size: SizeSpec; tint: { fill: string; line: string }; plan: FoldPlan;
+function FoldIcon({ size, color, plan, scale = SHEET_SCALE, ink = false, rings = false }: {
+  size: SizeSpec; color: string; plan: FoldPlan;
   scale?: number; ink?: boolean; rings?: boolean;
 }) {
   const k = scale;
@@ -1070,12 +1077,12 @@ function FoldIcon({ size, tint, plan, scale = SHEET_SCALE, ink = false, rings = 
       aria-hidden="true"
     >
       {down ? (
-        <path d={outline} fill={tint.fill} stroke={tint.line} strokeWidth={pen(OUTLINE_PX)} strokeLinejoin="round" />
+        <path d={outline} fill={PAPER} stroke={color} strokeWidth={pen(OUTLINE_PX)} strokeLinejoin="round" />
       ) : (
         <rect
           x={line} y={line}
           width={W - line * 2} height={H - line * 2}
-          rx={pen(2)} fill={tint.fill} stroke={tint.line} strokeWidth={pen(OUTLINE_PX)}
+          rx={pen(2)} fill={PAPER} stroke={color} strokeWidth={pen(OUTLINE_PX)}
         />
       )}
       {/* Each panel holds its own part, so each is ruled: a strip with one
@@ -1092,7 +1099,7 @@ function FoldIcon({ size, tint, plan, scale = SHEET_SCALE, ink = false, rings = 
             box={down
               ? { x: (i === 0 ? 0 : cut) + pad, y: p.atMm + head, w: W - (i === 0 ? 0 : cut) - pad * 2, h: p.widthMm - head - pad }
               : { x: p.atMm + head, y: pad, w: p.widthMm - head - pad, h: H - pad * 2 }}
-            cols={1} rows={5} tint={tint} pen={pen}
+            cols={1} rows={5} color={color} pen={pen}
           />
         );
       })}
@@ -1104,7 +1111,7 @@ function FoldIcon({ size, tint, plan, scale = SHEET_SCALE, ink = false, rings = 
           key={`n${p.atMm}`}
           x={down ? W / 2 : p.atMm + p.widthMm / 2}
           y={down ? p.atMm + p.widthMm / 2 : H - pen(4)}
-          fill={tint.line} opacity={0.75}
+          fill={color} opacity={0.75}
           fontSize={pen(8)} fontWeight={700} textAnchor="middle"
         >
           {i + 1}
@@ -1115,11 +1122,11 @@ function FoldIcon({ size, tint, plan, scale = SHEET_SCALE, ink = false, rings = 
           key={p.atMm}
           x1={down ? cut : p.atMm} y1={down ? p.atMm : 0}
           x2={down ? W : p.atMm} y2={down ? p.atMm : H}
-          stroke={tint.line} strokeWidth={pen(OUTLINE_PX * 0.8)} strokeDasharray={`${pen(3)} ${pen(2.4)}`}
+          stroke={color} strokeWidth={pen(OUTLINE_PX * 0.8)} strokeDasharray={`${pen(3)} ${pen(2.4)}`}
         />
       ))}
       {rings && (
-        <g fill={tint.line}>
+        <g fill={color}>
           {holeCentres(size.holes).map((at, i) => {
             const thick = Math.max(hole * 2.4, pen(3));
             return (
@@ -1137,7 +1144,7 @@ function FoldIcon({ size, tint, plan, scale = SHEET_SCALE, ink = false, rings = 
         <circle
           key={i}
           cx={margin} cy={at} r={hole}
-          fill="#fff" stroke={tint.line} strokeWidth={pen(HOLE_RING_PX)}
+          fill="#fff" stroke={color} strokeWidth={pen(HOLE_RING_PX)}
         />
       ))}
     </svg>
