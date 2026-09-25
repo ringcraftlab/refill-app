@@ -16,17 +16,21 @@
 @theme {
   --color-bg: #FBF9F5;
   --color-paper: #FFFFFF;
-  --color-ink: #23252D;
-  --color-muted: #6B7080;
-  --color-faint: #A2A7B5;
-  --color-line: #ECEEF3;
-  --color-line-strong: #DDE0E8;
+  /* The greys lean the way the ground does. They were mixed cool while the
+     background was cool, and a cool rule on warm paper reads as a different
+     material rather than as a quieter line. Same lightness, warm hue: the
+     contrast each one was chosen for is unchanged. */
+  --color-ink: #26241F;
+  --color-muted: #736D62;
+  --color-faint: #ABA69A;
+  --color-line: #EEEAE2;
+  --color-line-strong: #E0DACE;
   /* Vivid enough to read as the one colour that acts, dark enough that a 10px
      note in it stays legible on white -- the point most pop palettes miss. */
   --color-accent: #E06A0F;
   --color-accent-soft: #FFF2E4;
   /* Reads as ink on a label, but lighter, so a row of controls does not shout. */
-  --color-label: #575C6B;
+  --color-label: #5C574E;
   --color-danger: #E0443B;
 
   --font-sans: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic", sans-serif;
@@ -45,8 +49,8 @@
 }
 
 @keyframes knobPulse {
-  0%, 100% { box-shadow: 0 1px 3px rgba(35, 37, 45, 0.18), 0 0 0 0 rgba(224, 106, 15, 0.45); }
-  60% { box-shadow: 0 1px 3px rgba(35, 37, 45, 0.18), 0 0 0 8px rgba(224, 106, 15, 0); }
+  0%, 100% { box-shadow: 0 1px 3px rgba(38, 36, 31, 0.18), 0 0 0 0 rgba(224, 106, 15, 0.45); }
+  60% { box-shadow: 0 1px 3px rgba(38, 36, 31, 0.18), 0 0 0 8px rgba(224, 106, 15, 0); }
 }
 
 @layer base {
