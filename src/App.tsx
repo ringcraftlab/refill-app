@@ -950,16 +950,41 @@ function SidesScreen({ size, spread, fold, foldGrain, onPick, onBack, onConfirm 
 
   return (
     <div className={PICK_SCREEN}>
-      <Button variant="chip" className="self-start" onClick={onBack}>
-        <span className="text-[13px] leading-none">←</span>
-        サイズを選び直す
-      </Button>
       <div>
         <h1 className="text-[19px] font-bold">ページ構成を選ぶ</h1>
-        <p className="m-0 mt-1 text-[12px] text-muted">
-          {SIZE_NAME[size]}（{sizeMm(spec)}・{sizeHoles(spec)}）のリフィルを作ります
-        </p>
+        <p className="m-0 mt-1 text-[12px] text-muted">この紙を、どう開く形にしますか</p>
       </div>
+      {/* The size just chosen, as the card it was chosen on -- the same bar,
+          the same sheet, the same selected outline, carried across. Said in a
+          line of grey text instead, the second screen looked like a different
+          app: the colour and the paper both vanished between one tap and the
+          next. It is also the way back, because the thing to press to change
+          the size is the size. */}
+      <button
+        className="sizenow relative flex w-full min-w-0 items-center gap-1 overflow-hidden rounded-[18px] border-[1.5px] py-2 pl-3 pr-2 text-left"
+        style={cardSkin(true, color)}
+        onClick={onBack}
+      >
+        <span className="absolute inset-y-0 left-0 w-1.5" style={{ background: color }} />
+        <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <strong className={`truncate font-semibold leading-tight ${nameSize(SIZE_NAME[size])}`}>
+            {SIZE_NAME[size]}
+          </strong>
+          <span className="truncate text-[10px] leading-tight text-faint">{sizeMm(spec)}</span>
+          <span
+            className="truncate text-[10px] font-semibold leading-tight"
+            style={{ color: SIZE_WORD[size] }}
+          >
+            {sizeHoles(spec)}
+          </span>
+        </span>
+        <span className="flex shrink-0 items-center justify-center" style={SHEET_SLOT}>
+          <SizeIcon size={spec} color={color} rings />
+        </span>
+        <span className="flex shrink-0 items-center gap-0.5 text-[10px] text-muted">
+          変更<span aria-hidden="true" className="text-[13px] leading-none text-faint">›</span>
+        </span>
+      </button>
       {/* Side by side, on the same two-column grid as the picker. A comparison
           reads across, not down: stacked, these were the same drawing seen
           twice in a row instead of one beside the other. Which also settles
