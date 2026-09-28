@@ -639,6 +639,13 @@ export interface DateGridSpec {
   // folded into two, the same page gives 18mm and two shorter days. Printed
   // one-page weeklies are nearly all this shape.
   tiers?: number;
+  // One more cell after the last date, labelled this. Seven days shared
+  // between two pages come out three and four, and the same Tuesday is then a
+  // third of one page and a quarter of the other. Eight cells share evenly --
+  // which is why nearly every printed weekly has eight and writes MEMO in the
+  // last one. Empty means no extra cell, which is what a week that fits on
+  // one page wants.
+  tail?: string;
 }
 
 const TITLE_H = 4.4;
@@ -672,8 +679,12 @@ export function drawDateGrid(area: Rect, layout: Layout, spec: DateGridSpec): Pr
       out.push(...drawDateGrid(
         { ...area, y: area.y + bandH * t, h: bandH },
         layout,
-        // The title belongs to the part, not to each band of it.
-        { ...spec, tiers: 1, range: [a, Math.min(to, a + per)], title: t === 0 ? spec.title : '' },
+        // The title belongs to the part, not to each band of it; the spare
+        // cell belongs to its end.
+        {
+          ...spec, tiers: 1, range: [a, Math.min(to, a + per)],
+          title: t === 0 ? spec.title : '', tail: t === tiers - 1 ? spec.tail : '',
+        },
       ));
     }
     return out;
@@ -687,17 +698,22 @@ export function drawDateGrid(area: Rect, layout: Layout, spec: DateGridSpec): Pr
     out.push({ type: 'text', x: left, y: top + 2.8, text: spec.title, sizePt: 5.5, color: pal.inkSoft, align: 'left' });
   }
 
-  const dateCount = to - from;
+  const tail = spec.tail ?? '';
+  const dayCount = to - from;
+  const dateCount = dayCount + (tail ? 1 : 0);
+  const spare = (i: number) => !!tail && i === dateCount - 1;
   const dayAt = (i: number) => axis[from + i];
   // A month grid has a column per day and no room to say which weekday it is;
   // a weekly has few enough columns to name them.
   const dateText = (i: number) => {
+    if (spare(i)) return tail;
     const d = dayAt(i);
     return spec.span === 'month'
       ? String(d.getDate())
       : `${d.getDate()} ${weekdayLabel(d.getDay(), layout.words)}`;
   };
-  const dateTone = (i: number) => dateColor(dayAt(i), pal);
+  // The spare cell is not a day, so it is not a Sunday either.
+  const dateTone = (i: number) => (spare(i) ? pal.inkSoft : dateColor(dayAt(i), pal));
 
   // Bound once so the kind narrows; reading spec.cross each time does not.
   const cross = spec.cross;
@@ -782,7 +798,7 @@ export function drawDateGrid(area: Rect, layout: Layout, spec: DateGridSpec): Pr
         // you. Faint and hard against the rule, so the hour is there to be
         // found rather than in the way of what gets written beside it.
         if (colW >= HOUR_IN_COLUMN_MM) {
-          for (let d = 0; d < dateCount; d++) {
+          for (let d = 0; d < dayCount; d++) {
             out.push({
               type: 'text', x: bodyL + colW * d + 0.7, y: bodyT + rowH * i + rowH * 0.7,
               text: crossText(i), sizePt: Math.min(size, 3), color: pal.inkFaint, align: 'left',
@@ -864,6 +880,18 @@ const ACROSS_EVEN_SHARE = 0.8;
 // division allows. The three-and-four a printed refill uses falls out of this
 // when the gutter lands in the middle: the narrower side takes the index
 // column and every weekday comes out the same width.
+// The same share with one dateless cell at the end of the second page. It is
+// worth a cell: a day that is 68mm on the left page and 51mm on the right is
+// the same day drawn two sizes, and nobody reads that as one week.
+function shareWithSpare(aW: number, bW: number, total: number) {
+  let best = { cut: 1, cost: Infinity };
+  for (let cut = 1; cut < total; cut++) {
+    const cost = Math.abs(aW / cut - bW / (total - cut + 1));
+    if (cost < best.cost - 1e-9) best = { cut, cost };
+  }
+  return best;
+}
+
 function shareColumns(aW: number, bW: number, total: number, allowIndex: boolean) {
   let best = { cut: Math.max(1, Math.round(total / 2)), index: false, cost: Infinity };
   for (const index of allowIndex ? [false, true] : [false]) {
@@ -946,13 +974,24 @@ export function drawPartAcross(
     // dates on an axis divides at a day, like every other dated part does.
     // Rows divide along the height the pages share, columns along their
     // widths.
-    const along = spec.dates === 'rows'
-      ? shareColumns(a.h, b.h, total, false)
-      : shareColumns(a.w, b.w, total, false);
+    const [aExt, bExt] = spec.dates === 'rows' ? [a.h, b.h] : [a.w, b.w];
+    const along = shareColumns(aExt, bExt, total, false);
+    // Seven days over two pages is three and four however it is cut, so one
+    // page draws the day bigger than the other. A spare cell makes it four and
+    // four, and the spare one is where a printed weekly puts the memo. Only
+    // when the days do not already share evenly, and only across a gutter: a
+    // week that fits on one page has nothing to even out.
+    const even = spec.span === 'days' && (spec.tiers ?? 1) === 1
+      ? shareWithSpare(aExt, bExt, total)
+      : null;
+    const spare = !!even && even.cost < along.cost - 0.05;
+    const cut = spare ? even!.cut : along.cut;
     return [
-      ...drawDateGrid(a, layout, { ...spec, range: [0, along.cut] }),
+      ...drawDateGrid(a, layout, { ...spec, range: [0, cut] }),
       // The title belongs to the part, not to each page of it.
-      ...drawDateGrid(b, layout, { ...spec, title: '', range: [along.cut, total] }),
+      ...drawDateGrid(b, layout, {
+        ...spec, title: '', range: [cut, total], tail: spare ? 'MEMO' : '',
+      }),
     ];
   }
   return null;

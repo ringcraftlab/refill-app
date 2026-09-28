@@ -425,6 +425,25 @@ if (await photoStamp.count()) {
   await shot('35-見開き全面の写真');
 }
 
+// A week over two pages. Seven days cannot be shared evenly, so one page used
+// to draw the day a third taller than the other; a spare cell makes it four
+// and four, and the spare one is the memo every printed weekly has.
+await page.goto(BASE);
+await page.locator('.sizerow', { hasText: '95×170mm' }).click();
+await page.locator('.card', { hasText: '見開き' }).click();
+await page.getByRole('button', { name: 'この構成で作る' }).click();
+await page.locator('.page').first().waitFor();
+await drag(await centerOf(await stamp('ウィークリー')), await centerOf(page.locator('.page').first()));
+await page.waitForTimeout(400);
+{
+  const cells = async (i) => (await page.locator('.page').nth(i).locator('text').allTextContents())
+    .filter(t => t.trim() && t !== 'WEEKLY');
+  const [l, r] = [await cells(0), await cells(1)];
+  console.log(`見開きの週間: 左「${l.join(' ')}」右「${r.join(' ')}」`);
+  console.log('8マスで揃う:', l.length === 4 && r.length === 4 && r[3] === 'MEMO');
+}
+await shot('36-見開きの週間は8マス');
+
 // The refill's own get-up: the words it prints and the ink it prints them in.
 // One decision for the whole refill, so it sits in a chip above the paper
 // rather than in every part's settings.
