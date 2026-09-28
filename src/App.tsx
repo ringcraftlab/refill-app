@@ -306,6 +306,29 @@ function createLayout(): Layout {
 // left": they are one sheet each and need nothing decided about them.
 type SectionKind = PartKind | 'blank' | 'cover';
 
+// How long a dated run starts out, from how fast it eats paper.
+//
+// The period used to be twelve months for everything, because a year is what
+// a monthly means -- twelve sheets, four of A4. The same twelve months on a
+// weekly is 53 sheets: A4 14 on Mini6 and 27 on A5, printed double-sided,
+// nobody's idea of a first try. A run you have to cut back is worse than one
+// you have to extend, because extending is one tap on the period and cutting
+// back is something you only learn to do after wasting the paper.
+//
+// So the number is not the months, it is the sheets: about fifteen, which is
+// four or five of A4 on most sizes. A month to a sheet lands on twelve months
+// by itself, which is why the monthly is unchanged.
+const RUN_SHEETS = 15;
+const runMonths = (daysPerSheet: number): number =>
+  Math.max(1, Math.min(12, Math.round((RUN_SHEETS * Math.max(1, daysPerSheet)) / 30.4)));
+
+// A section that is paced by days starts at that length rather than at the
+// book's. Applied where the pacing is decided -- when the part lands -- and
+// never afterwards: silently shortening a run someone set is as bad as
+// handing them a long one.
+const pacedFor = (l: Layout): Layout =>
+  (isDayPaced(l) ? { ...l, monthCount: runMonths(l.daysPerSheet) } : l);
+
 function sectionOf(kind: SectionKind, base: Layout): Layout {
   const sheet: Layout = {
     ...createLayout(),
@@ -345,7 +368,7 @@ function sectionOf(kind: SectionKind, base: Layout): Layout {
       // a page yet, so a photograph was the only content anyone could supply.
     };
   }
-  return { ...sheet, surface: { ...sheet.surface, placed: [kind] } };
+  return pacedFor({ ...sheet, surface: { ...sheet.surface, placed: [kind] } });
 }
 
 // The empty sheet a new book starts with. It is somewhere to draw, not a
@@ -1872,7 +1895,10 @@ function CanvasScreen({ book, at, nth, setBook, onBack, goTo, print, setPrint, o
           if (placed[i] === 'photo' && !photos?.[i]) { setSheet({ slot: i }); break; }
         }
       }
-      return planned.layout;
+      // The drop is what decides the pacing: a weekly landing on a monthly's
+      // sheet turns twelve sheets into fifty-three. Only on the change, so a
+      // second weekly -- or any later edit -- leaves the period alone.
+      return isDayPaced(prev) ? planned.layout : pacedFor(planned.layout);
     });
   };
 
@@ -3447,6 +3473,18 @@ function PartSheet({
   const saved = useMemo(() => target === 'load' ? listBooks() : [], [target]);
   const job = usePaperJob(book.sections, size, print);
   const { also, perPaper } = job;
+  // What this one section costs, for the period being set right here. The
+  // chip above the paper says what the whole book comes to, but the sheet
+  // covers that chip on a phone -- and the number that moves when the period
+  // is stepped is this one.
+  const mine = usePaperJob([layout], size, print);
+  const runPaper = (
+    <p className="run-paper m-0 text-[11px] text-faint">
+      この区切りで{PAPERS[print.paper].label}
+      <strong className="mx-0.5 font-semibold text-muted">{mine.sheets}枚</strong>
+      （リフィル{mine.used}{mine.unit}）
+    </p>
+  );
   // An empty place pressed on the printed sheet itself, and a filled one.
   const [pickHere, setPickHere] = useState(false);
   const [pageAt, setPageAt] = useState<number | null>(null);
@@ -3759,12 +3797,13 @@ function PartSheet({
                 onStep={n => setLayout(l => ({ ...l, ...addMonths(l.year, l.month, n) }))}
               />
             </Field>
-            <Field label={`終了月（${layout.monthCount}ヶ月分）`}>
+            <Field label={`終了月（${layout.monthCount}ヶ月分・${sheetCount(layout)}枚）`}>
               <Stepper
                 value={`${lastMonth.year}年${lastMonth.month}月`}
                 onStep={n => setLayout(l => ({ ...l, monthCount: Math.min(36, Math.max(1, l.monthCount + n)) }))}
               />
             </Field>
+            {runPaper}
           </>
         )}
 
@@ -3872,6 +3911,7 @@ function PartSheet({
             <p className="run-dates m-0 text-[11px] text-faint">
               刷られるのは {ymd(firstDay)} 〜 {ymd(lastDay)}
             </p>
+            {runPaper}
             <Choice
               label="週の始まり"
               options={[{ v: 1, label: '月曜始まり' }, { v: 0, label: '日曜始まり' }]}

@@ -501,5 +501,47 @@ check(
 );
 await page.screenshot({ path: `${OUT}/40-折り目と曜日.png` });
 
+// ---- how long a run starts out --------------------------------------------
+// Twelve months is what a monthly means, and what a weekly must not mean: the
+// same period on a week to a sheet is 53 sheets, 27 of A4 on A5. A run is
+// extended with one tap and cut back only by someone who already wasted the
+// paper, so it starts at about fifteen sheets and the paper it comes to is on
+// screen while the period is being set.
+const newBook = async (size, part) => {
+  await page.goto(BASE);
+  await page.locator('.sizerow', { hasText: size }).click();
+  await page.locator('.card', { hasText: '見開き' }).first().click();
+  await page.getByRole('button', { name: 'この構成で作る' }).click();
+  await page.locator('.page').first().waitFor();
+  const st = page.locator('.stamp', { hasText: part });
+  await st.scrollIntoViewIfNeeded();
+  await drag(await centerOf(st), await centerOf(page.locator('.page').first()));
+  await page.waitForTimeout(500);
+};
+await newBook('148×210mm', 'ウィークリー');
+check(
+  (await flat('.pager')).includes('/30ページ'),
+  `A5の週間は3ヶ月で始まる（${await flat('.pager')}）`,
+);
+check(
+  (await flat('.paper')).includes('A4 8枚'),
+  `12ヶ月なら27枚だったA4が8枚（${await flat('.paper')}）`,
+);
+// The paper is said again where the period is set: on a phone the sheet
+// covers the chip that says it.
+await page.locator('.range').click();
+await page.waitForTimeout(400);
+check(
+  (await flat('.run-paper')).includes('A4') && (await flat('.run-paper')).includes('枚'),
+  `期間を決めるその場に紙が出ている（${await flat('.run-paper')}）`,
+);
+await page.screenshot({ path: `${OUT}/41-期間と紙.png` });
+await shut();
+await newBook('80×128mm', 'マンスリー');
+check(
+  (await flat('.range')).includes('12ヶ月'),
+  `マンスリーは12ヶ月のまま（${await flat('.range')}）`,
+);
+
 await browser.close();
 if (bad) process.exitCode = 1;
