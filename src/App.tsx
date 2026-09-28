@@ -463,6 +463,7 @@ export function App() {
         setBook={setBook}
         print={print}
         at={Math.min(at, book.sections.length - 1)}
+        nth={nth}
         onOpen={(i: number, open?: 'range' | 'part0', sheet = 0) => {
           goTo(i, sheet);
           if (open) setOpenOn(o => ({ key: o.key + 1, what: open }));
@@ -1208,12 +1209,16 @@ interface DragState {
 // The list is a list rather than a picture on purpose: what it answers is
 // "what is in here and in what order", and a picture of the paper answers a
 // different question (which the export screen answers, with the ＋ on it).
-function ContentsScreen({ book, setBook, print, at, onOpen, onBack }: {
+function ContentsScreen({ book, setBook, print, at, nth, onOpen, onBack }: {
   book: Book;
   setBook: (fn: (b: Book) => Book) => void;
   print: PrintOptions;
   // Which section the editor was on, so that going back goes back.
   at: number;
+  // And which sheet of it, so that the page being edited is the one marked
+  // here. Someone who came from the page number is looking for where they
+  // just were; a wall of thumbnails with nothing marked does not say.
+  nth: number;
   // `'range'` opens that section's period straight away (the number someone
   // wants to change is the one they just read in this row); `'part0'` opens
   // what the section is still missing.
@@ -1234,6 +1239,10 @@ function ContentsScreen({ book, setBook, print, at, onOpen, onBack }: {
   const [picked, setPicked] = useState<number | null>(null);
   const [addAt, setAddAt] = useState<number | null>(null);
   const pages = useMemo(() => pagesOf(book.sections), [book.sections]);
+  // The page the editor was on, brought into view. A book of thirty pages
+  // opens this panel scrolled to the top, which is not where you were.
+  const hereRef = useRef<HTMLButtonElement | null>(null);
+  useLayoutEffect(() => { hereRef.current?.scrollIntoView({ block: 'center' }); }, []);
 
   // The last sheet of paper is mostly empty, and one section is what fills it:
   // saying which one, and by how much, turns "too many" into one press. The
@@ -1330,22 +1339,29 @@ function ContentsScreen({ book, setBook, print, at, onOpen, onBack }: {
                   return <span key={half} className="w-[62px]" />;
                 }
                 const sec = leaf.at === null ? null : book.sections[leaf.at];
+                // The sheet the editor is on -- both its pages, because a
+                // spread is one sheet and turning lands on the pair.
+                const here = !!sec && leaf.at === at && leaf.nth === nth;
                 return (
                   <button
                     key={half}
+                    ref={here && half === 0 ? hereRef : undefined}
                     className={`leaf flex w-[62px] flex-col items-center gap-0.5 p-0 ${
                       sec ? '' : 'empty'
-                    }`}
+                    } ${here ? 'here' : ''}`}
                     onClick={() => (sec ? onOpen(leaf.at!, undefined, leaf.nth) : setAddAt(leaf.before))}
                   >
                     {sec ? (
-                      <Thumb layout={sec} size={size} side={leaf.side} box={{ w: 54, h: 74 }} />
+                      <Thumb
+                        layout={sec} size={size} side={leaf.side} box={{ w: 54, h: 74 }}
+                        ring={here}
+                      />
                     ) : (
                       <span className="flex h-[74px] w-[54px] items-center justify-center rounded-[3px] border border-dashed border-line-strong text-[15px] text-faint">
                         ＋
                       </span>
                     )}
-                    <span className="text-[9px] leading-none text-faint">
+                    <span className={`text-[9px] leading-none ${here ? 'font-semibold text-accent' : 'text-faint'}`}>
                       {no}
                       {sec && <span className="ml-0.5 text-accent">{sectionMark(book.sections, leaf.at!)}</span>}
                     </span>
@@ -2351,18 +2367,12 @@ function CanvasScreen({ book, at, nth, setBook, onBack, goTo, print, setPrint, o
             this one. Two of them at the two edges of the paper were two
             buttons that looked the same and were not, which is worse than no
             button at all. Adding at the end is what the contents is for. */}
+        {/* Only the ＋ stays on the paper, because only the ＋ means its
+            position: a page goes in HERE, before this one. Turning meant
+            nothing by being at the right edge, and a spread binds in the
+            middle -- so both outer edges are the refill's own content, and
+            a round button sat on the dates. Turning moved under the paper. */}
         <span className="turn-left absolute left-1 top-1/2 z-10 flex w-[52px] -translate-y-1/2 flex-col items-center gap-2">
-          {cursor > 0 && (
-            <span className="flex flex-col items-center gap-0.5">
-              <Button
-                variant="edge"
-                className="prevpage"
-                onClick={() => goTo(leaves[cursor - 1].at, leaves[cursor - 1].nth)}
-                aria-label="前のページ"
-              >‹</Button>
-              <em className="not-italic text-[9px] leading-none text-faint">前へ</em>
-            </span>
-          )}
           {/* Nothing goes in front of the cover -- it is the outside of the
               stack. Between the cover and the first month is reached from the
               ＋ on that month, which is where that page would go. */}
@@ -2374,20 +2384,6 @@ function CanvasScreen({ book, at, nth, setBook, onBack, goTo, print, setPrint, o
               <em className="not-italic text-[9px] leading-none text-faint">足す</em>
             </span>
           )}
-        </span>
-        <span className="turn-right absolute right-1 top-1/2 z-10 flex w-[52px] -translate-y-1/2 flex-col items-center gap-2">
-          {cursor >= 0 && cursor < leaves.length - 1 && (
-            <span className="flex flex-col items-center gap-0.5">
-              <Button
-                variant="edge"
-                className="nextpage"
-                onClick={() => goTo(leaves[cursor + 1].at, leaves[cursor + 1].nth)}
-                aria-label="次のページ"
-              >›</Button>
-              <em className="not-italic text-[9px] leading-none text-faint">次へ</em>
-            </span>
-          )}
-
         </span>
         <div
           className="flex items-center justify-center"
@@ -2557,14 +2553,37 @@ function CanvasScreen({ book, at, nth, setBook, onBack, goTo, print, setPrint, o
         </div>
       </div>
 
-      {/* Where in the book this page is, printed under it the way a page
-          number is. Not in the header: the form the refill is folded into is
-          what a narrow screen has room for up there. */}
-      {paging && paging.of > 2 && (
-        <p className="pageno m-0 shrink-0 pt-0.5 text-center text-[10px] text-faint">
-          {paging.from === paging.to ? paging.from : `${paging.from}–${paging.to}`}
-          <span className="mx-0.5">/</span>{paging.of}ページ
-        </p>
+      {/* Turning the page, and where in the book this page is, in one row
+          under the paper. The two arrows keep their room and go dim at the
+          ends rather than disappearing: a row that changes width as you turn
+          moves the button you are pressing out from under your thumb.
+
+          The number is a button. Twenty-six pages is more than anyone turns
+          through one at a time, and the number is where the eye already is
+          when someone wants to be somewhere else. */}
+      {leaves.length > 1 && (
+        <div className="pager flex shrink-0 items-center justify-center gap-2.5 pt-1">
+          <Button
+            variant="edge"
+            className="prevpage size-8 text-[15px]"
+            disabled={cursor <= 0}
+            onClick={() => goTo(leaves[cursor - 1].at, leaves[cursor - 1].nth)}
+            aria-label="前のページ"
+          >‹</Button>
+          {paging && (
+            <Button variant="chip" className="pageno" onClick={onBack} aria-label="中身を開く">
+              {paging.from === paging.to ? paging.from : `${paging.from}–${paging.to}`}
+              <span className="text-faint">/{paging.of}ページ</span>
+            </Button>
+          )}
+          <Button
+            variant="edge"
+            className="nextpage size-8 text-[15px]"
+            disabled={cursor < 0 || cursor >= leaves.length - 1}
+            onClick={() => goTo(leaves[cursor + 1].at, leaves[cursor + 1].nth)}
+            aria-label="次のページ"
+          >›</Button>
+        </div>
       )}
 
       {/* What the rest of the book is, from inside one section of it. */}
@@ -3373,20 +3392,25 @@ function PageSheet({ book, at, nth, onShorten, onDrop, onClose }: {
 
 // One saved refill, small enough to sit in a list and big enough to tell a
 // calendar from a memo.
-function Thumb({ layout, size, side = 0, box = { w: 34, h: 46 } }: {
+function Thumb({ layout, size, side = 0, box = { w: 34, h: 46 }, ring = false }: {
   layout: Layout;
   size: SizeSpec;
   // Which page of the design: a spread has two, and in a list of pages they
   // are two different pictures.
   side?: number;
   box?: { w: number; h: number };
+  // Marks the page the editor is on. The border rather than a tint, so the
+  // drawing underneath stays the colour it will print.
+  ring?: boolean;
 }) {
   const pages = useMemo(() => buildPages(layout, size), [layout, size]);
   const page = pages[Math.min(side, pages.length - 1)];
   if (!page) return null;
   const scale = Math.min(box.w / page.widthMm, box.h / page.heightMm);
   return (
-    <span className="thumb block shrink-0 overflow-hidden rounded-[3px] border border-line-strong bg-white">
+    <span className={`thumb block shrink-0 overflow-hidden rounded-[3px] border bg-white ${
+      ring ? 'border-accent shadow-[0_0_0_1px_var(--color-accent)]' : 'border-line-strong'
+    }`}>
       <PageSvg page={page} scale={scale} />
     </span>
   );

@@ -223,13 +223,25 @@ const pageno = () => flat('.pageno');
 check((await pageno()).startsWith('2–3'), `いま何ページ目かが紙の下に出る（${await pageno()}）`);
 check(
   await page.locator('.turn-left .addbefore').count() === 1
-    && await page.locator('.turn-right .nextpage').count() === 1,
-  '紙の左端に＋、右端にページ送りがある',
+    && (await flat('.turn-left')).includes('足す')
+    && await page.locator('.addafter').count() === 0,
+  '紙の上に残っているのは＋だけ（左に1つ）',
+);
+// Turning sat on the drawing: a spread binds in the middle, so both outer
+// edges are the refill's own content and the round buttons were over the
+// dates. The paper carries only what its position means.
+const boxOf = async (sel) => await page.locator(sel).first().boundingBox();
+const sheetBox = await boxOf('.page');
+const pagerBox = await boxOf('.pager');
+check(
+  pagerBox.y > sheetBox.y + sheetBox.height - 1,
+  `めくるボタンは紙の下にある（紙の下端 ${Math.round(sheetBox.y + sheetBox.height)} < ページャ ${Math.round(pagerBox.y)}）`,
 );
 check(
-  (await flat('.turn-left')).includes('足す') && (await flat('.turn-right')).includes('次へ')
-    && await page.locator('.addafter').count() === 0,
-  `＋は左に1つだけ、右はページ送り（左「${await flat('.turn-left')}」右「${await flat('.turn-right')}」）`,
+  await page.locator('.pager .prevpage').count() === 1
+    && await page.locator('.pager .nextpage').count() === 1
+    && await page.locator('.pager .pageno').count() === 1,
+  '‹ ページ番号 › が1行に並ぶ',
 );
 await page.locator('.nextpage').click();
 await page.waitForTimeout(400);
@@ -240,6 +252,31 @@ await page.locator('.prevpage').click();
 await page.waitForTimeout(400);
 check((await pageno()).startsWith('2–3'), `戻れる（${await pageno()}）`);
 await page.screenshot({ path: `${OUT}/30-めくる編集画面.png` });
+
+// The row keeps its width at the ends. A button that disappears takes the
+// one beside it under your thumb.
+check(
+  await page.locator('.pager .prevpage').isDisabled()
+    && !(await page.locator('.pager .nextpage').isDisabled()),
+  '先頭では ‹ が薄くなるだけで、消えない',
+);
+
+// Twenty-six pages is more than anyone turns one at a time, so the number is
+// the way out -- and the contents has to say where you just were.
+await page.locator('.pageno').click();
+await page.waitForTimeout(400);
+check(
+  await page.locator('.contents-list').count() === 1,
+  'ページ番号を押すと中身が開く',
+);
+check(
+  await page.locator('.leaf.here').count() === 2,
+  `見ていた見開きに印がついている（${await page.locator('.leaf.here').count()}ページぶん）`,
+);
+await page.screenshot({ path: `${OUT}/30b-番号から中身へ.png` });
+await page.locator('.leaf.here').first().click();
+await page.locator('.page').first().waitFor();
+check((await pageno()).startsWith('2–3'), `印のページに戻る（${await pageno()}）`);
 
 // Pressing ＋ makes the page. No menu in between: picking a part from a
 // menu and dropping the same part from the tray on this screen make the same
