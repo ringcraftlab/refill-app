@@ -1262,6 +1262,23 @@ function ContentsScreen({ book, setBook, print, at, nth, onOpen, onBack }: {
   const [picked, setPicked] = useState<number | null>(null);
   const [addAt, setAddAt] = useState<number | null>(null);
   const pages = useMemo(() => pagesOf(book.sections), [book.sections]);
+  // The sheet each page actually is, not the section it belongs to. A run of
+  // fifty-three weeks drew fifty-three pictures of its first week: the panel
+  // was a list of identical thumbnails, which is not a list of anything.
+  // Cached by identity so a redraw of the panel is not fifty-three rebuilds --
+  // `Thumb` remembers its drawing per layout object, and a fresh object every
+  // render would remember nothing.
+  const sheetFor = useMemo(() => {
+    const seen = new Map<string, Layout>();
+    return (at: number, nth: number): Layout => {
+      const key = `${at}:${nth}`;
+      const had = seen.get(key);
+      if (had) return had;
+      const made = sheetAt(book.sections[at], nth);
+      seen.set(key, made);
+      return made;
+    };
+  }, [book.sections]);
   // The page the editor was on, brought into view. A book of thirty pages
   // opens this panel scrolled to the top, which is not where you were.
   const hereRef = useRef<HTMLButtonElement | null>(null);
@@ -1376,8 +1393,8 @@ function ContentsScreen({ book, setBook, print, at, nth, onOpen, onBack }: {
                   >
                     {sec ? (
                       <Thumb
-                        layout={sec} size={size} side={leaf.side} box={{ w: 54, h: 74 }}
-                        ring={here}
+                        layout={sheetFor(leaf.at!, leaf.nth)} size={size} side={leaf.side}
+                        box={{ w: 54, h: 74 }} ring={here} lazy
                       />
                     ) : (
                       <span className="flex h-[74px] w-[54px] items-center justify-center rounded-[3px] border border-dashed border-line-strong text-[15px] text-faint">
@@ -3418,7 +3435,7 @@ function PageSheet({ book, at, nth, onShorten, onDrop, onClose }: {
 
 // One saved refill, small enough to sit in a list and big enough to tell a
 // calendar from a memo.
-function Thumb({ layout, size, side = 0, box = { w: 34, h: 46 }, ring = false }: {
+function Thumb({ layout, size, side = 0, box = { w: 34, h: 46 }, ring = false, lazy = false }: {
   layout: Layout;
   size: SizeSpec;
   // Which page of the design: a spread has two, and in a list of pages they
@@ -3428,16 +3445,47 @@ function Thumb({ layout, size, side = 0, box = { w: 34, h: 46 }, ring = false }:
   // Marks the page the editor is on. The border rather than a tint, so the
   // drawing underneath stays the colour it will print.
   ring?: boolean;
+  // Draw only once the picture is near the window. A book is a list of every
+  // page it has, and building them all at once means building every day of
+  // every month -- a year of monthlies is 26 sheets and half a second, and
+  // most of that is counting six-day cycles nobody is looking at yet.
+  lazy?: boolean;
 }) {
-  const pages = useMemo(() => buildPages(layout, size), [layout, size]);
-  const page = pages[Math.min(side, pages.length - 1)];
-  if (!page) return null;
-  const scale = Math.min(box.w / page.widthMm, box.h / page.heightMm);
+  const mark = useRef<HTMLSpanElement | null>(null);
+  const [near, setNear] = useState(!lazy);
+  useLayoutEffect(() => {
+    const el = mark.current;
+    if (near || !el) return;
+    const io = new IntersectionObserver(
+      seen => { if (seen.some(e => e.isIntersecting)) setNear(true); },
+      // A window ahead, so the picture is there before the scroll stops.
+      { rootMargin: '400px' },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [near]);
+
+  // The room it takes is geometry alone -- no dates, no almanac -- so the
+  // space can be held without drawing anything into it, and nothing jumps
+  // when the drawing arrives.
+  const geo = useMemo(() => buildGeometry(layout, size), [layout, size]);
+  const shape = geo.pages[Math.min(side, geo.pages.length - 1)];
+  const drawn = useMemo(
+    () => (near ? buildPages(layout, size) : null),
+    [near, layout, size],
+  );
+  if (!shape) return null;
+  const scale = Math.min(box.w / shape.widthMm, box.h / shape.heightMm);
+  const page = drawn?.[Math.min(side, drawn.length - 1)];
   return (
-    <span className={`thumb block shrink-0 overflow-hidden rounded-[3px] border bg-white ${
-      ring ? 'border-accent shadow-[0_0_0_1px_var(--color-accent)]' : 'border-line-strong'
-    }`}>
-      <PageSvg page={page} scale={scale} />
+    <span
+      ref={mark}
+      className={`thumb block shrink-0 overflow-hidden rounded-[3px] border bg-white ${
+        ring ? 'border-accent shadow-[0_0_0_1px_var(--color-accent)]' : 'border-line-strong'
+      }`}
+      style={{ width: shape.widthMm * scale, height: shape.heightMm * scale }}
+    >
+      {page && <PageSvg page={page} scale={scale} />}
     </span>
   );
 }

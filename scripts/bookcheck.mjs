@@ -543,5 +543,38 @@ check(
   `マンスリーは12ヶ月のまま（${await flat('.range')}）`,
 );
 
+// ---- the contents is a list of pages, not of the section -------------------
+// Every sheet of a run drew the section's first sheet: 53 weeks came out as 53
+// pictures of the same week. And a book of pages must not build all of them at
+// once -- a year of monthlies is 26 sheets, each counting a month of six-day
+// cycles and holidays.
+for (let i = 0; i < 8; i++) { await page.locator('.nextpage').click(); await page.waitForTimeout(120); }
+await page.locator('.pageno').click();
+await page.locator('.contents-list').waitFor();
+await page.waitForTimeout(500);
+const months = await page.locator('.leaf .thumb').evaluateAll(els => els.map(e => {
+  const big = [...e.querySelectorAll('text')].map(t => ({ t: t.textContent.trim(), s: +t.getAttribute('font-size') || 0 }))
+    .sort((a, b) => b.s - a.s)[0];
+  return big ? big.t : '';
+}).filter(Boolean));
+check(
+  new Set(months).size > 1,
+  `ページごとに中身が違う（サムネイルの見出し ${[...new Set(months)].slice(0, 5).join(' ')}…）`,
+);
+check(
+  await page.locator('.leaf.here .thumb svg').count() === 2,
+  '飛んだ先の印のページは描かれている',
+);
+const drawn = async () => await page.locator('.leaf .thumb svg').count();
+const first = await drawn();
+check(
+  first < await page.locator('.leaf').count(),
+  `見えていないページはまだ描いていない（${first}枚だけ）`,
+);
+await page.locator('.contents-list').evaluate(el => { el.scrollTop = 0; });
+await page.waitForTimeout(600);
+check(await drawn() > first, `スクロールすると描かれる（${first} → ${await drawn()}枚）`);
+await page.screenshot({ path: `${OUT}/42-もくじのサムネイル.png` });
+
 await browser.close();
 if (bad) process.exitCode = 1;
