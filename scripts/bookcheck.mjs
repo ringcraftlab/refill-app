@@ -59,7 +59,6 @@ async function start(sizeText, form, part) {
   await page.goto(BASE);
   await page.locator('.sizerow', { hasText: sizeText }).click();
   await page.locator('.card', { hasText: form }).first().click();
-  await page.getByRole('button', { name: 'この構成で作る' }).click();
   await page.locator('.page').first().waitFor();
   await drag(
     await centerOf(page.locator('.stamp', { hasText: part })),
@@ -366,7 +365,6 @@ check(
 await page.goto(BASE);
 await page.locator('.sizerow', { hasText: '80×128mm' }).click();
 await page.locator('.card', { hasText: '見開き' }).first().click();
-await page.getByRole('button', { name: 'この構成で作る' }).click();
 await page.locator('.page').first().waitFor();
 check(await page.locator('.page').count() === 2, '作った直後は見開き（2ページ）');
 await page.locator('.addbefore').click();
@@ -483,7 +481,6 @@ await page.screenshot({ path: `${OUT}/38-インク見本.png` });
 await page.goto(BASE);
 await page.locator('.sizerow', { hasText: '110×210mm' }).click();
 await page.locator('.card', { hasText: '蛇腹2面' }).first().click();
-await page.getByRole('button', { name: 'この構成で作る' }).click();
 await page.locator('.page').first().waitFor();
 await drag(
   await centerOf(page.locator('.stamp', { hasText: 'マンスリー' })),
@@ -511,7 +508,6 @@ const newBook = async (size, part) => {
   await page.goto(BASE);
   await page.locator('.sizerow', { hasText: size }).click();
   await page.locator('.card', { hasText: '見開き' }).first().click();
-  await page.getByRole('button', { name: 'この構成で作る' }).click();
   await page.locator('.page').first().waitFor();
   const st = page.locator('.stamp', { hasText: part });
   await st.scrollIntoViewIfNeeded();

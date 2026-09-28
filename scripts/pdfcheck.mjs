@@ -21,7 +21,6 @@ await page.goto(BASE);
 
 await page.locator('.sizerow', { hasText: SIZE }).first().click();
 await page.locator('.card', { hasText: '見開き' }).click();
-await page.getByRole('button', { name: 'この構成で作る' }).click();
 await page.locator('.page').first().waitFor();
 
 const centerOf = async (l) => { const b = await l.boundingBox(); return { x: b.x + b.width / 2, y: b.y + b.height / 2 }; };

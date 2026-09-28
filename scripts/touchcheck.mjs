@@ -16,7 +16,6 @@ const page = await browser.newPage({
 await page.goto(BASE);
 await page.locator('.sizerow', { hasText: '95×170mm' }).click();
 await page.locator('.card', { hasText: '片面' }).click();
-await page.getByRole('button', { name: 'この構成で作る' }).click();
 await page.locator('.page').first().waitFor();
 
 const scroller = page.locator('.stamp').first().locator('xpath=..');

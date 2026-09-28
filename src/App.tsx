@@ -456,7 +456,12 @@ export function App() {
         spread={body.spread}
         fold={body.fold}
         foldGrain={body.foldGrain}
-        onPick={(v) => every(l => ({
+        // Tapping a form is choosing it, the way tapping a size is choosing a
+        // size. The size picker went straight on; this one asked for a second
+        // press on a button at the bottom, which made the tap look like it had
+        // not worked -- and then there was nothing to say what the button
+        // would do. One screen cannot answer a tap two different ways.
+        onPick={(v) => { every(l => ({
           ...l,
           ...v,
           // A fold holds one part per panel and has no band, so anything the
@@ -473,9 +478,8 @@ export function App() {
                 fold: undefined,
               }
             : l.surface,
-        }))}
+        })); setAt(0); setStage('canvas'); }}
         onBack={() => setStage('size')}
-        onConfirm={() => { setAt(0); setStage('canvas'); }}
       />
     );
   }
@@ -859,13 +863,13 @@ function SizeScreen({ selected, onPick }: { selected: RefillSize; onPick: (s: Re
 // finger just touched is the same paper, the same size, on the screen that
 // follows. Drawing it larger here because there was room made the two
 // screens look like two different apps.
-function SidesScreen({ size, spread, fold, foldGrain, onPick, onBack, onConfirm }: {
+function SidesScreen({ size, spread, fold, foldGrain, onPick, onBack }: {
   size: RefillSize;
   spread: boolean;
   fold: FoldCount;
   foldGrain?: FoldGrain;
   onPick: (v: { spread: boolean; fold: FoldCount; foldGrain?: FoldGrain }) => void;
-  onBack: () => void; onConfirm: () => void;
+  onBack: () => void;
 }) {
   const wide = useWide();
   const spec = SIZES[size];
@@ -1094,7 +1098,6 @@ function SidesScreen({ size, spread, fold, foldGrain, onPick, onBack, onConfirm 
           not for choosing a form -- and the picture of a strip cut into
           numbered panels is what the choice is made on. */}
       </div>
-      <Button variant="cta" className="mt-auto shrink-0" onClick={onConfirm}>この構成で作る</Button>
     </div>
   );
 }
