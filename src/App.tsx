@@ -53,7 +53,7 @@ const SCREEN = 'relative mx-auto flex h-full max-w-[430px] flex-col overflow-hid
 // The editor, and only the editor, spreads out on a desktop: the paper takes
 // the room and the tools stand beside it. The pickers stay a column -- a list
 // of sizes 1400px wide is harder to read, not easier.
-const CANVAS_SCREEN = `${SCREEN} lg:max-w-[1440px] lg:flex-row`;
+const CANVAS_SCREEN = `${SCREEN} screen-in lg:max-w-[1440px] lg:flex-row`;
 const WIDE = '(min-width: 1024px)';
 
 // A mouse and a window are a different shape from a thumb and a phone, and the
@@ -79,7 +79,7 @@ const SCREEN_PAD = `${SCREEN} gap-[18px] px-[22px] py-7`;
 // one row and the whole list is in view without scrolling. Not as wide as the
 // editor -- past four across the cards get narrower than the phone's, which is
 // how a list of nine turns back into a wall.
-const PICK_SCREEN = `${SCREEN_PAD} lg:max-w-[1000px]`;
+const PICK_SCREEN = `${SCREEN_PAD} screen-in lg:max-w-[1000px]`;
 
 // What a stamp shows. A character said what the part was called -- 時 for the
 // vertical, 週 for the horizontal -- which is no help at all when the question
@@ -656,11 +656,17 @@ const nameSize = (name: string) =>
 // among others, the haze reached them too. Enough to see, not enough to be
 // the loudest thing on the screen.
 const CARD_SHADOW = '0 1px 3px rgba(38,36,31,0.07)';
+// Chosen has to be visible from arm's length. A 1.5px border in the size's own
+// colour is nothing at all on the pale ones -- Bible's blue against white is a
+// hairline, and on the recording of a real phone you cannot tell which card is
+// picked. A ring outside the border says it in a band three times as wide,
+// without moving anything by a pixel.
 const cardSkin = (on: boolean, line: string) =>
   ({
     borderColor: on ? line : 'var(--color-line)',
     background: '#fff',
-    boxShadow: on ? `0 0 8px 0 ${line}33, ${CARD_SHADOW}` : CARD_SHADOW,
+    boxShadow: on ? `0 0 0 3px ${line}33, ${CARD_SHADOW}` : CARD_SHADOW,
+    transition: 'box-shadow 140ms ease-out, border-color 140ms ease-out',
   }) as const;
 
 // The paper is in millimetres and scaled as a whole to fit the box -- that is
@@ -1625,6 +1631,12 @@ function CanvasScreen({ book, at, nth, setBook, onBack, goTo, print, setPrint, o
     [book.sections],
   );
   const cursor = leaves.findIndex(l => l.at === at && l.nth === nth);
+  // Which way the last turn went. The paper comes in from the side it was
+  // turned from, so the press and the movement agree -- arriving from the
+  // wrong side reads as a different page rather than as the next one.
+  const cameFrom = useRef(cursor);
+  const turnedIn = cursor === cameFrom.current ? '' : cursor > cameFrom.current ? 'turn-next' : 'turn-prev';
+  useLayoutEffect(() => { cameFrom.current = cursor; });
   // Where this sheet falls in the book, said in pages, which is how anyone
   // holding a planner counts.
   const paging = useMemo(() => {
@@ -1666,6 +1678,15 @@ function CanvasScreen({ book, at, nth, setBook, onBack, goTo, print, setPrint, o
   // from the same drop -- beside the calendar or under it -- so the sheet has
   // to say which one the finger is currently asking for.
   const [preview, setPreview] = useState<Box[] | null>(null);
+  // Where the last part landed. A quarter of a spread changing from empty to
+  // ruled is a change you have to hunt for, especially when the drop was a tap
+  // and the eye was on the tray. This is where to look.
+  const [landedOn, setLandedOn] = useState<Box[] | null>(null);
+  useLayoutEffect(() => {
+    if (!landedOn) return;
+    const t = window.setTimeout(() => setLandedOn(null), 520);
+    return () => window.clearTimeout(t);
+  }, [landedOn]);
   // Taking a part out reflows every other part on the sheet, so nothing is
   // removed without a plain question first.
   const [confirm, setConfirm] = useState<{ what: string; run: () => void } | null>(null);
@@ -1911,6 +1932,9 @@ function CanvasScreen({ book, at, nth, setBook, onBack, goTo, print, setPrint, o
         for (let i = placed.length - 1; i >= 0; i--) {
           if (placed[i] === 'photo' && !photos?.[i]) { setSheet({ slot: i }); break; }
         }
+      }
+      if (planned.landed !== null) {
+        setLandedOn(regionBoxes(buildGeometry(planned.layout, size), planned.landed));
       }
       // The drop is what decides the pacing: a weekly landing on a monthly's
       // sheet turns twelve sheets into fifty-three. Only on the change, so a
@@ -2429,7 +2453,10 @@ function CanvasScreen({ book, at, nth, setBook, onBack, goTo, print, setPrint, o
           )}
         </span>
         <div
-          className="flex items-center justify-center"
+          // Keyed on the page, so turning to another one starts the animation
+          // over rather than leaving the paper where it was.
+          key={`${at}:${nth}`}
+          className={`flex items-center justify-center ${turnedIn}`}
           ref={setRef}
           style={{ flexDirection: geo.flow, gap, position: 'relative' }}
           // Tapping the paper places what the tray has selected. Dragging is
@@ -2531,6 +2558,16 @@ function CanvasScreen({ book, at, nth, setBook, onBack, goTo, print, setPrint, o
             <div
               key={`preview-${b.key}`}
               className="pointer-events-none absolute z-[3] rounded-[3px] border-[1.5px] border-accent/55 bg-accent-soft/55"
+              style={{ left: b.left, top: b.top, width: b.width, height: b.height }}
+            />
+          ))}
+
+          {/* Fades out over the part that just arrived. Over, not under: the
+              part is drawn already and this says where it went. */}
+          {landedOn?.map(b => (
+            <div
+              key={`landed-${b.key}`}
+              className="drop-flash pointer-events-none absolute z-[3] rounded-[3px] bg-accent"
               style={{ left: b.left, top: b.top, width: b.width, height: b.height }}
             />
           ))}
@@ -2679,9 +2716,10 @@ function CanvasScreen({ book, at, nth, setBook, onBack, goTo, print, setPrint, o
               key={t.kind}
               // `pan-x`, not `none`: sideways belongs to the tray, every other
               // direction belongs to the part being lifted out of it.
-              className={`stamp relative flex w-[60px] shrink-0 cursor-grab touch-pan-x flex-col items-center gap-[3px] rounded-xl border-[1.5px] py-[8px] text-[9px] font-semibold active:cursor-grabbing lg:w-full lg:gap-1 lg:py-3 lg:text-[11px] ${
+              className={`stamp relative flex w-[60px] shrink-0 cursor-grab touch-pan-x flex-col items-center gap-[3px] rounded-xl border-[1.5px] py-[8px] text-[9px] font-semibold transition-[transform,box-shadow,background-color,border-color] duration-[120ms] ease-out active:cursor-grabbing active:scale-95 motion-reduce:transition-none lg:w-full lg:gap-1 lg:py-3 lg:text-[11px] ${
                 idx >= 0
-                  ? 'border-accent bg-accent-soft'
+                  // Picked up: it stands off the tray until it is put down.
+                  ? '-translate-y-0.5 border-accent bg-accent-soft shadow-[0_3px_8px_rgba(224,106,15,0.22)]'
                   : 'border-line bg-white hover:border-line-strong hover:shadow-[0_2px_8px_rgba(38,36,31,0.12)]'
               }`}
               onPointerDown={e => startDrag(e, idx >= 0 && traySelected.length > 1 ? [...traySelected] : [t.kind], null)}

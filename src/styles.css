@@ -48,6 +48,32 @@
   --animate-knob: knobPulse 1.9s ease-in-out infinite;
 }
 
+/* The moments this app had none of. Everything here is short enough to be
+   felt rather than watched -- a page that takes half a second to turn is a
+   page you wait for -- and every one of them is off when the reader has asked
+   for less movement. */
+
+/* Turning the page. The paper comes in from the side it was turned from, so
+   the direction of the press and the direction of the movement agree. */
+@keyframes turnNext { from { transform: translateX(16px); opacity: 0.4 } to { transform: none; opacity: 1 } }
+@keyframes turnPrev { from { transform: translateX(-16px); opacity: 0.4 } to { transform: none; opacity: 1 } }
+.turn-next { animation: turnNext 170ms ease-out }
+.turn-prev { animation: turnPrev 170ms ease-out }
+
+/* Arriving at a screen. Without it, size → 構成 → 編集 is three unrelated
+   pictures; with it they are one move forward. */
+@keyframes screenIn { from { opacity: 0; transform: translateY(7px) } to { opacity: 1; transform: none } }
+.screen-in { animation: screenIn 160ms ease-out }
+
+/* What just landed on the paper. A part dropped into a quarter of a spread
+   was a change you had to look for; this is where to look. */
+@keyframes dropFlash { 0% { opacity: 0.5 } 100% { opacity: 0 } }
+.drop-flash { animation: dropFlash 420ms ease-out forwards }
+
+@media (prefers-reduced-motion: reduce) {
+  .turn-next, .turn-prev, .screen-in, .drop-flash { animation: none }
+}
+
 @keyframes knobPulse {
   0%, 100% { box-shadow: 0 1px 3px rgba(38, 36, 31, 0.18), 0 0 0 0 rgba(224, 106, 15, 0.45); }
   60% { box-shadow: 0 1px 3px rgba(38, 36, 31, 0.18), 0 0 0 8px rgba(224, 106, 15, 0); }
