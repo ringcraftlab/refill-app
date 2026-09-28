@@ -39,6 +39,7 @@ async function build() {
   await page.goto(BASE);
   await page.locator('.sizerow', { hasText: '80×128mm' }).click();
   await page.locator('.card', { hasText: '見開き' }).click();
+  await page.getByRole('button', { name: 'この構成で作る' }).click();
   await page.locator('.page').first().waitFor();
   await drag(await centerOf(await stamp('マンスリー')), await centerOf(page.locator('.page').first()));
   await drag(await centerOf(await stamp('バーチカル')), await centerOf(page.locator('.page').nth(1)));

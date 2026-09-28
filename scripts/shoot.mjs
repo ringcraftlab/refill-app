@@ -50,6 +50,7 @@ await page.locator('.sizerow', { hasText: '80×128mm' }).click();
 await shot('02-ページ構成');
 
 await page.locator('.card', { hasText: '見開き' }).click();
+await page.getByRole('button', { name: 'この構成で作る' }).click();
 await page.locator('.page').first().waitFor();
 await shot('03-空のキャンバス');
 
@@ -81,6 +82,7 @@ await shot('07-右に方眼を落とす');
 await page.goto(BASE);
 await page.locator('.sizerow', { hasText: '80×128mm' }).click();
 await page.locator('.card', { hasText: '見開き' }).click();
+await page.getByRole('button', { name: 'この構成で作る' }).click();
 await page.locator('.page').first().waitFor();
 const left2 = page.locator('.page').first();
 await drag(await centerOf(await stamp('マンスリー')), await centerOf(left2));
@@ -98,6 +100,7 @@ await shot('09-TODOを足す');
 await page.goto(BASE);
 await page.locator('.sizerow', { hasText: '80×128mm' }).click();
 await page.locator('.card', { hasText: '見開き' }).click();
+await page.getByRole('button', { name: 'この構成で作る' }).click();
 await page.locator('.page').first().waitFor();
 const left3 = page.locator('.page').first();
 await drag(await centerOf(await stamp('マンスリー')), await centerOf(left3));
@@ -128,6 +131,7 @@ await shot('12-2つ外してマンスリーだけ');
 await page.goto(BASE);
 await page.locator('.sizerow', { hasText: '95×170mm' }).click();
 await page.locator('.card', { hasText: '見開き' }).click();
+await page.getByRole('button', { name: 'この構成で作る' }).click();
 await page.locator('.page').first().waitFor();
 await drag(await centerOf(await stamp('バーチカル')), await centerOf(page.locator('.page').first()));
 await shot('13-バーチカル');
@@ -158,6 +162,7 @@ await shot('14-バーチカルを8時から20時に');
 await page.goto(BASE);
 await page.locator('.sizerow', { hasText: '95×170mm' }).click();
 await page.locator('.card', { hasText: '片面' }).click();
+await page.getByRole('button', { name: 'この構成で作る' }).click();
 await page.locator('.page').first().waitFor();
 const only = page.locator('.page').first();
 await drag(await centerOf(await stamp('マンスリー')), await centerOf(only));
@@ -169,6 +174,7 @@ await shot('15-片面にマンスリーと日付リスト');
 await page.goto(BASE);
 await page.locator('.sizerow', { hasText: '95×170mm' }).click();
 await page.locator('.card', { hasText: '見開き' }).click();
+await page.getByRole('button', { name: 'この構成で作る' }).click();
 await page.locator('.page').first().waitFor();
 await drag(await centerOf(await stamp('バーチカル')), await centerOf(page.locator('.page').first()));
 await page.locator('.range').click();
@@ -185,6 +191,7 @@ await shot('16-バーチカルを2段に');
 await page.goto(BASE);
 await page.locator('.sizerow', { hasText: '95×170mm' }).click();
 await page.locator('.card', { hasText: '見開き' }).click();
+await page.getByRole('button', { name: 'この構成で作る' }).click();
 await page.locator('.page').first().waitFor();
 const edgeL = await page.locator('.page').first().boundingBox();
 await drag(
@@ -205,6 +212,7 @@ await shot('17-左端に落として片ページ2段');
 await page.goto(BASE);
 await page.locator('.sizerow', { hasText: '95×170mm' }).click();
 await page.locator('.card', { hasText: '見開き' }).click();
+await page.getByRole('button', { name: 'この構成で作る' }).click();
 await page.locator('.page').first().waitFor();
 await drag(await centerOf(await stamp('バーチカル')), await centerOf(page.locator('.page').first()));
 await page.locator('.range').click();
@@ -224,6 +232,7 @@ const foldCard = page.locator('.card', { hasText: '蛇腹3面' });
 if (await foldCard.count()) {
   await foldCard.click();
   await shot('19-蛇腹を選ぶ');
+  await page.getByRole('button', { name: 'この構成で作る' }).click();
   await page.locator('.page').first().waitFor();
 
   // One calendar over the whole strip: a fold-out month, which is the thing a
@@ -243,6 +252,7 @@ if (await foldCard.count()) {
   await page.goto(BASE);
   await page.locator('.sizerow', { hasText: '62×105mm' }).click();
   await page.locator('.card', { hasText: '蛇腹3面' }).click();
+  await page.getByRole('button', { name: 'この構成で作る' }).click();
   await page.locator('.page').first().waitFor();
   const s3 = await page.locator('.page').first().boundingBox();
   for (const at of [0.17, 0.5, 0.84]) {
@@ -256,6 +266,7 @@ if (await foldCard.count()) {
   await page.goto(BASE);
   await page.locator('.sizerow', { hasText: '62×105mm' }).click();
   await page.locator('.card', { hasText: '蛇腹2面' }).click();
+  await page.getByRole('button', { name: 'この構成で作る' }).click();
   await page.locator('.page').first().waitFor();
   await (await stamp('マンスリー')).click();
   const s2 = await page.locator('.page').first().boundingBox();
@@ -272,6 +283,7 @@ if (await foldCard.count()) {
   await page.goto(BASE);
   await page.locator('.sizerow', { hasText: '62×105mm' }).click();
   await page.locator('.card', { hasText: '蛇腹3面' }).click();
+  await page.getByRole('button', { name: 'この構成で作る' }).click();
   await page.locator('.page').first().waitFor();
   await page.locator('.rotate').click();
   const turned = await page.locator('.page').first().boundingBox();
@@ -301,6 +313,7 @@ if (await foldCard.count()) {
   // the one it is.
   await page.locator('.card', { hasText: 'L字3面' }).click();
   await shot('28-横長ミニ3穴の蛇腹');
+  await page.getByRole('button', { name: 'この構成で作る' }).click();
   await page.locator('.page').first().waitFor();
   const card = await page.locator('.page').first().boundingBox();
   await drag(await centerOf(await stamp('マンスリー')),
@@ -316,6 +329,7 @@ if (await foldCard.count()) {
   await page.goto(BASE);
   await page.locator('.sizerow', { hasText: '91×55mm' }).click();
   await page.locator('.card', { hasText: '蛇腹3面' }).click();
+  await page.getByRole('button', { name: 'この構成で作る' }).click();
   await page.locator('.page').first().waitFor();
   const ribbon = await page.locator('.page').first().boundingBox();
   await drag(await centerOf(await stamp('マンスリー')),
@@ -332,6 +346,7 @@ if (await foldCard.count()) {
 await page.goto(BASE);
 await page.locator('.sizerow', { hasText: '80×128mm' }).click();
 await page.locator('.card', { hasText: '見開き' }).click();
+await page.getByRole('button', { name: 'この構成で作る' }).click();
 await page.locator('.page').first().waitFor();
 await drag(await centerOf(await stamp('マンスリー')), await centerOf(page.locator('.page').first()));
 const bgChip = page.locator('button', { hasText: '背景なし' });
@@ -378,6 +393,7 @@ async function feedPhoto() {
 await page.goto(BASE);
 await page.locator('.sizerow', { hasText: '80×128mm' }).click();
 await page.locator('.card', { hasText: '見開き' }).click();
+await page.getByRole('button', { name: 'この構成で作る' }).click();
 await page.locator('.page').first().waitFor();
 const photoStamp = page.locator('.stamp', { hasText: '写真' });
 if (await photoStamp.count()) {
@@ -399,6 +415,7 @@ if (await photoStamp.count()) {
   await page.goto(BASE);
   await page.locator('.sizerow', { hasText: '80×128mm' }).click();
   await page.locator('.card', { hasText: '見開き' }).click();
+  await page.getByRole('button', { name: 'この構成で作る' }).click();
   await page.locator('.page').first().waitFor();
   await drag(await centerOf(await stamp('写真')), await centerOf(page.locator('.page').first()));
   await openPhotoSheet();
@@ -414,6 +431,7 @@ if (await photoStamp.count()) {
 await page.goto(BASE);
 await page.locator('.sizerow', { hasText: '95×170mm' }).click();
 await page.locator('.card', { hasText: '見開き' }).click();
+await page.getByRole('button', { name: 'この構成で作る' }).click();
 await page.locator('.page').first().waitFor();
 await drag(await centerOf(await stamp('ウィークリー')), await centerOf(page.locator('.page').first()));
 await page.waitForTimeout(400);
@@ -432,6 +450,7 @@ await shot('36-見開きの週間は8マス');
 await page.goto(BASE);
 await page.locator('.sizerow', { hasText: '80×128mm' }).click();
 await page.locator('.card', { hasText: '見開き' }).click();
+await page.getByRole('button', { name: 'この構成で作る' }).click();
 await page.locator('.page').first().waitFor();
 await drag(await centerOf(await stamp('マンスリー')), await centerOf(page.locator('.page').first()));
 await drag(await centerOf(await stamp('メモ')), await centerOf(page.locator('.page').nth(1)));
@@ -452,6 +471,7 @@ if (await lookChip.count()) {
 await page.goto(BASE);
 await page.locator('.sizerow', { hasText: '80×128mm' }).click();
 await page.locator('.card', { hasText: '片面' }).first().click();
+await page.getByRole('button', { name: 'この構成で作る' }).click();
 await page.locator('.page').first().waitFor();
 await drag(await centerOf(await stamp('マンスリー')), await centerOf(page.locator('.page').first()));
 await shot('38-前後の月の小さなカレンダー');
@@ -471,6 +491,7 @@ if (await miniChoice.count()) {
 await page.goto(BASE);
 await page.locator('.sizerow', { hasText: '148×210mm' }).click();
 await page.locator('.card', { hasText: '見開き' }).first().click();
+await page.getByRole('button', { name: 'この構成で作る' }).click();
 await page.locator('.page').first().waitFor();
 {
   const paper = await page.locator('.page').first().boundingBox();

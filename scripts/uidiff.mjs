@@ -37,6 +37,7 @@ async function measure(base) {
   await page.locator('.sizerow', { hasText: '80×128mm' }).click();
   await grab('card', '.card');
   await page.locator('.card', { hasText: '見開き' }).click();
+  await page.getByRole('button', { name: 'この構成で作る' }).click();
   await page.locator('.page').first().waitFor();
   await grab('page', '.page');
   await grab('stamp', '.stamp');
