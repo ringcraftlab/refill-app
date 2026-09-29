@@ -29,6 +29,7 @@ const CHECKS = [
   { id: 'pc', script: 'pccheck.mjs', out: 'shots/pc', what: 'PCの2カラムとホバー' },
   { id: 'book', script: 'bookcheck.mjs', out: 'shots/book', what: '1冊の中身（順番・枚数・保存）' },
   { id: 'ux', script: 'uxcheck.mjs', out: 'shots/ux', what: '×と確認ダイアログ' },
+  { id: 'nav', script: 'navcheck.mjs', out: null, what: '開いた場所へ帰れるか' },
   { id: 'print', script: 'printpreview.mjs', out: 'shots/print', what: '刷り上がりプレビュー' },
   { id: 'multidrop', script: 'multidrop.mjs', out: null, what: 'まとめてドラッグ' },
   { id: 'touch', script: 'touchcheck.mjs', out: null, what: '指でのトレイ操作' },

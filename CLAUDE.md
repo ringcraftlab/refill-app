@@ -77,7 +77,7 @@
 **コードを読んで「直った」と結論しない。実際に動かして見る。**
 
 ```bash
-npm run check                # ビルド→preview→8つの確認を並列。56秒
+npm run check                # ビルド→preview→9つの確認を並列
 npm run check -- shoot pdf   # 一部だけ
 npm run check -- --keep      # 自分で見に行くので preview を残す
 npm run check -- --no-build  # 直前のビルドのまま
@@ -97,7 +97,7 @@ npm run koyomi               # 六曜と祝日を外部実装と照合（暦を�
 | `bookcheck.mjs` | 1冊の中身（もくじに足す・枚数・並べ替え・外す・束ごと保存・PDF） |
 | `pccheck.mjs` | PCの2カラム（紙の横に設定・折り返すトレイ）とホバー、狭い窓に戻ること |
 | `uxcheck.mjs` | ×の数、確認ダイアログ、潰したときに×が消えること |
-| `navcheck.mjs` | **開いた場所へ帰れるか**（`npm run nav`）。他のスクリプトは40場面のうち1か所しか戻っていないので、行き止まりはここでしか見つからない。仕様を満たすまで `npm run check` には入れない |
+| `navcheck.mjs` | **開いた場所へ帰れるか**（15か所）。他のスクリプトは40場面のうち1か所しか戻らないので、行き止まりはここでしか見つからない |
 | `multidrop.mjs` | まとめてドラッグが拒否されないか |
 | `touchcheck.mjs` | 指でのトレイ操作（横に払えばスクロール・上に引けばパーツ）。他は全部マウス |
 | `printpreview.mjs` | 刷り上がりプレビューと拡大 |

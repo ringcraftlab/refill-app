@@ -8,9 +8,11 @@
 // That is why the app could grow a dead end -- a form you can choose but not
 // un-choose -- and still report 8/8.
 //
-// It exits 1 on any mismatch. It is deliberately NOT in `npm run check` yet:
-// the app does not satisfy the spec today, and the point of this file is to
-// say by how much. Add it to check.mjs the moment the count reaches zero.
+// It exits 1 on any mismatch. It found three the day it was written -- a form
+// you could choose but not un-choose, a contents that came out at the form
+// picker however you had reached it, and an editor entered from the contents
+// with no way back to it -- and runs with the rest of the checks now that
+// those are gone.
 //
 //   npm run build && npx vite preview --port 4173 --strictPort &
 //   node scripts/navcheck.mjs
@@ -55,12 +57,11 @@ check(await where() === '編集', '構成から編集へ進む');
 
 // 編集から構成へ帰る道があるか。仕様では「来た場所へ帰る」なので、
 // 構成から来た直後は構成へ帰れなければならない。
-const backToForm = await page.locator('button', { hasText: '見開き' }).count()
-  + await page.locator('.toform').count();
+const backToForm = await page.locator('.toform').count();
 check(backToForm > 0, `編集から構成へ帰る道がある（いま ${backToForm} 個）`);
 
 // ---- 3. 編集 → 一覧 → 帰る ------------------------------------------------
-await page.locator('.tocontents').click();
+await page.locator('.pageno').click();
 await settle();
 check(await where() === '一覧', '編集から一覧へ入れる');
 await page.locator('button[aria-label="戻る"]').first().click();

@@ -415,6 +415,17 @@ function createBook(): Book {
 
 export function App() {
   const [stage, setStage] = useState<Stage>('size');
+  // Where each screen was opened from. Not a parent -- an opener: the contents
+  // reached from the editor closes back to the editor, and the editor reached
+  // from the contents closes back to the contents. A fixed hierarchy cannot
+  // say that, which is why pressing back in the contents used to come out at
+  // the form picker however you had got there.
+  const [openedFrom, setOpenedFrom] = useState<Partial<Record<Stage, Stage>>>({});
+  const go = (next: Stage) => {
+    setOpenedFrom(m => ({ ...m, [next]: stage }));
+    setStage(next);
+  };
+  const back = () => { const prev = openedFrom[stage]; if (prev) setStage(prev); };
   const [book, setBook] = useState<Book>(createBook);
   // Where the editor is: which section, and which of its sheets. Turning the
   // page moves the second; the contents moves both.
@@ -445,7 +456,7 @@ export function App() {
     return (
       <SizeScreen
         selected={body.size}
-        onPick={(size) => { every(l => ({ ...l, size })); setStage('sides'); }}
+        onPick={(size) => { every(l => ({ ...l, size })); go('sides'); }}
       />
     );
   }
@@ -474,8 +485,8 @@ export function App() {
               }
             : l.surface,
         }))}
-        onBack={() => setStage('size')}
-        onConfirm={() => { setAt(0); setStage('canvas'); }}
+        onBack={back}
+        onConfirm={() => { setAt(0); go('canvas'); }}
       />
     );
   }
@@ -490,9 +501,9 @@ export function App() {
         onOpen={(i: number, open?: 'range' | 'part0', sheet = 0) => {
           goTo(i, sheet);
           if (open) setOpenOn(o => ({ key: o.key + 1, what: open }));
-          setStage('canvas');
+          go('canvas');
         }}
-        onBack={() => setStage('sides')}
+        onBack={back}
       />
     );
   }
@@ -502,7 +513,13 @@ export function App() {
       at={Math.min(at, book.sections.length - 1)}
       nth={nth}
       setBook={setBook}
-      onBack={() => setStage('contents')}
+      onList={() => go('contents')}
+      // The way home, and where home is. The editor is the workshop, so it has
+      // no way out of its own -- only the one back to whatever opened it.
+      backTo={openedFrom.canvas === 'contents' || openedFrom.canvas === 'sides'
+        ? openedFrom.canvas
+        : null}
+      onBack={back}
       goTo={goTo}
       print={print}
       setPrint={setPrint}
@@ -1442,9 +1459,6 @@ function ContentsScreen({ book, setBook, print, at, nth, onOpen, onBack }: {
         </span>
       )}
 
-      <div className="flex shrink-0 gap-2 pb-1 pt-1.5">
-        <Button variant="cta" className="flex-1" onClick={() => onOpen(at)}>編集にもどる</Button>
-      </div>
 
       {(adding || addAt !== null) && (
         <AddSection
@@ -1594,10 +1608,18 @@ function sectionSpan(l: Layout): string {
   return `${l.year}年${l.month}月 → ${end.year}年${end.month}月・${runText(l)}`;
 }
 
-function CanvasScreen({ book, at, nth, setBook, onBack, goTo, print, setPrint, openOn }: {
+function CanvasScreen({
+  book, at, nth, setBook, onList, backTo, onBack, goTo, print, setPrint, openOn,
+}: {
   book: Book; at: number; setBook: (fn: (b: Book) => Book) => void;
   // Which sheet of that section the book is turned to.
   nth: number;
+  // Opening the list of pages, which is a door forward, not a way back.
+  onList: () => void;
+  // Where this screen was opened from, or nothing when it is where the app
+  // started. The way back wears that place's own picture, so nothing has to
+  // be written to say where it goes.
+  backTo: 'sides' | 'contents' | null;
   onBack: () => void;
   // Editing a different section of the same book, at one of its sheets:
   // turning the page and adding one both land here.
@@ -2320,13 +2342,24 @@ function CanvasScreen({ book, at, nth, setBook, onBack, goTo, print, setPrint, o
           turned a quarter turn fills the drawing area top to bottom, and a
           button floating in its corner sat on the refill itself. */}
       <header className="flex shrink-0 items-center gap-2 px-4 pb-2 pt-3 text-xs font-semibold text-label">
-        {/* Says where it goes. An unlabelled ← is read as "undo this screen",
-            and 中身 was the one thing in the app with no word on it anywhere:
-            someone looking for the cover had no reason to press this. */}
-        <Button variant="chip" className="tocontents" onClick={onBack} aria-label="中身へ">
-          <span className="text-[13px] leading-none">←</span>
-          中身{book.sections.length > 1 ? ` ${at + 1}/${book.sections.length}` : ''}
-        </Button>
+        {/* The way back, and only when there is one: the editor is the
+            workshop, so it has no exit of its own. What it wears is the
+            picture of the place it would return to -- the pages laid out in
+            rows, or the sheet the form was chosen on -- which is why no word
+            is needed to say where it goes. 「← 中身」 was that word. */}
+        {backTo && (
+          <Button
+            variant="chip"
+            className={backTo === 'contents' ? 'goback tolist' : 'goback toform'}
+            onClick={onBack}
+            aria-label={backTo === 'contents' ? '並びへもどる' : '構成へもどる'}
+          >
+            <span className="text-[13px] leading-none">←</span>
+            {backTo === 'contents'
+              ? <ListGlyph />
+              : <SizeIcon size={size} color={SIZE_COLOR[layout.size]} scale={0.1} />}
+          </Button>
+        )}
         {/* The two buttons keep their room; the name gives way. A long size
             name pushing them off the edge is worse than a name cut short. */}
         <span className="min-w-0 truncate">
@@ -2641,8 +2674,11 @@ function CanvasScreen({ book, at, nth, setBook, onBack, goTo, print, setPrint, o
           The number is a button. Twenty-six pages is more than anyone turns
           through one at a time, and the number is where the eye already is
           when someone wants to be somewhere else. */}
-      {leaves.length > 1 && (
-        <div className="pager flex shrink-0 items-center justify-center gap-2.5 pt-1">
+      <div className="pager flex shrink-0 items-center justify-center gap-2.5 pt-1">
+        {/* The arrows only exist when there is somewhere to turn to. The
+            number is always here, because it is also the door to the pages
+            laid out in rows -- a book of one page still has to have one. */}
+        {leaves.length > 1 && (
           <Button
             variant="edge"
             className="prevpage size-8 text-[15px]"
@@ -2650,12 +2686,14 @@ function CanvasScreen({ book, at, nth, setBook, onBack, goTo, print, setPrint, o
             onClick={() => goTo(leaves[cursor - 1].at, leaves[cursor - 1].nth)}
             aria-label="前のページ"
           >‹</Button>
-          {paging && (
-            <Button variant="chip" className="pageno" onClick={onBack} aria-label="中身を開く">
-              {paging.from === paging.to ? paging.from : `${paging.from}–${paging.to}`}
-              <span className="text-faint">/{paging.of}ページ</span>
-            </Button>
-          )}
+        )}
+        {paging && (
+          <Button variant="chip" className="pageno" onClick={onList} aria-label="並びを見る">
+            {paging.from === paging.to ? paging.from : `${paging.from}–${paging.to}`}
+            <span className="text-faint">/{paging.of}ページ</span>
+          </Button>
+        )}
+        {leaves.length > 1 && (
           <Button
             variant="edge"
             className="nextpage size-8 text-[15px]"
@@ -2663,14 +2701,14 @@ function CanvasScreen({ book, at, nth, setBook, onBack, goTo, print, setPrint, o
             onClick={() => goTo(leaves[cursor + 1].at, leaves[cursor + 1].nth)}
             aria-label="次のページ"
           >›</Button>
-        </div>
-      )}
+        )}
+      </div>
 
       {/* What the rest of the book is, from inside one section of it. */}
       {book.sections.length > 1 && (
         <button
           className="alsonote m-0 shrink-0 px-3.5 pt-1 text-left text-[10px] text-accent"
-          onClick={onBack}
+          onClick={onList}
         >
           {book.sections.map(sectionLabel).join(' → ')}
         </button>
@@ -3202,6 +3240,21 @@ function DividerHandle({ box, teach, onDown, onMove, onUp }: {
         ))}
       </b>
     </div>
+  );
+}
+
+// The list of pages, drawn rather than named. Two columns of little sheets is
+// what the panel it opens actually looks like, so the button and the place it
+// goes are the same picture.
+function ListGlyph() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 13 13" aria-hidden="true" className="block">
+      <g fill="none" stroke="currentColor" strokeWidth={1}>
+        {[0.5, 7.5].map(x => [0.5, 5, 9.5].map(y => (
+          <rect key={`${x}-${y}`} x={x} y={y} width={5} height={3} rx={0.5} />
+        )))}
+      </g>
+    </svg>
   );
 }
 

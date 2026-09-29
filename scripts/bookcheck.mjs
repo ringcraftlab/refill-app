@@ -51,7 +51,10 @@ const shut = async () => {
   await page.waitForTimeout(200);
 };
 const toContents = async () => {
-  await page.locator('.tocontents').click();
+  // The page number is the door to the pages laid out in rows. 「← 中身」 used
+  // to be a second one, written in words; the way back now wears the picture
+  // of where it goes instead.
+  await page.locator('.pageno').click();
   await page.locator('.contents-list').waitFor();
   await page.waitForTimeout(400);
 };
