@@ -884,8 +884,22 @@ function SizeCards({ selected, wide, onPick }: {
   );
 }
 
+// How long the screen stays after a size is pressed. Pressing used to change
+// the screen in the same frame: the card you touched never got to show that it
+// was the one, so the tap read as "the app moved" rather than as "I chose
+// this". Long enough for the ring to land, short enough that nobody waits.
+const PICK_HOLD_MS = 130;
+
 function SizeScreen({ selected, onPick }: { selected: RefillSize; onPick: (s: RefillSize) => void }) {
   const wide = useWide();
+  // What was just pressed, so it can be seen being chosen before the screen
+  // goes. A second press while the first is still showing is the same press.
+  const [taken, setTaken] = useState<RefillSize | null>(null);
+  const take = (s: RefillSize) => {
+    if (taken) return;
+    setTaken(s);
+    window.setTimeout(() => onPick(s), PICK_HOLD_MS);
+  };
   return (
     <div className={PICK_SCREEN}>
       <div className="text-[14px] font-bold tracking-[0.04em] text-muted">RingCraftLab</div>
@@ -898,7 +912,7 @@ function SizeScreen({ selected, onPick }: { selected: RefillSize; onPick: (s: Re
           overflows -- `justify-center` on a scrolling column would push the
           first row above the scroll origin, where nothing can reach it. */}
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
-        <SizeCards selected={selected} wide={wide} onPick={onPick} />
+        <SizeCards selected={taken ?? selected} wide={wide} onPick={take} />
       </div>
     </div>
   );
