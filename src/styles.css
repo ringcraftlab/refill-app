@@ -28,6 +28,11 @@
   /* Vivid enough to read as the one colour that acts, dark enough that a 10px
      note in it stays legible on white -- the point most pop palettes miss. */
   --color-accent: #E06A0F;
+  /* The same orange, dark enough to read at 11px: #E06A0F on the ground comes
+     to 3.2:1, which is fine for a fill and not fine for a word. Measured, not
+     guessed -- 82% of the brand orange is where 4.5:1 lands. Fills keep the
+     bright one; anything that is read uses this. */
+  --color-accent-text: #B8570C;
   --color-accent-soft: #FFF2E4;
   /* Reads as ink on a label, but lighter, so a row of controls does not shout. */
   --color-label: #5C574E;

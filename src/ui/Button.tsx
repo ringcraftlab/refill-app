@@ -28,7 +28,11 @@ export type ButtonVariant =
   | 'edge';
 
 const VARIANT: Record<ButtonVariant, string> = {
-  cta: 'rounded-xl bg-accent p-3.5 text-sm font-bold text-white',
+  // The darker orange, not the bright one: white on #E06A0F is 3.37:1, and the
+  // biggest button in the app is the last place to be short of contrast. The
+  // bright orange keeps everything a word is not drawn on -- rings, flashes,
+  // soft grounds.
+  cta: 'rounded-xl bg-accent-text p-3.5 text-[15px] font-bold text-white',
   action: 'flex-1 rounded-[10px] border border-line-strong bg-white py-3 text-xs font-semibold text-label',
   // Wider and borderless, so the export button reads as the end of the row.
   actionWide: 'flex-[1.3] rounded-[10px] bg-white py-3 text-xs font-semibold text-label',
