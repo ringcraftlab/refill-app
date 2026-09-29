@@ -1,0 +1,119 @@
+// Walks the app's doors and asks one question at every one of them:
+//
+//   開いた場所へ帰れるか。
+//
+// The spec (5章「戻る構造」) says a screen remembers where it was opened from
+// and goes back there when it closes. Nothing else in scripts/ ever presses
+// back: of the forty-odd scenes the other checks walk, one goes backwards.
+// That is why the app could grow a dead end -- a form you can choose but not
+// un-choose -- and still report 8/8.
+//
+// It exits 1 on any mismatch. It is deliberately NOT in `npm run check` yet:
+// the app does not satisfy the spec today, and the point of this file is to
+// say by how much. Add it to check.mjs the moment the count reaches zero.
+//
+//   npm run build && npx vite preview --port 4173 --strictPort &
+//   node scripts/navcheck.mjs
+import { BASE, launch } from './browser.mjs';
+
+const browser = await launch();
+const page = await browser.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2 });
+
+let bad = 0;
+const check = (ok, what) => { console.log(ok ? 'ok  ' : 'NG  ', what); if (!ok) bad++; };
+
+// Which screen is on. Order matters: the contents draws thumbnails, not pages;
+// the editor is the only one with a tray.
+const where = async () => {
+  if (await page.locator('.contents-list').count()) return '一覧';
+  if (await page.locator('.stamp').count()) return '編集';
+  if (await page.locator('.card').count()) return '構成';
+  if (await page.locator('.sizerow').count()) return 'サイズ';
+  return '（不明）';
+};
+const settle = () => page.waitForTimeout(350);
+
+const start = async () => {
+  await page.goto(BASE);
+  await page.locator('.sizerow', { hasText: '95×170mm' }).click();
+  await page.locator('.card').first().waitFor();
+};
+
+// ---- 1. サイズ → 構成 -----------------------------------------------------
+await start();
+check(await where() === '構成', 'サイズを選ぶと構成へ進む');
+await page.locator('button', { hasText: 'サイズを選び直す' }).first().click();
+await settle();
+check(await where() === 'サイズ', `構成から戻ると、開いた場所（サイズ）へ帰る（いま ${await where()}）`);
+
+// ---- 2. 構成 → 編集 -------------------------------------------------------
+await page.locator('.sizerow', { hasText: '95×170mm' }).click();
+await page.locator('.card', { hasText: '見開き' }).first().click();
+await page.getByRole('button', { name: 'この構成で作る' }).click();
+await page.locator('.page').first().waitFor();
+check(await where() === '編集', '構成から編集へ進む');
+
+// 編集から構成へ帰る道があるか。仕様では「来た場所へ帰る」なので、
+// 構成から来た直後は構成へ帰れなければならない。
+const backToForm = await page.locator('button', { hasText: '見開き' }).count()
+  + await page.locator('.toform').count();
+check(backToForm > 0, `編集から構成へ帰る道がある（いま ${backToForm} 個）`);
+
+// ---- 3. 編集 → 一覧 → 帰る ------------------------------------------------
+await page.locator('.tocontents').click();
+await settle();
+check(await where() === '一覧', '編集から一覧へ入れる');
+await page.locator('button[aria-label="戻る"]').first().click();
+await settle();
+check(
+  await where() === '編集',
+  `一覧を閉じると、開いた場所（編集）へ帰る（いま ${await where()}）`,
+);
+
+// ---- 4. ページ番号から一覧、押したページの編集へ --------------------------
+await start();
+await page.locator('.card', { hasText: '見開き' }).first().click();
+await page.getByRole('button', { name: 'この構成で作る' }).click();
+await page.locator('.page').first().waitFor();
+const monthly = page.locator('.stamp', { hasText: 'マンスリー' });
+await monthly.scrollIntoViewIfNeeded();
+const box = async (l) => { const b = await l.boundingBox(); return { x: b.x + b.width / 2, y: b.y + b.height / 2 }; };
+const from = await box(monthly), onto = await box(page.locator('.page').first());
+await page.mouse.move(from.x, from.y); await page.mouse.down();
+await page.mouse.move(onto.x, onto.y, { steps: 10 }); await page.mouse.up();
+await settle();
+await page.locator('.pageno').click();
+await settle();
+check(await where() === '一覧', 'ページ番号から一覧へ入れる');
+await page.locator('.leaf.here').first().click();
+await page.locator('.page').first().waitFor();
+check(await where() === '編集', '一覧でページを押すと、そのページの編集へ');
+const backToList = await page.locator('.tolist').count();
+check(backToList > 0, `一覧から入った編集に、一覧へ帰る道がある（いま ${backToList} 個）`);
+
+// ---- 5. 紙の上のチップ：開いて閉じたら編集 --------------------------------
+for (const [name, sel] of [['期間', '.range'], ['用紙', '.paper'], ['背景', 'button:has-text("背景")'], ['体裁', '.look']]) {
+  await page.locator(sel).first().click();
+  await settle();
+  const opened = await page.locator('.scrim, .sheet').count() > 0;
+  await page.keyboard.press('Escape').catch(() => {});
+  await page.locator('.scrim').click({ position: { x: 6, y: 6 } }).catch(() => {});
+  await settle();
+  check(opened && await where() === '編集', `${name}のシートは閉じると編集へ帰る`);
+}
+
+// ---- 6. 刷り上がりと拡大 --------------------------------------------------
+await page.getByRole('button', { name: 'PDF出力プレビュー' }).click();
+await page.locator('.preview svg').first().waitFor();
+await page.locator('.scrim').click({ position: { x: 6, y: 6 } }).catch(() => {});
+await settle();
+check(await where() === '編集', '刷り上がりを閉じると編集へ帰る');
+await page.getByRole('button', { name: '大きく見る' }).click();
+await page.waitForTimeout(400);
+await page.locator('button[aria-label="閉じる"]').first().click().catch(() => {});
+await settle();
+check(await where() === '編集', '拡大を閉じると編集へ帰る');
+
+console.log(`\n${bad === 0 ? '行き止まりなし' : `仕様（5章 戻る構造）と食い違うところ ${bad} か所`}`);
+await browser.close();
+if (bad) process.exitCode = 1;

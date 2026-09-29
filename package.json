@@ -9,6 +9,7 @@
     "preview": "vite preview --port 4173 --strictPort",
     "check": "node scripts/check.mjs",
     "rules": "node scripts/rules.mts",
+    "nav": "node scripts/navcheck.mjs",
     "baseline": "bash scripts/baseline.sh",
     "shots": "node scripts/shoot.mjs",
     "koyomi": "node scripts/koyomicheck.mjs"
