@@ -5,7 +5,7 @@ import type { ReactNode } from 'react';
 export function Field({ label, children }: { label: ReactNode; children: ReactNode }) {
   return (
     <div className="flex flex-col gap-2">
-      <span className="field-label text-[11px] text-muted">{label}</span>
+      <span className="field-label text-[13px] text-muted">{label}</span>
       {children}
     </div>
   );
@@ -24,7 +24,7 @@ export function Segmented<T extends string | number>({ options, value, onPick }:
         <button
           key={String(o.v)}
           onClick={() => onPick(o.v)}
-          className={`flex-1 rounded-[9px] border px-1 py-[11px] text-xs font-semibold ${
+          className={`flex-1 rounded-[9px] border px-1 py-[11px] text-[13px] font-semibold ${
             o.v === value
               ? 'border-ink bg-ink text-white'
               : 'border-line-strong bg-white text-label'
@@ -51,7 +51,7 @@ export function Stepper({ value, onStep, canDown = true, canUp = true, tight = f
   return (
     <div className={`stepper flex shrink-0 items-center ${tight ? 'gap-1.5' : 'gap-2.5'}`}>
       <button className={box} disabled={!canDown} onClick={() => onStep(-1)} aria-label="減らす">−</button>
-      <strong className={`${tight ? 'min-w-[2.2rem]' : 'min-w-[84px]'} text-center text-[13px]`}>{value}</strong>
+      <strong className={`${tight ? 'min-w-[2.2rem]' : 'min-w-[84px]'} text-center text-[14px]`}>{value}</strong>
       <button className={box} disabled={!canUp} onClick={() => onStep(1)} aria-label="増やす">＋</button>
     </div>
   );

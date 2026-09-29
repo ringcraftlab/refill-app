@@ -660,7 +660,7 @@ const sizeHoles = (s: SizeSpec) => `${s.holes.count}穴`;
 const emWidth = (name: string) =>
   [...name].reduce((w, c) => w + (/[^\u0020-\u00ff]/.test(c) ? 1 : 0.55), 0);
 const nameSize = (name: string) =>
-  (emWidth(name) > 4.5 ? 'text-[11px] min-[360px]:text-[11px]' : 'text-[13px]');
+  (emWidth(name) > 4.5 ? 'text-[13px] min-[360px]:text-[13px]' : 'text-[14px]');
 
 // Selection is the size's own colour, drawn as an outline and a glow around
 // the card, and nothing at all inside it. The card was once washed with that
@@ -700,13 +700,23 @@ const cardSkin = (on: boolean, line: string) =>
 // on A5, so the bigger the sheet the fainter its own outline, and A5 came out
 // as a wash with no edge and no visible punch at all. `pen` turns a thickness
 // on screen back into millimetres, which gives all nine sheets one line.
-const OUTLINE_PX = 0.8;
+// 0.8 was a hairline: on the pale sizes -- Bible's blue, A5 slim's yellow --
+// the sheet read as a smudge rather than as a drawn thing. 1.2 is where it
+// becomes a line without becoming an icon (1.6 made the outline the subject
+// and the paper the gap inside it).
+const OUTLINE_PX = 1.2;
+// The ring around a punch does NOT follow the outline up. The hole is about a
+// pixel across on the small sizes, and a 1.2px ring on each side of a 1px
+// white centre closes it: the holes came out as beads with no hole in them.
+// The ring stays thin and the centre is what grew instead.
 const HOLE_RING_PX = 0.9;
 // The punch shrinks the same way: 5.5mm on A5 is a 0.7px dot. A hole keeps
 // its true size wherever that still reads, and stops shrinking below a dot
 // that does -- never past three quarters of the margin it sits in, or it
-// would break out through the edge of the paper it is punched in.
-const HOLE_MIN_PX = 1;
+// would break out through the edge of the paper it is punched in. 1.4, not 1:
+// with the outline at 1.2 a 1px hole is smaller than the line beside it, and
+// reads as a dot rather than as something the ring passes through.
+const HOLE_MIN_PX = 1.4;
 
 // The binder, drawn where it grips the paper: one bar per hole, from a little
 // outside the edge through the hole and a little past it, with the punched
@@ -759,10 +769,17 @@ function SizeIcon({ size, color, flip = false, scale = SHEET_SCALE, rings = fals
   // The paper keeps its scale; the box around it gains the room the rings
   // stand out into, on the bound side only.
   const over = rings ? ringOut(size) : 0;
-  const vbX = !onTop && !flip ? -over : 0;
-  const vbY = onTop && !flip ? -over : 0;
-  const vbW = size.widthMm + (onTop ? 0 : over);
-  const vbH = size.heightMm + (onTop ? over : 0);
+  // And half a pixel of air all round. Without it the outline's outer edge
+  // lands exactly on the box's edge, and the box is a fractional number of
+  // pixels tall (横長ミニ3穴 came to 18.7), so the bottom and right of the
+  // sheet fell across a device pixel and came out visibly paler than the top
+  // -- measured at 105 against 117. The air costs nothing and makes the four
+  // sides the same weight.
+  const air = pen(0.75);
+  const vbX = (!onTop && !flip ? -over : 0) - air;
+  const vbY = (onTop && !flip ? -over : 0) - air;
+  const vbW = size.widthMm + (onTop ? 0 : over) + air * 2;
+  const vbH = size.heightMm + (onTop ? over : 0) + air * 2;
   return (
     <svg
       width={vbW * k} height={vbH * k}
@@ -798,7 +815,7 @@ function SizeCards({ selected, wide, onPick }: {
           <div className="mb-auto flex w-full flex-col gap-3 py-0.5">
             {SIZE_GROUPS.map(group => (
               <section key={group.title} className="flex flex-col gap-1.5">
-                <h2 className="m-0 text-[11px] font-bold tracking-[0.04em] text-muted">{group.title}</h2>
+                <h2 className="m-0 text-[13px] font-bold tracking-[0.04em] text-muted">{group.title}</h2>
                 {/* A grid, not nested flex rows: its columns are exactly half
                     each, where a flex item would refuse to shrink below its own
                     name and the longest one on a row would push the column edge
@@ -830,7 +847,7 @@ function SizeCards({ selected, wide, onPick }: {
                             <strong className={`truncate font-semibold leading-tight ${nameSize(SIZE_NAME[id])}`}>
                               {SIZE_NAME[id]}
                             </strong>
-                            <span className="truncate text-[11px] leading-tight text-muted">
+                            <span className="truncate text-[13px] leading-tight text-muted">
                               {sizeMm(SIZES[id])}
                             </span>
                             {/* In the size's own colour, which is the one place
@@ -839,7 +856,7 @@ function SizeCards({ selected, wide, onPick }: {
                                 whose sheets swap between binders. Darkened to
                                 the point where ten pixels of it can be read. */}
                             <span
-                              className="truncate text-[11px] font-semibold leading-tight"
+                              className="truncate text-[13px] font-semibold leading-tight"
                               style={{ color: SIZE_WORD[id] }}
                             >
                               {sizeHoles(SIZES[id])}
@@ -856,7 +873,7 @@ function SizeCards({ selected, wide, onPick }: {
                               between "148×210mm" and "148×210m…", and the
                               millimetres are the only clue left to someone who
                               does not know the names. */}
-                          <span aria-hidden="true" className="hidden shrink-0 text-[13px] leading-none text-muted min-[360px]:block">›</span>
+                          <span aria-hidden="true" className="hidden shrink-0 text-[14px] leading-none text-muted min-[360px]:block">›</span>
                         </button>
                       )
                   ))}
@@ -871,10 +888,10 @@ function SizeScreen({ selected, onPick }: { selected: RefillSize; onPick: (s: Re
   const wide = useWide();
   return (
     <div className={PICK_SCREEN}>
-      <div className="text-[13px] font-bold tracking-[0.04em] text-muted">RingCraftLab</div>
+      <div className="text-[14px] font-bold tracking-[0.04em] text-muted">RingCraftLab</div>
       <div>
-        <h1 className="text-[19px] font-bold">手帳のサイズを選ぶ</h1>
-        <p className="m-0 mt-1 text-[12px] text-muted">お使いの手帳のサイズを選んでください</p>
+        <h1 className="text-[20px] font-bold">手帳のサイズを選ぶ</h1>
+        <p className="m-0 mt-1 text-[13px] text-muted">お使いの手帳のサイズを選んでください</p>
       </div>
       {/* The list starts under the heading rather than floating in the middle
           of the screen, and `mb-auto` keeps it there whether or not it
@@ -1032,14 +1049,14 @@ function FormCards({ size, spread, fold, foldGrain, wide, onPick, onScale }: {
             </g>
           </svg>
           <em
-            className="not-italic text-[11px] font-semibold leading-tight"
+            className="not-italic text-[13px] font-semibold leading-tight"
             style={{ color: SIZE_WORD[size] }}
           >{span(choice)!.text}</em>
         </span>
       )}
       <span className="flex flex-col gap-0.5">
-        <strong className="text-[13px] font-semibold leading-tight">{choice.title}</strong>
-        <span className="text-[11px] leading-tight text-muted">{choice.note}</span>
+        <strong className="text-[14px] font-semibold leading-tight">{choice.title}</strong>
+        <span className="text-[13px] leading-tight text-muted">{choice.note}</span>
       </span>
     </button>
   );
@@ -1058,8 +1075,8 @@ function FormCards({ size, spread, fold, foldGrain, wide, onPick, onScale }: {
       {special.length > 0 && (
         <div className="flex flex-col gap-1.5">
           <div>
-            <h2 className="m-0 text-[13px] font-semibold">特殊蛇腹（L字）</h2>
-            <p className="m-0 mt-0.5 text-[11px] leading-snug text-muted">
+            <h2 className="m-0 text-[14px] font-semibold">特殊蛇腹（L字）</h2>
+            <p className="m-0 mt-0.5 text-[13px] leading-snug text-muted">
               {`${SIZE_NAME[size]}だけの形。折り目がリングと直角なので、`
                 + `内側の面は綴じ側を${special[0].plan!.insetMm}mm切り落とします`}
             </p>
@@ -1092,12 +1109,12 @@ function SidesScreen({ size, spread, fold, foldGrain, onPick, onBack, onConfirm 
           back has to be where a way back is looked for. Leaving it to the card
           meant leaving it to be discovered, and it was not. */}
       <Button variant="chip" className="self-start" onClick={onBack}>
-        <span className="text-[13px] leading-none">←</span>
+        <span className="text-[14px] leading-none">←</span>
         サイズを選び直す
       </Button>
       <div>
-        <h1 className="text-[19px] font-bold">ページ構成を選ぶ</h1>
-        <p className="m-0 mt-1 text-[12px] text-muted">この紙を、どう開く形にしますか</p>
+        <h1 className="text-[20px] font-bold">ページ構成を選ぶ</h1>
+        <p className="m-0 mt-1 text-[13px] text-muted">この紙を、どう開く形にしますか</p>
       </div>
       {/* The size just chosen, carried across with its bar and its sheet: said
           in a line of grey text instead, the second screen looked like a
@@ -1116,7 +1133,7 @@ function SidesScreen({ size, spread, fold, foldGrain, onPick, onBack, onConfirm 
           give: on Micro5 it went from 97px to 18px and the name and the sheet
           were clipped away, leaving a bar with 「62×105mm」 in it. */}
       <div className="flex min-h-0 flex-1 flex-col gap-[18px] overflow-y-auto">
-      <span className="m-0 text-[11px] font-bold tracking-[0.04em] text-muted">作るリフィル</span>
+      <span className="m-0 text-[13px] font-bold tracking-[0.04em] text-muted">作るリフィル</span>
       <button
         // Full width on a phone, where everything is; on a wide window it
         // hugs what it holds, because a strip the width of the screen with a
@@ -1130,9 +1147,9 @@ function SidesScreen({ size, spread, fold, foldGrain, onPick, onBack, onConfirm 
           <strong className={`truncate font-semibold leading-tight ${nameSize(SIZE_NAME[size])}`}>
             {SIZE_NAME[size]}
           </strong>
-          <span className="truncate text-[11px] leading-tight text-muted">{sizeMm(spec)}</span>
+          <span className="truncate text-[13px] leading-tight text-muted">{sizeMm(spec)}</span>
           <span
-            className="truncate text-[11px] font-semibold leading-tight"
+            className="truncate text-[13px] font-semibold leading-tight"
             style={{ color: SIZE_WORD[size] }}
           >
             {sizeHoles(spec)}
@@ -1148,7 +1165,7 @@ function SidesScreen({ size, spread, fold, foldGrain, onPick, onBack, onConfirm 
         >
           <SizeIcon size={spec} color={color} scale={k} rings />
         </span>
-        <span className="shrink-0 pr-0.5 text-[11px] text-accent-text">変更</span>
+        <span className="shrink-0 pr-0.5 text-[13px] text-accent-text">変更</span>
       </button>
       {/* The line between what is already decided and what is being asked. */}
       <hr className="m-0 w-full shrink-0 border-0 border-t border-line" />
@@ -1281,7 +1298,7 @@ function EdgeNote({ size, count, sheet, paper }: {
   if (plan.endMm < 0.75) tight.push('上下');
   if (!tight.length) {
     return (
-      <p className="edge-note m-0 mb-[13px] text-[12px] text-muted">
+      <p className="edge-note m-0 mb-[13px] text-[13px] text-muted">
         外周に{Math.floor(Math.min(plan.sideMm, plan.endMm))}mm余ります。端まで刷る必要はありません
       </p>
     );
@@ -1291,7 +1308,7 @@ function EdgeNote({ size, count, sheet, paper }: {
   // guide is in the firing line.
   const onEdge = tight.includes('左右') ? punchInset(size) : INK_INSET_MM;
   return (
-    <p className="edge-note m-0 mb-[13px] text-[12px] text-muted">
+    <p className="edge-note m-0 mb-[13px] text-[13px] text-muted">
       <span className="font-semibold text-label">{tight.join('と')}は紙の端まで使います。</span>
       お使いのプリンタの余白が{onEdge.toFixed(onEdge < 4 ? 2 : 1)}mmより広いと、
       {tight.includes('左右') ? '穴ガイドの外側' : '中身の外周'}がそのぶん欠けます
@@ -1406,7 +1423,7 @@ function ContentsScreen({ book, setBook, print, at, nth, onOpen, onBack }: {
 
   return (
     <div className={PICK_SCREEN}>
-      <header className="flex shrink-0 items-center gap-2 pb-1 pt-1 text-xs font-semibold text-label">
+      <header className="flex shrink-0 items-center gap-2 pb-1 pt-1 text-[13px] font-semibold text-label">
         <Button variant="icon" onClick={onBack} aria-label="戻る">←</Button>
         <span className="min-w-0 truncate">
           {size.label} {size.widthMm}×{size.heightMm}mm
@@ -1414,9 +1431,9 @@ function ContentsScreen({ book, setBook, print, at, nth, onOpen, onBack }: {
           {formLabel(body, foldOf(body, size)?.grain)}
         </span>
       </header>
-      <h1 className="m-0 mb-0.5 text-[19px]">
+      <h1 className="m-0 mb-0.5 text-[20px]">
         中身
-        <span className="ml-2 align-middle text-[11px] font-normal text-muted">
+        <span className="ml-2 align-middle text-[13px] font-normal text-muted">
           全{pages.length}ページ
         </span>
       </h1>
@@ -1480,11 +1497,11 @@ function ContentsScreen({ book, setBook, print, at, nth, onOpen, onBack }: {
                         box={{ w: 54, h: 74 }} ring={here} lazy
                       />
                     ) : (
-                      <span className="flex h-[74px] w-[54px] items-center justify-center rounded-[3px] border border-dashed border-line-strong text-[15px] text-muted">
+                      <span className="flex h-[74px] w-[54px] items-center justify-center rounded-[3px] border border-dashed border-line-strong text-[16px] text-muted">
                         ＋
                       </span>
                     )}
-                    <span className={`text-[11px] leading-none ${here ? 'font-semibold text-accent-text' : 'text-muted'}`}>
+                    <span className={`text-[13px] leading-none ${here ? 'font-semibold text-accent-text' : 'text-muted'}`}>
                       {no}
                       {sec && <span className="ml-0.5 text-accent-text">{sectionMark(book.sections, leaf.at!)}</span>}
                     </span>
@@ -1499,7 +1516,7 @@ function ContentsScreen({ book, setBook, print, at, nth, onOpen, onBack }: {
       {/* What the whole book comes to on paper. The number that makes someone
           want to shorten something is this one, so it is here rather than
           three screens away -- and so is the shortening. */}
-      <p className="fill-note m-0 mt-auto pt-2 text-[12px] text-muted">
+      <p className="fill-note m-0 mt-auto pt-2 text-[13px] text-muted">
         {print.impose
           ? `${PAPERS[print.paper].label} ${job.sheets}枚・この束で${job.used}${job.unit}` +
             (job.spare > 0 ? `・最後の紙にあと${job.spare}${job.unit}ぶん` : '・あきはありません')
@@ -1507,7 +1524,7 @@ function ContentsScreen({ book, setBook, print, at, nth, onOpen, onBack }: {
       </p>
       {trim && (
         <span className="trim flex flex-wrap items-center gap-x-2 gap-y-1 pt-0.5">
-          <span className="flex-1 text-[12px] text-accent-text">
+          <span className="flex-1 text-[13px] text-accent-text">
             {sectionLabel(book.sections[trim.at])}を
             {runText(book.sections[trim.at])}→{runText(trim.to)}にすると
             {PAPERS[print.paper].label} {job.sheets - 1}枚に収まります
@@ -1544,7 +1561,7 @@ function ContentsScreen({ book, setBook, print, at, nth, onOpen, onBack }: {
           it sits in the book, and whether it stays. */}
       {picked !== null && book.sections[picked] && (
         <Modal title={sectionLabel(book.sections[picked])} onClose={() => setPicked(null)}>
-          <p className="secspan m-0 text-[12px] text-muted">{sectionSpan(book.sections[picked])}</p>
+          <p className="secspan m-0 text-[13px] text-muted">{sectionSpan(book.sections[picked])}</p>
           {hasDatedPart(book.sections[picked]) ? (
             <Button variant="quiet" className="torange" onClick={() => onOpen(picked, 'range')}>
               期間を変える
@@ -1552,7 +1569,7 @@ function ContentsScreen({ book, setBook, print, at, nth, onOpen, onBack }: {
           ) : (
             <span className="pages flex items-center gap-2">
               <Button variant="icon" onClick={() => setPages(picked, -1)} aria-label="減らす">−</Button>
-              <strong className="min-w-[3.5rem] text-center text-[13px]">
+              <strong className="min-w-[3.5rem] text-center text-[14px]">
                 {Math.max(1, book.sections[picked].pages ?? 1)}ページ
               </strong>
               <Button variant="icon" onClick={() => setPages(picked, 1)} aria-label="増やす">＋</Button>
@@ -2401,7 +2418,7 @@ function CanvasScreen({
       {/* Turning belongs up here rather than over the paper. A folded strip
           turned a quarter turn fills the drawing area top to bottom, and a
           button floating in its corner sat on the refill itself. */}
-      <header className="flex shrink-0 items-center gap-2 px-4 pb-2 pt-3 text-xs font-semibold text-label">
+      <header className="flex shrink-0 items-center gap-2 px-4 pb-2 pt-3 text-[13px] font-semibold text-label">
         {/* The way back, and only when there is one: the editor is the
             workshop, so it has no exit of its own. What it wears is the
             picture of the place it would return to -- the pages laid out in
@@ -2414,7 +2431,7 @@ function CanvasScreen({
             onClick={onBack}
             aria-label={backTo === 'contents' ? '並びへもどる' : '構成へもどる'}
           >
-            <span className="text-[13px] leading-none">←</span>
+            <span className="text-[14px] leading-none">←</span>
             {backTo === 'contents'
               ? <ListGlyph />
               : <SizeIcon size={size} color={SIZE_COLOR[layout.size]} scale={0.1} />}
@@ -2456,11 +2473,11 @@ function CanvasScreen({
             out of the title is worth more. The icons stay, and so do the
             labels a screen reader reads. */}
         <Button variant="chip" className="rotate ml-auto" onClick={turn} aria-label="リフィルを回転">
-          <span className="text-[13px] leading-none">↻</span>
+          <span className="text-[14px] leading-none">↻</span>
           <span className="hidden min-[360px]:inline">{turnLabel}</span>
         </Button>
         <Button variant="chip" className="magnify" onClick={() => setZoomed(true)} aria-label="大きく見る">
-          <span className="text-[13px] leading-none">⤢</span>
+          <span className="text-[14px] leading-none">⤢</span>
           <span className="hidden min-[360px]:inline">大きく</span>
         </Button>
       </header>
@@ -2478,7 +2495,7 @@ function CanvasScreen({
       <div className="mb-0.5 ml-3.5 mr-3 flex shrink-0 flex-wrap items-center gap-1.5 self-start">
       {dated && (
         <button
-          className="range flex shrink-0 items-center gap-2 rounded-full border border-line-strong bg-white px-3 py-1.5 text-[11px] text-ink"
+          className="range flex shrink-0 items-center gap-2 rounded-full border border-line-strong bg-white px-3 py-1.5 text-[13px] text-ink"
           onClick={() => setSheet(monthlyTarget)}
         >
           {byDay
@@ -2499,7 +2516,7 @@ function CanvasScreen({
             to put something else on it, so it is said before it is asked
             for -- and the chip opens the picture where that is done. */}
         <Button variant="chip" className="paper" onClick={() => setSheet('paper')}>
-          <span className="text-[13px] leading-none">▭</span>
+          <span className="text-[14px] leading-none">▭</span>
           {print.impose
             ? `${PAPERS[print.paper].label} ${job.sheets}枚`
             : `${PAPERS[print.paper].label} 原寸`}
@@ -2508,7 +2525,7 @@ function CanvasScreen({
           )}
         </Button>
         <Button variant="chip" onClick={() => setSheet('background')}>
-          <span className="text-[13px] leading-none">▦</span>
+          <span className="text-[14px] leading-none">▦</span>
           {BACKGROUND_LABEL[layout.background?.kind ?? 'none']}
         </Button>
         {/* The chip is the sample. It says the words it is set to, in the ink
@@ -2520,7 +2537,7 @@ function CanvasScreen({
           onClick={() => setSheet('look')}
           style={{ color: cssColor(paletteOf(layout).ink) }}
         >
-          <span className="text-[13px] font-semibold leading-none">Aa</span>
+          <span className="text-[14px] font-semibold leading-none">Aa</span>
           {WORD_SAMPLE[layout.words ?? 'mix']}
         </Button>
       </div>
@@ -2549,7 +2566,7 @@ function CanvasScreen({
               <Button variant="edge" className="addbefore" onClick={() => addPageHere()} aria-label="前にページを足す">
                 ＋
               </Button>
-              <em className="not-italic text-[11px] leading-none text-muted">足す</em>
+              <em className="not-italic text-[13px] leading-none text-muted">足す</em>
             </span>
           )}
         </span>
@@ -2645,7 +2662,7 @@ function CanvasScreen({
           ))}
 
           {empty && (
-            <div className="pointer-events-none absolute inset-0 flex items-center justify-center text-center text-[11px] leading-[1.7] text-muted">
+            <div className="pointer-events-none absolute inset-0 flex items-center justify-center text-center text-[13px] leading-[1.7] text-muted">
               {/* A cover is a single page in a book of spreads, and an empty
                   page looks like any other empty page. It says so itself,
                   because the paper is what anyone is looking at. */}
@@ -2694,7 +2711,7 @@ function CanvasScreen({
                 title={PART_LABEL[layout.surface.placed[b.slot]]}
               >
                 {waiting && (
-                  <span className="photo-empty pointer-events-none rounded-full bg-white/85 px-2 py-1 text-[11px] text-muted">
+                  <span className="photo-empty pointer-events-none rounded-full bg-white/85 px-2 py-1 text-[13px] text-muted">
                     ＋ 写真を選ぶ
                   </span>
                 )}
@@ -2749,7 +2766,7 @@ function CanvasScreen({
         {leaves.length > 1 && (
           <Button
             variant="edge"
-            className="prevpage size-8 text-[15px]"
+            className="prevpage size-8 text-[16px]"
             disabled={cursor <= 0}
             onClick={() => goTo(leaves[cursor - 1].at, leaves[cursor - 1].nth)}
             aria-label="前のページ"
@@ -2764,7 +2781,7 @@ function CanvasScreen({
         {leaves.length > 1 && (
           <Button
             variant="edge"
-            className="nextpage size-8 text-[15px]"
+            className="nextpage size-8 text-[16px]"
             disabled={cursor < 0 || cursor >= leaves.length - 1}
             onClick={() => goTo(leaves[cursor + 1].at, leaves[cursor + 1].nth)}
             aria-label="次のページ"
@@ -2775,14 +2792,14 @@ function CanvasScreen({
       {/* What the rest of the book is, from inside one section of it. */}
       {book.sections.length > 1 && (
         <button
-          className="alsonote m-0 shrink-0 px-3.5 pt-1 text-left text-[11px] text-accent-text"
+          className="alsonote m-0 shrink-0 px-3.5 pt-1 text-left text-[13px] text-accent-text"
           onClick={onList}
         >
           {book.sections.map(sectionLabel).join(' → ')}
         </button>
       )}
 
-      <p className={`m-0 shrink-0 px-3.5 py-1 text-[11px] ${
+      <p className={`m-0 shrink-0 px-3.5 py-1 text-[13px] ${
         traySelected.length > 0 || teachDivider ? 'text-accent-text' : 'text-muted'
       }`}>
         {teachDivider
@@ -2822,10 +2839,12 @@ function CanvasScreen({
               key={t.kind}
               // `pan-x`, not `none`: sideways belongs to the tray, every other
               // direction belongs to the part being lifted out of it.
-              // 68, not 60: at 11px 「ウィークリー」 wraps to two lines in 60,
+              // 84, not 68: 「ウィークリー」 measures 78px at 13px, and the
               // and a tray whose stamps are different heights reads as two
-              // rows of something. The floor under the type decides the width.
-              className={`stamp relative flex w-[68px] shrink-0 cursor-grab touch-pan-x flex-col items-center gap-[3px] rounded-xl border-[1.5px] py-[8px] text-[11px] font-semibold transition-[transform,box-shadow,background-color,border-color] duration-[120ms] ease-out active:cursor-grabbing active:scale-95 motion-reduce:transition-none lg:w-full lg:gap-1 lg:py-3 lg:text-[11px] ${
+              // border takes 3 more. A tray whose stamps are different heights
+              // reads as two rows of something, so the longest name decides
+              // the width -- it went 60 → 68 → 84 as the type went 9 → 11 → 13.
+              className={`stamp relative flex w-[84px] shrink-0 cursor-grab touch-pan-x flex-col items-center gap-[3px] rounded-xl border-[1.5px] py-[8px] text-[13px] font-semibold transition-[transform,box-shadow,background-color,border-color] duration-[120ms] ease-out active:cursor-grabbing active:scale-95 motion-reduce:transition-none lg:w-full lg:gap-1 lg:py-3 lg:text-[13px] ${
                 idx >= 0
                   // Picked up: it stands off the tray until it is put down.
                   ? '-translate-y-0.5 border-accent bg-accent-soft shadow-[0_3px_8px_rgba(224,106,15,0.22)]'
@@ -2837,7 +2856,7 @@ function CanvasScreen({
               onPointerUp={e => endTrayDrag(e, t.kind)}
             >
               {idx >= 0 && (
-                <i className="absolute -right-[5px] -top-[5px] size-[17px] rounded-full bg-accent text-[11px] not-italic leading-[17px] text-white">
+                <i className="absolute -right-[5px] -top-[5px] size-[17px] rounded-full bg-accent text-[13px] not-italic leading-[17px] text-white">
                   {idx + 1}
                 </i>
               )}
@@ -2886,7 +2905,7 @@ function CanvasScreen({
 
       {ghost && (
         <div
-          className="pointer-events-none fixed z-40 -translate-x-1/2 -translate-y-[140%] whitespace-nowrap rounded-[20px] bg-ink px-3 py-[7px] text-[11px] text-white"
+          className="pointer-events-none fixed z-40 -translate-x-1/2 -translate-y-[140%] whitespace-nowrap rounded-[20px] bg-ink px-3 py-[7px] text-[13px] text-white"
           style={{ left: ghost.x, top: ghost.y }}
         >
           {ghost.kinds.map(k => PART_LABEL[k]).join(' + ')}
@@ -2999,7 +3018,7 @@ function PhotoField({ layout, setLayout, size, slot, nth }: {
             value={mine ? 'each' : 'all'}
             onPick={v => setEach(v === 'each')}
           />
-          <p className="photo-where m-0 text-[11px] leading-snug text-muted">
+          <p className="photo-where m-0 text-[13px] leading-snug text-muted">
             {mine
               ? `いま${nth + 1}枚目の写真です（${run}枚中${filled}枚に入っています）`
               : `${run}枚ぜんぶに同じ写真が刷られます`}
@@ -3037,16 +3056,16 @@ function PhotoField({ layout, setLayout, size, slot, nth }: {
         {src && <Button variant="quiet" onClick={() => set(null)}>外す</Button>}
       </div>
       {(busy || (src && shown !== src)) && (
-        <p className="m-0 text-[11px] text-muted">{busy || '読み込み中…'}</p>
+        <p className="m-0 text-[13px] text-muted">{busy || '読み込み中…'}</p>
       )}
-      {failed && <p className="photo-failed m-0 text-[11px] leading-snug text-danger">{failed}</p>}
+      {failed && <p className="photo-failed m-0 text-[13px] leading-snug text-danger">{failed}</p>}
       {src ? (
-        <p className={`photo-size m-0 text-[11px] ${bytes > PHOTO_WARN_BYTES ? 'text-danger' : 'text-muted'}`}>
+        <p className={`photo-size m-0 text-[13px] ${bytes > PHOTO_WARN_BYTES ? 'text-danger' : 'text-muted'}`}>
           {`${Math.round(bytes / 1024)}KB。刷る大きさ（${Math.round(box.w)}×${Math.round(box.h)}mm）に合わせて縮めてあります`}
           {bytes > PHOTO_WARN_BYTES && '。これより大きいと保存が通らないことがあります'}
         </p>
       ) : (
-        <p className="m-0 text-[11px] leading-snug text-muted">
+        <p className="m-0 text-[13px] leading-snug text-muted">
           枠いっぱいに入ります。縦横の比が違うぶんは切り取られるので、
           見せたいところが端にある写真は先に切っておいてください
         </p>
@@ -3094,7 +3113,7 @@ function LookSheet({ layout, setLayout }: {
                 aria-label={TONES[t].label}
                 aria-pressed={on}
                 onClick={() => setLayout(l => ({ ...l, tone: t as InkTone }))}
-                className={`flex flex-1 flex-col items-center gap-1 rounded-[9px] border-2 bg-white py-2 text-[11px] ${
+                className={`flex flex-1 flex-col items-center gap-1 rounded-[9px] border-2 bg-white py-2 text-[13px] ${
                   on ? 'border-ink' : 'border-line-strong'
                 }`}
               >
@@ -3127,7 +3146,7 @@ function LookSheet({ layout, setLayout }: {
         ))}
       </div>
 
-      <p className="m-0 text-[11px] leading-snug text-muted">
+      <p className="m-0 text-[13px] leading-snug text-muted">
         日曜と土曜の色は体裁では変わりません。日曜が赤いのは好みではなく決まりごとなので、
         色みに合わせて変えると意味がなくなります
       </p>
@@ -3231,9 +3250,9 @@ function BackgroundSheet({ layout, setLayout, size }: {
             )}
             {bg.src && <Button variant="quiet" onClick={() => set({ src: undefined })}>外す</Button>}
           </div>
-          {busy && <p className="m-0 text-[11px] text-muted">{busy}</p>}
+          {busy && <p className="m-0 text-[13px] text-muted">{busy}</p>}
           {bg.src && (
-            <p className={`photo-size m-0 text-[11px] ${bytes > PHOTO_WARN_BYTES ? 'text-danger' : 'text-muted'}`}>
+            <p className={`photo-size m-0 text-[13px] ${bytes > PHOTO_WARN_BYTES ? 'text-danger' : 'text-muted'}`}>
               {`${Math.round(bytes / 1024)}KB。刷る大きさに合わせて縮めてあります`}
               {bytes > PHOTO_WARN_BYTES && '。これより大きいと保存が通らないことがあります'}
             </p>
@@ -3252,7 +3271,7 @@ function BackgroundSheet({ layout, setLayout, size }: {
         </Field>
       )}
 
-      <p className="m-0 text-[11px] leading-snug text-muted">
+      <p className="m-0 text-[13px] leading-snug text-muted">
         紙の端まで刷ります。プリンタが端まで出せないぶんは欠けます
       </p>
     </>
@@ -3274,7 +3293,7 @@ function RoundButton({ left, top, label, onClick, hook = 'clearmini', children }
       // other controls on the drawing wear (`variant="edge"`), which is both
       // legible (15:1) and the app's own word for "this is a control, not a
       // mark on the page".
-      className={`${hook} absolute z-[5] flex size-[18px] items-center justify-center rounded-full border border-line-strong bg-white p-0 text-[11px] leading-none text-label shadow-[0_1px_3px_rgba(38,36,31,0.18)] hover:border-danger hover:text-danger`}
+      className={`${hook} absolute z-[5] flex size-[18px] items-center justify-center rounded-full border border-line-strong bg-white p-0 text-[13px] leading-none text-label shadow-[0_1px_3px_rgba(38,36,31,0.18)] hover:border-danger hover:text-danger`}
       style={{ left, top }}
       onClick={onClick}
       aria-label={label}
@@ -3358,14 +3377,14 @@ function SaveSheet({ book, size, grain, onSave }: {
     <>
       <Field label="名前">
         <input
-          className="savename w-full rounded-[9px] border border-line-strong bg-white px-3 py-[11px] text-[13px]"
+          className="savename w-full rounded-[9px] border border-line-strong bg-white px-3 py-[11px] text-[14px]"
           value={name}
           autoFocus
           onChange={e => setName(e.target.value)}
           onKeyDown={e => { if (e.key === 'Enter') onSave(name.trim() || suggestName(book, size, grain)); }}
         />
       </Field>
-      <p className="m-0 text-[11px] leading-snug text-muted">
+      <p className="m-0 text-[13px] leading-snug text-muted">
         束はまとめて保存されます。中身の順番も、用紙も、
         <strong className="font-semibold text-label">そのまま開き直せます</strong>
       </p>
@@ -3429,7 +3448,7 @@ function AddSection({ job, print, onPick, onClose }: {
 }) {
   return (
     <Modal title="中身を足す" onClose={onClose}>
-      <p className="picker m-0 text-[12px] text-muted">
+      <p className="picker m-0 text-[13px] text-muted">
         {job.spare > 0
           ? `${PAPERS[print.paper].label}の${job.sheets}枚目に、あとリフィル${job.spare}${job.unit}ぶん入ります`
           : `いまちょうど${PAPERS[print.paper].label}${job.sheets}枚です。足すと紙が増えます`}
@@ -3445,7 +3464,7 @@ function AddSection({ job, print, onPick, onClose }: {
 
       {SECTION_MENU.map(group => (
         <span key={group.title} className="flex flex-col gap-1">
-          <strong className="text-[11px] font-normal text-muted">{group.title}</strong>
+          <strong className="text-[13px] font-normal text-muted">{group.title}</strong>
           <span className="fillers grid grid-cols-2 gap-1.5">
             {group.kinds.map(kind => (
               <Button key={kind} variant="quiet" className="justify-start" onClick={() => onPick(kind)}>
@@ -3460,7 +3479,7 @@ function AddSection({ job, print, onPick, onClose }: {
       <Button variant="quiet" className="makenew justify-start" onClick={() => onPick('blank')}>
         白紙（自分で作る）
       </Button>
-      <span className="text-[11px] leading-snug text-muted">
+      <span className="text-[13px] leading-snug text-muted">
         足したものは末尾に入ります（表紙だけ先頭）。順番は中身の ↑↓ で変えられます
       </span>
     </Modal>
@@ -3518,7 +3537,7 @@ function PlaceNumbers({ plan, tile, count, mirror, scalePercent, numberOf, small
           style={placeStyle(plan, tile, i, mirror, scalePercent)}
         >
           <em className={`rounded-[2px] bg-white/85 not-italic text-accent-text ${
-            small ? 'm-px px-px text-[7px] leading-[9px]' : 'm-[3px] px-1 text-[11px] leading-4'
+            small ? 'm-px px-px text-[7px] leading-[9px]' : 'm-[3px] px-1 text-[13px] leading-4'
           }`}>{numberOf(i)}</em>
         </span>
       ))}
@@ -3547,7 +3566,7 @@ function SpareSlots({ plan, tile, first, count, mirror, scalePercent, empty, onP
             key={i}
             className={`absolute flex items-center justify-center rounded-[2px] ${
               empty
-                ? 'empty border border-dashed border-accent bg-accent-soft/70 text-[13px] text-accent-text'
+                ? 'empty border border-dashed border-accent bg-accent-soft/70 text-[14px] text-accent-text'
                 : 'onpaper border border-transparent hover:border-accent hover:bg-accent-soft/40'
             }`}
             style={placeStyle(plan, tile, i, mirror, scalePercent)}
@@ -3575,7 +3594,7 @@ function PageSheet({ book, at, nth, onShorten, onDrop, onClose }: {
   const cut = shortenTo(sec, nth + 1);
   return (
     <Modal title={sectionLabel(sec)} onClose={onClose}>
-      <p className="pagewhat m-0 text-[12px] text-muted">
+      <p className="pagewhat m-0 text-[13px] text-muted">
         この面は「{sectionLabel(sec)}」の{nth + 1}枚目・{sheetLabel(sec, nth)}
         （ぜんぶで{runText(sec)}）
       </p>
@@ -3584,7 +3603,7 @@ function PageSheet({ book, at, nth, onShorten, onDrop, onClose }: {
           ここまでにする（{runText(sec)} → {runText(cut)}）
         </Button>
       ) : (
-        <p className="m-0 text-[11px] leading-snug text-muted">
+        <p className="m-0 text-[13px] leading-snug text-muted">
           これが最後の1枚です。短くするなら期間を変えてください
         </p>
       )}
@@ -3593,7 +3612,7 @@ function PageSheet({ book, at, nth, onShorten, onDrop, onClose }: {
           この中身を外す
         </Button>
       )}
-      <span className="text-[11px] leading-snug text-muted">
+      <span className="text-[13px] leading-snug text-muted">
         日付のあるものは月の単位で短くなります（週の途中では終われないため）
       </span>
     </Modal>
@@ -3694,7 +3713,7 @@ function PartSheet({
   // is stepped is this one.
   const mine = usePaperJob([layout], size, print);
   const runPaper = (
-    <p className="run-paper m-0 text-[11px] text-muted">
+    <p className="run-paper m-0 text-[13px] text-muted">
       この区切りで{PAPERS[print.paper].label}
       <strong className="mx-0.5 font-semibold text-muted">{mine.sheets}枚</strong>
       （リフィル{mine.used}{mine.unit}）
@@ -3740,14 +3759,14 @@ function PartSheet({
             Half a book is not a thing anyone asked for. */}
         {target === 'load' && (
           saved.length === 0
-            ? <p className="text-[13px] text-muted">まだ保存されていません</p>
+            ? <p className="text-[14px] text-muted">まだ保存されていません</p>
             : <ul className="m-0 flex max-h-[22rem] list-none flex-col gap-1.5 overflow-y-auto p-0">
                 {saved.map(b => (
                   <li key={b.id} className="flex items-center gap-2.5 rounded-[9px] border border-line-strong bg-white p-2">
                     <Thumb layout={b.sections[0]} size={SIZES[b.sections[0].size]} />
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate text-[13px]">{b.name}</span>
-                      <span className="block truncate text-[11px] text-muted">
+                      <span className="block truncate text-[14px]">{b.name}</span>
+                      <span className="block truncate text-[13px] text-muted">
                         {b.id === book.id ? '編集中・' : ''}{b.sections.map(sectionLabel).join(' → ')}
                       </span>
                     </span>
@@ -3820,7 +3839,7 @@ function PartSheet({
                   value={print.paper}
                   onPick={v => setPrint(p => ({ ...p, paper: v as PaperId }))}
                 />
-                <p className="fill-note m-0 text-[12px] text-muted">
+                <p className="fill-note m-0 text-[13px] text-muted">
                   {PAPERS[print.paper].label} 1枚にリフィル{perPaper}{job.unit}・
                   この束で{job.used}{job.unit}（紙{job.sheets}枚）
                   {job.spare > 0
@@ -3829,7 +3848,7 @@ function PartSheet({
                 </p>
               </>
             ) : (
-              <p className="m-0 text-[12px] leading-snug text-muted">
+              <p className="m-0 text-[13px] leading-snug text-muted">
                 原寸のまま刷る設定です。用紙にまとめると、1枚の紙に何枚ぶんも
                 並べて刷れます
               </p>
@@ -3875,7 +3894,7 @@ function PartSheet({
                 want to add -- and one press to where that is done. */}
             {print.impose && (
               <div className="spare flex flex-col gap-0.5">
-                <p className="fill-note m-0 text-[12px] text-muted">
+                <p className="fill-note m-0 text-[13px] text-muted">
                   {PAPERS[print.paper].label} 1枚にリフィル{perPaper}{job.unit}・いま{job.used}{job.unit}（紙{job.sheets}枚）
                   {job.spare > 0
                     ? `・最後の紙にあと${job.spare}${job.unit}ぶん`
@@ -3885,7 +3904,7 @@ function PartSheet({
                     ＋ on the sheet is small. One sentence, beside the picture
                     it is about. */}
                 {job.spare > 0 && (
-                  <p className="fill-how m-0 text-[12px] text-accent-text">
+                  <p className="fill-how m-0 text-[13px] text-accent-text">
                     あと{job.spare}{job.unit}入れられます。空きの ＋ をタップして入れてください
                   </p>
                 )}
@@ -3913,7 +3932,7 @@ function PartSheet({
 
             {/* The browser's own paragraph margin, kept deliberately: it is the
                 breathing room between the paper choice and the print options. */}
-            <p className="print-summary my-[13px] text-[13px] text-muted">
+            <p className="print-summary my-[13px] text-[14px] text-muted">
               {hasDatedPart(layout) && `${layout.year}年${layout.month}月から${layout.monthCount}ヶ月分・`}
               {isDayPaced(layout) && `${sheetCount(layout)}枚・`}
               {print.impose && (layout.fold > 1
@@ -3941,7 +3960,7 @@ function PartSheet({
                 on how the refills ended up on the sheet, so it is worked out
                 here and printed in the corner of the sheet as well. */}
             {print.duplex && print.impose && (
-              <p className="duplex-note m-0 mb-[13px] text-[12px] text-muted">
+              <p className="duplex-note m-0 mb-[13px] text-[13px] text-muted">
                 プリンタの両面設定は
                 <strong className="font-semibold text-label">
                   {duplexFlipOf(layout, size, imposeCount(layout, size, print, also), print.paper)}
@@ -4166,7 +4185,7 @@ function PartSheet({
                 onStep={n => setLayout(l => ({ ...l, monthCount: Math.min(36, Math.max(1, l.monthCount + n)) }))}
               />
             </Field>
-            <p className="run-dates m-0 text-[11px] text-muted">
+            <p className="run-dates m-0 text-[13px] text-muted">
               刷られるのは {ymd(firstDay)} 〜 {ymd(lastDay)}
             </p>
             {runPaper}
@@ -4226,7 +4245,7 @@ function PartSheet({
                 />
               </Field>
             )}
-            <p className="m-0 text-[11px] leading-snug text-muted">
+            <p className="m-0 text-[13px] leading-snug text-muted">
               カード1枚で1本ぶん、名刺の大きさのまま並びます。名前も説明も手で書く
               ところなので、刷るのは枠だけです。余った紙はつまみを動かして、メモや
               方眼に分けられます
@@ -4341,12 +4360,12 @@ function PrintPreview({ layout, size, print, also, job, onPlus, onPage }: {
                 />
               )}
             </span>
-            <figcaption className="whitespace-nowrap text-[11px] text-muted">{label(i)}</figcaption>
+            <figcaption className="whitespace-nowrap text-[13px] text-muted">{label(i)}</figcaption>
           </figure>
         ))}
         {sheets.length > shown.length && (
           <button
-            className="flex min-h-[142px] w-[110px] shrink-0 items-center justify-center self-start rounded-sm border border-dashed border-line-strong text-center text-[11px] leading-[1.6] text-muted"
+            className="flex min-h-[142px] w-[110px] shrink-0 items-center justify-center self-start rounded-sm border border-dashed border-line-strong text-center text-[13px] leading-[1.6] text-muted"
             onClick={() => { setZoom(false); setOpen(PREVIEW_PAGES); }}
           >
             ほか<br />{sheets.length - shown.length}ページ
@@ -4355,11 +4374,11 @@ function PrintPreview({ layout, size, print, also, job, onPlus, onPage }: {
       </div>
       {/* The numbers are unexplained otherwise, and an orange number on a
           drawing of paper reads as something that will be on the paper. */}
-      <p className="faceno-note m-0 text-[11px] leading-[1.7] text-muted">
+      <p className="faceno-note m-0 text-[13px] leading-[1.7] text-muted">
         オレンジの番号はページの順番です（画面だけ・紙には刷りません）
       </p>
       {print.duplex && layout.spread && hasDatedPart(layout) && (
-        <p className="m-0 text-[11px] leading-[1.7] text-muted">
+        <p className="m-0 text-[13px] leading-[1.7] text-muted">
           見開きは左ページが必ず裏面に来るので、最初の表と最後の裏だけが余ります。
           そのまま両面で刷って、切り取って順に重ねてください。
         </p>
@@ -4371,7 +4390,7 @@ function PrintPreview({ layout, size, print, also, job, onPlus, onPage }: {
           onClick={() => setOpen(null)}
         >
           <button
-            className="absolute right-3.5 top-3 size-[34px] rounded-full bg-white/20 p-0 text-[17px] leading-[34px] text-white"
+            className="absolute right-3.5 top-3 size-[34px] rounded-full bg-white/20 p-0 text-[18px] leading-[34px] text-white"
             onClick={() => setOpen(null)}
             aria-label="閉じる"
           >×</button>
@@ -4421,11 +4440,11 @@ function PrintPreview({ layout, size, print, also, job, onPlus, onPage }: {
               )}
             </span>
           </div>
-          <div className="lightbox-bar flex items-center gap-3.5 text-xs text-white" onClick={e => e.stopPropagation()}>
+          <div className="lightbox-bar flex items-center gap-3.5 text-[13px] text-white" onClick={e => e.stopPropagation()}>
             <Button variant="quiet" className="min-w-[52px] disabled:opacity-35" disabled={open === 0} onClick={() => step(-1)} aria-label="前へ">←</Button>
             <span className="flex flex-col items-center gap-0.5 text-center">
               {label(open)}　{open + 1}/{sheets.length}
-              <em className="not-italic text-[11px] text-white/55">{zoom ? 'タップで全体' : 'タップで拡大'}</em>
+              <em className="not-italic text-[13px] text-white/55">{zoom ? 'タップで全体' : 'タップで拡大'}</em>
             </span>
             <Button variant="quiet" className="min-w-[52px] disabled:opacity-35" disabled={open === sheets.length - 1} onClick={() => step(1)} aria-label="次へ">→</Button>
           </div>
@@ -4475,7 +4494,7 @@ function ZoomView({ pages, flow, onClose }: {
   return (
     <div className="lightbox fixed inset-0 z-50 flex flex-col bg-[rgba(28,26,22,0.9)]">
       <button
-        className="absolute right-3.5 top-3 z-10 size-[34px] rounded-full bg-white/20 p-0 text-[17px] leading-[34px] text-white"
+        className="absolute right-3.5 top-3 z-10 size-[34px] rounded-full bg-white/20 p-0 text-[18px] leading-[34px] text-white"
         onClick={onClose}
         aria-label="閉じる"
       >×</button>
@@ -4495,7 +4514,7 @@ function ZoomView({ pages, flow, onClose }: {
           ))}
         </div>
       </div>
-      <p className="zoom-hint m-0 pb-[18px] text-center text-[11px] text-white/55">
+      <p className="zoom-hint m-0 pb-[18px] text-center text-[13px] text-white/55">
         {big ? '紙をタップで全体・外をタップで閉じる' : '紙をタップでさらに拡大・外をタップで閉じる'}
       </p>
     </div>

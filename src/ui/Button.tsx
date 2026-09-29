@@ -32,15 +32,15 @@ const VARIANT: Record<ButtonVariant, string> = {
   // biggest button in the app is the last place to be short of contrast. The
   // bright orange keeps everything a word is not drawn on -- rings, flashes,
   // soft grounds.
-  cta: 'rounded-xl bg-accent-text p-3.5 text-[15px] font-bold text-white',
-  action: 'flex-1 rounded-[10px] border border-line-strong bg-white py-3 text-xs font-semibold text-label',
+  cta: 'rounded-xl bg-accent-text p-3.5 text-[16px] font-bold text-white',
+  action: 'flex-1 rounded-[10px] border border-line-strong bg-white py-3 text-[13px] font-semibold text-label',
   // Wider and borderless, so the export button reads as the end of the row.
-  actionWide: 'flex-[1.3] rounded-[10px] bg-white py-3 text-xs font-semibold text-label',
-  quiet: 'rounded-[9px] border border-line-strong bg-bg px-3 py-[11px] text-xs text-muted',
-  danger: 'rounded-[10px] border border-line-strong bg-white p-3 text-[13px] font-semibold text-danger',
+  actionWide: 'flex-[1.3] rounded-[10px] bg-white py-3 text-[13px] font-semibold text-label',
+  quiet: 'rounded-[9px] border border-line-strong bg-bg px-3 py-[11px] text-[13px] text-muted',
+  danger: 'rounded-[10px] border border-line-strong bg-white p-3 text-[14px] font-semibold text-danger',
   icon: 'px-1 text-lg leading-none',
-  chip: 'flex shrink-0 items-center gap-1 rounded-full border border-line-strong bg-white px-2.5 py-1 text-[11px] font-normal text-label',
-  edge: 'size-9 rounded-full border border-line-strong bg-white text-[17px] leading-none text-muted shadow-[0_2px_6px_rgba(38,36,31,0.16)] hover:border-accent hover:text-accent disabled:opacity-35',
+  chip: 'flex shrink-0 items-center gap-1 rounded-full border border-line-strong bg-white px-2.5 py-1 text-[13px] font-normal text-label',
+  edge: 'size-9 rounded-full border border-line-strong bg-white text-[18px] leading-none text-muted shadow-[0_2px_6px_rgba(38,36,31,0.16)] hover:border-accent hover:text-accent disabled:opacity-35',
 };
 
 interface Props extends ButtonHTMLAttributes<HTMLButtonElement> {
