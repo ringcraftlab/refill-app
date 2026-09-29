@@ -39,7 +39,12 @@ import { Dialog, Modal, Sheet, Toast } from './ui/Overlay';
 type Stage = 'size' | 'sides' | 'contents' | 'canvas';
 // A rectangle on screen, in the page area's own pixels.
 type Box = { key: string; left: number; top: number; width: number; height: number };
-type SheetTarget = { slot: number } | 'spanning' | 'load' | 'save' | 'print' | 'paper' | 'background' | 'look' | null;
+type SheetTarget =
+  { slot: number } | 'spanning' | 'load' | 'save' | 'print'
+  // `sheet` is the refill itself -- which size it is and what form it takes.
+  // `paper` is the A4 it gets printed on. Two different pieces of paper, and
+  // the confusion between them is why they are named apart here.
+  | 'sheet' | 'paper' | 'background' | 'look' | null;
 
 const GAP = 6;
 
@@ -780,6 +785,85 @@ function SizeIcon({ size, color, flip = false, scale = SHEET_SCALE, rings = fals
   );
 }
 
+// The nine sizes, laid out to be compared. Extracted from the screen that
+// asks for one first, because the same cards are what the paper's own chip
+// opens later -- the size is a property of the paper, not a step you passed.
+function SizeCards({ selected, wide, onPick }: {
+  selected: RefillSize; wide: boolean; onPick: (s: RefillSize) => void;
+}) {
+  return (
+          <div className="mb-auto flex w-full flex-col gap-3 py-0.5">
+            {SIZE_GROUPS.map(group => (
+              <section key={group.title} className="flex flex-col gap-1.5">
+                <h2 className="m-0 text-[11px] font-bold tracking-[0.04em] text-muted">{group.title}</h2>
+                {/* A grid, not nested flex rows: its columns are exactly half
+                    each, where a flex item would refuse to shrink below its own
+                    name and the longest one on a row would push the column edge
+                    over. */}
+                <div className="grid grid-cols-2 gap-1.5 lg:grid-cols-4">
+                  {(wide ? group.rows.flat() : group.rows.flatMap(row => (row.length === 1 ? [...row, null] : row))).map((id, i) => (
+                    id === null
+                      // A size with no partner leaves the rest of its row empty
+                      // rather than pulling the next pair apart.
+                      ? <span key={`empty-${i}`} aria-hidden="true" />
+                      : (
+                        <button
+                          key={id}
+                          onClick={() => onPick(id)}
+                          className="sizerow relative flex min-w-0 items-center gap-1 overflow-hidden rounded-[18px] border-[1.5px] py-2 pl-3 pr-1 text-left"
+                          style={cardSkin(selected === id, SIZE_COLOR[id])}
+                          aria-pressed={selected === id}
+                        >
+                          {/* A colour a glance can learn the size by, before the
+                              name is read. Flush to the card's own edge and its
+                              full height: a bar with air around it is a shape
+                              sitting on the card, and this is meant to be the
+                              card's edge. */}
+                          <span
+                            className="absolute inset-y-0 left-0 w-1.5"
+                            style={{ background: SIZE_COLOR[id] }}
+                          />
+                          <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                            <strong className={`truncate font-semibold leading-tight ${nameSize(SIZE_NAME[id])}`}>
+                              {SIZE_NAME[id]}
+                            </strong>
+                            <span className="truncate text-[10px] leading-tight text-faint">
+                              {sizeMm(SIZES[id])}
+                            </span>
+                            {/* In the size's own colour, which is the one place
+                                that colour carries a fact rather than a label:
+                                the sizes sharing a hole count are the sizes
+                                whose sheets swap between binders. Darkened to
+                                the point where ten pixels of it can be read. */}
+                            <span
+                              className="truncate text-[10px] font-semibold leading-tight"
+                              style={{ color: SIZE_WORD[id] }}
+                            >
+                              {sizeHoles(SIZES[id])}
+                            </span>
+                          </span>
+                          <span className="flex shrink-0 items-center justify-center" style={SHEET_SLOT}>
+                            <SizeIcon size={SIZES[id]} color={SIZE_COLOR[id]} rings />
+                          </span>
+                          {/* Decoration: it says "this opens something", which
+                              the button already says, so it stays out of the
+                              name a screen reader reads -- and off a 320px
+                              screen entirely. It and its gap cost 9px of the
+                              135px card, which at that width is the difference
+                              between "148×210mm" and "148×210m…", and the
+                              millimetres are the only clue left to someone who
+                              does not know the names. */}
+                          <span aria-hidden="true" className="hidden shrink-0 text-[13px] leading-none text-faint min-[360px]:block">›</span>
+                        </button>
+                      )
+                  ))}
+                </div>
+              </section>
+            ))}
+          </div>
+  );
+}
+
 function SizeScreen({ selected, onPick }: { selected: RefillSize; onPick: (s: RefillSize) => void }) {
   const wide = useWide();
   return (
@@ -794,75 +878,7 @@ function SizeScreen({ selected, onPick }: { selected: RefillSize; onPick: (s: Re
           overflows -- `justify-center` on a scrolling column would push the
           first row above the scroll origin, where nothing can reach it. */}
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
-        <div className="mb-auto flex w-full flex-col gap-3 py-0.5">
-          {SIZE_GROUPS.map(group => (
-            <section key={group.title} className="flex flex-col gap-1.5">
-              <h2 className="m-0 text-[11px] font-bold tracking-[0.04em] text-muted">{group.title}</h2>
-              {/* A grid, not nested flex rows: its columns are exactly half
-                  each, where a flex item would refuse to shrink below its own
-                  name and the longest one on a row would push the column edge
-                  over. */}
-              <div className="grid grid-cols-2 gap-1.5 lg:grid-cols-4">
-                {(wide ? group.rows.flat() : group.rows.flatMap(row => (row.length === 1 ? [...row, null] : row))).map((id, i) => (
-                  id === null
-                    // A size with no partner leaves the rest of its row empty
-                    // rather than pulling the next pair apart.
-                    ? <span key={`empty-${i}`} aria-hidden="true" />
-                    : (
-                      <button
-                        key={id}
-                        onClick={() => onPick(id)}
-                        className="sizerow relative flex min-w-0 items-center gap-1 overflow-hidden rounded-[18px] border-[1.5px] py-2 pl-3 pr-1 text-left"
-                        style={cardSkin(selected === id, SIZE_COLOR[id])}
-                        aria-pressed={selected === id}
-                      >
-                        {/* A colour a glance can learn the size by, before the
-                            name is read. Flush to the card's own edge and its
-                            full height: a bar with air around it is a shape
-                            sitting on the card, and this is meant to be the
-                            card's edge. */}
-                        <span
-                          className="absolute inset-y-0 left-0 w-1.5"
-                          style={{ background: SIZE_COLOR[id] }}
-                        />
-                        <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-                          <strong className={`truncate font-semibold leading-tight ${nameSize(SIZE_NAME[id])}`}>
-                            {SIZE_NAME[id]}
-                          </strong>
-                          <span className="truncate text-[10px] leading-tight text-faint">
-                            {sizeMm(SIZES[id])}
-                          </span>
-                          {/* In the size's own colour, which is the one place
-                              that colour carries a fact rather than a label:
-                              the sizes sharing a hole count are the sizes
-                              whose sheets swap between binders. Darkened to
-                              the point where ten pixels of it can be read. */}
-                          <span
-                            className="truncate text-[10px] font-semibold leading-tight"
-                            style={{ color: SIZE_WORD[id] }}
-                          >
-                            {sizeHoles(SIZES[id])}
-                          </span>
-                        </span>
-                        <span className="flex shrink-0 items-center justify-center" style={SHEET_SLOT}>
-                          <SizeIcon size={SIZES[id]} color={SIZE_COLOR[id]} rings />
-                        </span>
-                        {/* Decoration: it says "this opens something", which
-                            the button already says, so it stays out of the
-                            name a screen reader reads -- and off a 320px
-                            screen entirely. It and its gap cost 9px of the
-                            135px card, which at that width is the difference
-                            between "148×210mm" and "148×210m…", and the
-                            millimetres are the only clue left to someone who
-                            does not know the names. */}
-                        <span aria-hidden="true" className="hidden shrink-0 text-[13px] leading-none text-faint min-[360px]:block">›</span>
-                      </button>
-                    )
-                ))}
-              </div>
-            </section>
-          ))}
-        </div>
+        <SizeCards selected={selected} wide={wide} onPick={onPick} />
       </div>
     </div>
   );
@@ -876,15 +892,21 @@ function SizeScreen({ selected, onPick }: { selected: RefillSize; onPick: (s: Re
 // finger just touched is the same paper, the same size, on the screen that
 // follows. Drawing it larger here because there was room made the two
 // screens look like two different apps.
-function SidesScreen({ size, spread, fold, foldGrain, onPick, onBack, onConfirm }: {
+// The forms this paper can take, drawn to one scale. It lives apart from the
+// screen that first asks for it, because the same cards are what the paper's
+// own chip opens afterwards: a form is not a step in a setup, it is a
+// property of the paper, and a property has to be reachable while working.
+function FormCards({ size, spread, fold, foldGrain, wide, onPick, onScale }: {
   size: RefillSize;
   spread: boolean;
   fold: FoldCount;
   foldGrain?: FoldGrain;
+  wide: boolean;
   onPick: (v: { spread: boolean; fold: FoldCount; foldGrain?: FoldGrain }) => void;
-  onBack: () => void; onConfirm: () => void;
+  // Whatever draws this paper above the cards has to draw it the same size,
+  // so the scale the cards settle on is handed back.
+  onScale?: (k: number) => void;
 }) {
-  const wide = useWide();
   const spec = SIZES[size];
   const color = SIZE_COLOR[size];
   const flat = fold <= 1;
@@ -1013,6 +1035,48 @@ function SidesScreen({ size, spread, fold, foldGrain, onPick, onBack, onConfirm 
     </button>
   );
 
+  useLayoutEffect(() => { onScale?.(k); }, [k, onScale]);
+
+  return (
+    <>
+      {/* Side by side. A comparison reads across, not down: stacked, these
+          were the same drawing seen twice in a row instead of one beside the
+          other. Every card keeps one box the height of the largest sheet, so
+          a folded strip and a pair of pages are drawn to the same scale. */}
+      <div className="grid grid-cols-2 gap-1.5 lg:grid-cols-4">
+        {choices.map(choice => card(choice))}
+      </div>
+      {special.length > 0 && (
+        <div className="flex flex-col gap-1.5">
+          <div>
+            <h2 className="m-0 text-[13px] font-semibold">特殊蛇腹（L字）</h2>
+            <p className="m-0 mt-0.5 text-[10px] leading-snug text-faint">
+              {`${SIZE_NAME[size]}だけの形。折り目がリングと直角なので、`
+                + `内側の面は綴じ側を${special[0].plan!.insetMm}mm切り落とします`}
+            </p>
+          </div>
+          <div className="grid grid-cols-2 gap-1.5 lg:grid-cols-4">
+            {special.map(choice => card(choice))}
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+function SidesScreen({ size, spread, fold, foldGrain, onPick, onBack, onConfirm }: {
+  size: RefillSize;
+  spread: boolean;
+  fold: FoldCount;
+  foldGrain?: FoldGrain;
+  onPick: (v: { spread: boolean; fold: FoldCount; foldGrain?: FoldGrain }) => void;
+  onBack: () => void; onConfirm: () => void;
+}) {
+  const wide = useWide();
+  const spec = SIZES[size];
+  const color = SIZE_COLOR[size];
+  // The cards below decide it; the sheet in the strip above has to match.
+  const [k, setK] = useState(SHEET_SCALE);
   return (
     <div className={PICK_SCREEN}>
       {/* The card below is the size and can be pressed to change it, but a way
@@ -1086,23 +1150,10 @@ function SidesScreen({ size, spread, fold, foldGrain, onPick, onBack, onConfirm 
           beside the paper, so the paper goes on top and the words underneath.
           Every card keeps one box the height of the largest sheet, so a folded
           strip and a pair of pages are drawn to the same scale. */}
-      <div className="grid grid-cols-2 gap-1.5 lg:grid-cols-4">
-        {choices.map(choice => card(choice))}
-      </div>
-      {special.length > 0 && (
-        <div className="flex flex-col gap-1.5">
-          <div>
-            <h2 className="m-0 text-[13px] font-semibold">特殊蛇腹（L字）</h2>
-            <p className="m-0 mt-0.5 text-[10px] leading-snug text-faint">
-              {`${SIZE_NAME[size]}だけの形。折り目がリングと直角なので、`
-                + `内側の面は綴じ側を${special[0].plan!.insetMm}mm切り落とします`}
-            </p>
-          </div>
-          <div className="grid grid-cols-2 gap-1.5 lg:grid-cols-4">
-            {special.map(choice => card(choice))}
-          </div>
-        </div>
-      )}
+      <FormCards
+        size={size} spread={spread} fold={fold} foldGrain={foldGrain}
+        wide={wide} onPick={onPick} onScale={setK}
+      />
       {/* The note that was here said three things about a fold, and the
           drawing now says two of them better: the rings are on the head panel
           only because that is where they are drawn, and what it comes to when
@@ -2360,9 +2411,17 @@ function CanvasScreen({
               : <SizeIcon size={size} color={SIZE_COLOR[layout.size]} scale={0.1} />}
           </Button>
         )}
-        {/* The two buttons keep their room; the name gives way. A long size
-            name pushing them off the edge is worse than a name cut short. */}
-        <span className="min-w-0 truncate">
+        {/* The paper itself, pressable. It used to be a line of text saying
+            what had been chosen three screens ago, and the way back to change
+            it was a button on another screen labelled 「サイズを選び直す」 --
+            a sentence explaining a door. The paper IS the door: press it and
+            the sizes and the forms are there, and what you pick redraws the
+            sheet behind the chip. */}
+        <Button
+          variant="chip"
+          className="papernow min-w-0 truncate"
+          onClick={() => setSheet('sheet')}
+        >
           {/* Which page of the book, and which section it came from -- with
               one section and one sheet there is no book to be lost in, and
               the form the refill is folded into is what a phone has room to
@@ -2383,7 +2442,7 @@ function CanvasScreen({
               anyone standing on the cover of a book of spreads that their
               book had become single-sided. It says which page it is instead. */}
           {' ・ '}{layout.cover ? '表紙（1ページ）' : formLabel(layout, foldNow?.grain)}
-        </span>
+        </Button>
         {/* Below 360px even these give up their words: what they were pushing
             out of the title is worth more. The icons stay, and so do the
             labels a screen reader reads. */}
@@ -3640,6 +3699,7 @@ function PartSheet({
   const title = target === 'load' ? '保存したリフィル'
     : target === 'save' ? '保存'
     : target === 'print' ? 'PDF出力プレビュー'
+    : target === 'sheet' ? 'リフィル'
     : target === 'paper' ? '用紙'
     : target === 'background' ? '紙の背景'
     : target === 'look' ? '体裁'
@@ -3679,6 +3739,48 @@ function PartSheet({
                   </li>
                 ))}
               </ul>
+        )}
+
+        {/* The refill: which size of paper, and what form it takes. Both in
+            one sheet because they depend on each other -- A5 has no three-panel
+            fold, the L is 横長ミニ3穴 only -- and two chips would mean changing
+            the size here and finding the form changed over there. Here the
+            form cards redraw under the finger that changed the size. */}
+        {target === 'sheet' && (
+          <>
+            <Field label="サイズ">
+              <SizeCards
+                selected={layout.size} wide={!!inline}
+                onPick={s => setBook(b => ({
+                  ...b, sections: b.sections.map(l => ({ ...l, size: s })),
+                }))}
+              />
+            </Field>
+            <FormCards
+              size={layout.size}
+              spread={layout.spread}
+              fold={layout.fold}
+              foldGrain={layout.foldGrain}
+              wide={!!inline}
+              onPick={v => setBook(b => ({
+                ...b,
+                sections: b.sections.map(l => ({
+                  ...l,
+                  ...v,
+                  // A cover stays one page whatever the rest of the book does.
+                  spread: l.cover ? l.spread : v.spread,
+                  spanning: v.fold > 1 ? null : l.spanning,
+                  surface: v.fold > 1
+                    ? {
+                        ...l.surface,
+                        placed: l.surface.placed.slice(0, v.fold),
+                        page: undefined, ratios: {}, fold: undefined,
+                      }
+                    : l.surface,
+                })),
+              }))}
+            />
+          </>
         )}
 
         {/* The paper itself: which one, and what else is going on it. Reached

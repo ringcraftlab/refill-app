@@ -93,7 +93,10 @@ const backToList = await page.locator('.tolist').count();
 check(backToList > 0, `一覧から入った編集に、一覧へ帰る道がある（いま ${backToList} 個）`);
 
 // ---- 5. 紙の上のチップ：開いて閉じたら編集 --------------------------------
-for (const [name, sel] of [['期間', '.range'], ['用紙', '.paper'], ['背景', 'button:has-text("背景")'], ['体裁', '.look']]) {
+for (const [name, sel] of [
+  ['リフィル（サイズと形）', '.papernow'], ['期間', '.range'], ['用紙', '.paper'],
+  ['背景', 'button:has-text("背景")'], ['体裁', '.look'],
+]) {
   await page.locator(sel).first().click();
   await settle();
   const opened = await page.locator('.scrim, .sheet').count() > 0;
