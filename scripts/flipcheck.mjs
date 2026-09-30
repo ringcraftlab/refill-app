@@ -135,10 +135,49 @@ await page.locator('.bookview').waitFor();
 await settle();
 const startLabel = await page.locator('.bookstart').innerText();
 check(startLabel.includes('表紙'), `表紙のある束では「表紙へ」（いま「${startLabel.trim()}」）`);
-await page.locator('.bookstart').click();
-await settle();
+// 表紙を足すと編集はその表紙に立つので、📖もそこで開く。
+// 立っている端のボタンは押せない（消えるのではなく暗くなる）。
+check(await page.locator('.bookstart').isDisabled(), '最初の見開きでは「表紙へ」が押せない');
 check(await page.locator('.bookpage').count() === 1, '表紙は相手のいない1ページ');
 await shot('06-表紙');
+
+// ---- 最後へ ---------------------------------------------------------------
+await page.locator('.bookend').click();
+await settle();
+check(await page.locator('.booknext').isDisabled(), `最後へで束の終わりに着く（いま ${await on()}）`);
+check(await page.locator('.bookend').isDisabled(), '最後の見開きでは「最後へ」が押せない');
+await shot('07-最後');
+await page.locator('.bookstart').click();
+await settle();
+check(await on() === '1', `「表紙へ」で1ページ目に帰る（いま ${await on()}）`);
+
+// ---- 空のページを押すと「中身を足す」 --------------------------------------
+// 束のどこかにある白紙は、この本のページであって隙間ではない。押せば何が
+// 入るかを聞く——一覧の空ページと同じ動作・同じシート。紙の話はしない。
+// 最後の紙の裏は、まだ何も入っていないページ（索引やメモが入る場所）。
+await page.locator('.bookend').click();
+await settle();
+const blanks = await page.locator('.bookblank').count();
+check(blanks > 0, `最後の紙の裏が白紙のページとして出る（${blanks} ページ）`);
+await page.locator('.bookblank').first().click();
+await page.locator('.fillers').first().waitFor();
+const asked = await page.locator('.modal').first().innerText().catch(() => '');
+check(asked.includes('押したページ'), '押したページに入ると言う（末尾ではなく）');
+const paperTalk = ['A4', 'A3', 'B4', '面付', '両面'].filter(w => asked.includes(w));
+check(paperTalk.length === 0, `足すシートも紙の話をしない（${paperTalk.join('・') || 'なし'}）`);
+await page.locator('.fillers').first().locator('button').first().click();
+await settle();
+check(await page.locator('.bookview').count() > 0, '足したあとも手帳のまま（見て確かめられる）');
+await shot('08-白紙に足した');
+
+// 足したものは束の形（見開き）を継ぐ。表紙は1ページなので、表紙を
+// 手本にすると片面の束が見開きの本に混ざる。
+await page.locator('.bookpage').first().click();
+await page.locator('.page').first().waitFor();
+const form = await page.locator('.papernow').innerText();
+check(form.includes('見開き'), `足した束も見開きのまま（いま「${form.trim()}」）`);
+await page.locator('.tobook').click();
+await settle();
 
 // ---- 下に払うと閉じる ------------------------------------------------------
 // ×と同じ結果。横に綴じた束は横にめくるので、下は空いている。

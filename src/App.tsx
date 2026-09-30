@@ -406,6 +406,12 @@ function sectionLabel(l: Layout): string {
   return parts.length ? parts.slice(0, 3).join('＋') : '白紙';
 }
 
+// The section a new one is copied from: the book's own form, its dates and its
+// look. Never the cover, whatever order the book is in -- a cover is one page
+// however the book is folded, so it carries 片面, and a monthly added to a book
+// of spreads after a cover had been put on the front came out single-sided.
+const bodyOf = (b: Book): Layout => b.sections.find(l => !l.cover) ?? b.sections[0];
+
 // A book of one empty section, which is what every refill made so far was.
 function createBook(): Book {
   const only = createLayout();
@@ -450,7 +456,7 @@ export function App() {
   // is all `src/lib` knows how to read.
   // A cover stays one page whatever the book is folded into, so the form the
   // picker shows -- and the form it sets -- is the rest of the book's.
-  const body = book.sections.find(l => !l.cover) ?? book.sections[0];
+  const body = bodyOf(book);
   const every = (fn: (l: Layout) => Layout) =>
     setBook(b => ({
       ...b,
@@ -522,8 +528,20 @@ export function App() {
         book={book}
         at={Math.min(at, book.sections.length - 1)}
         nth={nth}
+        print={print}
         onClose={back}
         onEdit={(i, sheet) => { goTo(i, sheet); go('canvas'); }}
+        // Chosen on an empty page, so it goes at that page. A cover and a
+        // blank are not finished when they are chosen -- one wants a picture,
+        // the other wants everything -- so both open in the editor; anything
+        // else is already what it is, and stays here to be looked at.
+        onAddAt={(where, kind) => {
+          setBook(b => ({
+            ...b,
+            sections: withSection(b.sections, sectionOf(kind, bodyOf(b)), where),
+          }));
+          if (kind === 'cover' || kind === 'blank') { goTo(where, 0); go('canvas'); }
+        }}
       />
     );
   }
@@ -1384,7 +1402,7 @@ function ContentsScreen({ book, setBook, print, at, nth, onOpen, onBack }: {
   const size = SIZES[book.sections[0].size];
   // A cover is one page in a book of spreads, so it is not what the form of
   // the book is read from.
-  const body = book.sections.find(l => !l.cover) ?? book.sections[0];
+  const body = bodyOf(book);
   const job = usePaperJob(book.sections, size, print);
   const [adding, setAdding] = useState(false);
   const [ask, setAsk] = useState<number | null>(null);
@@ -1571,6 +1589,7 @@ function ContentsScreen({ book, setBook, print, at, nth, onOpen, onBack }: {
       {(adding || addAt !== null) && (
         <AddSection
           job={job} print={print}
+          positioned={addAt !== null}
           onPick={kind => {
             // Pressed on an empty page: what is chosen goes at that page,
             // which is what makes a cover land on page 1 without anything
@@ -1580,7 +1599,7 @@ function ContentsScreen({ book, setBook, print, at, nth, onOpen, onBack }: {
             setAddAt(null);
             setBook(b => ({
               ...b,
-              sections: withSection(b.sections, sectionOf(kind, b.sections[0]), where),
+              sections: withSection(b.sections, sectionOf(kind, bodyOf(b)), where),
             }));
             if (kind === 'cover' || kind === 'blank') onOpen(where);
           }}
@@ -1748,17 +1767,23 @@ const RING_EDGE = '#8E887C';
 // How many sheet edges a stack shows before one more stops reading.
 const STACK_MAX = 8;
 
-function BookView({ book, at, nth, onClose, onEdit }: {
+function BookView({ book, at, nth, print, onClose, onEdit, onAddAt }: {
   book: Book;
   // Where the editor was, so this opens on that page.
   at: number; nth: number;
+  print: PrintOptions;
   onClose: () => void;
   onEdit: (at: number, nth: number) => void;
+  // An empty page is a page of the book with nothing in it yet, and pressing
+  // one asks what goes there -- the same question the list asks, in the same
+  // sheet. Leaving it dead was the one place in the book where pressing the
+  // paper did nothing at all.
+  onAddAt: (where: number, kind: SectionKind) => void;
 }) {
   const size = SIZES[book.sections[0].size];
   // A cover is one page whatever the book is folded into, so it is not what
   // the shape of the book is read from.
-  const body = book.sections.find(l => !l.cover) ?? book.sections[0];
+  const body = bodyOf(book);
   // Which way the book opens. The rings hold one edge and the leaf swings
   // round it, so a refill bound along the top has its pages above and below
   // each other rather than side by side -- and turning it is a motion up, not
@@ -1775,6 +1800,8 @@ function BookView({ book, at, nth, onClose, onEdit }: {
   );
   const openedAt = leaves.findIndex(l => l.at === at && l.nth === nth);
   const [row, setRow] = useState(() => (openedAt <= 0 ? 0 : Math.floor((openedAt + 1) / 2)));
+  // Where something put here would go, while the sheet asking what is open.
+  const [addAt, setAddAt] = useState<number | null>(null);
   // The leaf in the air: which pair it left from, which way it is going, and
   // how long it has. While it is up, the half it is uncovering already shows
   // the pair being turned to -- that is what the leaf is uncovering.
@@ -1826,46 +1853,53 @@ function BookView({ book, at, nth, onClose, onEdit }: {
     rowRef.current = r;
   };
 
-  // The sheet each page actually is -- October's page shows October -- and the
-  // drawing of it. Both cached by page, because turning back to a spread must
-  // not rebuild a month's worth of dates.
-  const sheets = useMemo(() => new Map<string, Layout>(), [book.sections]);
-  const drawn = useMemo(() => new Map<string, Page[]>(), [book.sections, size]);
-  const shapes = useMemo(() => new Map<string, Geometry>(), [book.sections, size]);
-  const keyOf = (leaf: Leaf) => `${leaf.at}:${leaf.nth}`;
-  const sheetOf = (leaf: Leaf): Layout | null => {
-    if (leaf.at === null) return null;
-    const key = keyOf(leaf);
-    let made = sheets.get(key);
-    if (!made) { made = sheetAt(book.sections[leaf.at], leaf.nth); sheets.set(key, made); }
-    return made;
-  };
-  const pageOf = (leaf: Leaf | null): Page | null => {
-    const sheet = leaf && sheetOf(leaf);
-    if (!leaf || !sheet) return null;
-    const key = keyOf(leaf);
-    let all = drawn.get(key);
-    if (!all) { all = buildPages(sheet, size); drawn.set(key, all); }
-    return all[Math.min(leaf.side, all.length - 1)] ?? null;
-  };
-  const shapeOf = (leaf: Leaf | null): PageGeometry | null => {
-    const sheet = leaf && sheetOf(leaf);
-    if (!leaf || !sheet) return null;
-    const key = keyOf(leaf);
-    let geo = shapes.get(key);
-    if (!geo) { geo = buildGeometry(sheet, size); shapes.set(key, geo); }
-    return geo.pages[Math.min(leaf.side, geo.pages.length - 1)] ?? null;
-  };
   // A page with nothing on it is still a page of the book -- the back of the
   // last sheet, or the one a spread needs in front of it -- so it is drawn as
   // paper, punched, rather than as a gap.
-  const blank = useMemo(() => {
-    const one: Layout = {
-      ...createLayout(), size: body.size, orientation: body.orientation,
-      spread: false, fold: 1,
-    };
-    return buildPages(one, size)[0] ?? null;
-  }, [body.size, body.orientation, size]);
+  const blankSheet = useMemo((): Layout => ({
+    ...createLayout(), size: body.size, orientation: body.orientation,
+    spread: false, fold: 1,
+  }), [body.size, body.orientation]);
+
+  // The sheet each page actually is -- October's page shows October -- with
+  // its drawing and its shape. Cached by page, because turning back to a
+  // spread must not rebuild a month's worth of dates.
+  //
+  // A page in the left half is the back of a sheet, and turning a sheet over
+  // puts its rings on the other edge -- which is what `flipBinding` is for,
+  // and what the printing path does with the same pages. Only a single-sided
+  // page changes: a designed spread already knows which of its two pages
+  // carries the seam on which side. Without it a book of single pages came out
+  // with the left half's holes on the outer edge, nowhere near the rings.
+  const sheets = useMemo(() => new Map<string, Layout>(), [book.sections]);
+  const made = useMemo(
+    () => new Map<string, { page: Page | null; shape: PageGeometry | null }>(),
+    [book.sections, size],
+  );
+  const sheetOf = (leaf: Leaf): Layout => {
+    const key = `${leaf.at}:${leaf.nth}`;
+    let one = sheets.get(key);
+    if (!one) {
+      one = leaf.at === null ? blankSheet : sheetAt(book.sections[leaf.at], leaf.nth);
+      sheets.set(key, one);
+    }
+    return one;
+  };
+  const paperOf = (leaf: Leaf | null, seam: 'lo' | 'hi') => {
+    const back = seam === 'lo';
+    if (!leaf) return { page: null, shape: null };
+    const key = `${leaf.at}:${leaf.nth}:${leaf.side}:${back}`;
+    let one = made.get(key);
+    if (!one) {
+      const sheet = sheetOf(leaf);
+      const pages = buildPages(sheet, size, back);
+      const geo = buildGeometry(sheet, size, back);
+      const i = Math.min(leaf.side, pages.length - 1);
+      one = { page: pages[i] ?? null, shape: geo.pages[Math.min(leaf.side, geo.pages.length - 1)] ?? null };
+      made.set(key, one);
+    }
+    return one;
+  };
 
   // One scale for the whole book, taken from its largest page: nothing may
   // change size as it is turned.
@@ -1943,7 +1977,7 @@ function BookView({ book, at, nth, onClose, onEdit }: {
   // this screen's own tree, so turning the page does not throw the drawing
   // away and build it again.
   const face = (leaf: Leaf, seam: 'lo' | 'hi', stack: number, live: boolean) => {
-    const page = pageOf(leaf) ?? blank;
+    const { page } = paperOf(leaf, seam);
     const { pw, ph, x, y } = placeOf(page, seam);
     const away = seam === 'hi' ? 1 : -1;
     const sheet = { left: x, top: y, width: pw, height: ph };
@@ -1972,12 +2006,25 @@ function BookView({ book, at, nth, onClose, onEdit }: {
             <PageSvg page={page} scale={scale} showGuides />
           </button>
         ) : (
-          <span
-            className="absolute rounded-[2px] bg-white shadow-[0_14px_30px_rgba(0,0,0,0.45)]"
+          // Paper with nothing in it yet. It is punched like the rest -- it is
+          // a page of this book, not a gap -- and pressing it asks what goes
+          // there, which is what every other page's press does in its own way.
+          <button
+            className="bookblank absolute overflow-hidden rounded-[2px] bg-white p-0 shadow-[0_14px_30px_rgba(0,0,0,0.45)]"
             style={sheet}
+            disabled={!live}
+            onClick={() => { if (!dragged.current) setAddAt(leaf.before); }}
+            aria-label="このページに中身を足す"
           >
             {page && <PageSvg page={page} scale={scale} showGuides />}
-          </span>
+            {/* Not a word. The same mark the empty pages of the list wear, in
+                the middle of the sheet it would fill. */}
+            <span className="pointer-events-none absolute inset-0 flex items-center justify-center">
+              <span className="flex size-9 items-center justify-center rounded-full border border-line-strong bg-white text-[18px] text-muted shadow-[0_2px_6px_rgba(38,36,31,0.16)]">
+                ＋
+              </span>
+            </span>
+          </button>
         )}
       </>
     );
@@ -1987,10 +2034,12 @@ function BookView({ book, at, nth, onClose, onEdit }: {
   // the spread and a little past each. This is what says the two pages are
   // held by the same binder -- and on page 1, alone on the right, what says
   // there is nothing on the other side of them yet.
-  const ringAt = shapeOf(hi) ?? shapeOf(lo);
+  const ringSide: 'lo' | 'hi' = hi ? 'hi' : 'lo';
+  const ringPaper = paperOf(hi ?? lo, ringSide);
+  const ringAt = ringPaper.shape;
   const ringSeam = (across ? boxW : boxH) + GAP / 2;
   const reach = size.ringMarginMm * 0.92 * scale + GAP / 2;
-  const ringPlace = placeOf(pageOf(hi ?? lo) ?? blank, hi ? 'hi' : 'lo');
+  const ringPlace = placeOf(ringPaper.page, ringSide);
 
   const onDown = (e: ReactPointerEvent) => {
     down.current = { x: e.clientX, y: e.clientY, t: Date.now() };
@@ -2087,7 +2136,12 @@ function BookView({ book, at, nth, onClose, onEdit }: {
           )}
 
           {ringAt && ringAt.holes.map((h, i) => {
-            const thick = Math.max(h.r * 2 * 1.25 * scale, 3.2);
+            // A ring passes through the punch, so the wire is thinner than the
+            // hole -- about half of it on a real binder. Drawn as thick as the
+            // hole it goes through, it stopped being a ring and became a peg,
+            // and the punched holes it is supposed to run through disappeared
+            // under it.
+            const thick = Math.max(h.r * 2 * 0.55 * scale, 2.2);
             const mid = across ? ringPlace.y + h.cy * scale : ringPlace.x + h.cx * scale;
             return (
               <span
@@ -2109,10 +2163,26 @@ function BookView({ book, at, nth, onClose, onEdit }: {
         </div>
       </div>
 
-      {/* Turning, and the one place worth going to in a book of thirty pages.
-          The same row in the same order as the editor's, because turning the
-          page is turning the page wherever you are doing it. */}
-      <div className="bookpager flex shrink-0 items-center justify-center gap-3 px-3.5 pb-5 pt-1">
+      {/* Turning, and the two ends of the book. A thumb through thirty pages
+          wants both: the front is where the cover and the year planner are,
+          and the back is where the notes and the index go -- and someone who
+          has just riffled forward to look at December is three seconds from
+          the back and thirty from the front.
+
+          The ends are on the outside and the turns in the middle, so the row
+          reads the way the book goes. Both ends go dim when you are standing
+          on them rather than disappearing, for the same reason the arrows do:
+          a row that changes width moves the button under your thumb. */}
+      <div className="bookpager flex shrink-0 items-center justify-center gap-2.5 px-3.5 pb-5 pt-1">
+        <Button
+          variant="chip"
+          className="bookstart disabled:opacity-40"
+          disabled={row <= 0}
+          onClick={() => jump(0)}
+        >
+          <span className="text-[14px] leading-none">«</span>
+          {hasCover ? '表紙へ' : '最初へ'}
+        </Button>
         <Button
           variant="edge"
           className="bookprev size-10 text-[18px]"
@@ -2120,10 +2190,6 @@ function BookView({ book, at, nth, onClose, onEdit }: {
           onClick={() => walk(-1)}
           aria-label="前のページ"
         >‹</Button>
-        <Button variant="chip" className="bookstart" onClick={() => jump(0)}>
-          <span className="text-[14px] leading-none">«</span>
-          {hasCover ? '表紙へ' : '最初へ'}
-        </Button>
         <Button
           variant="edge"
           className="booknext size-10 text-[18px]"
@@ -2131,7 +2197,29 @@ function BookView({ book, at, nth, onClose, onEdit }: {
           onClick={() => walk(1)}
           aria-label="次のページ"
         >›</Button>
+        <Button
+          variant="chip"
+          className="bookend disabled:opacity-40"
+          disabled={row >= rows - 1}
+          onClick={() => jump(rows - 1)}
+        >
+          最後へ
+          <span className="text-[14px] leading-none">»</span>
+        </Button>
       </div>
+
+      {/* What goes on the page that was pressed. The same sheet the list
+          opens, because it is the same question -- but without the line about
+          how much room is left on the paper: that belongs to 刷る, and this
+          screen does not talk about paper. */}
+      {addAt !== null && (
+        <AddSection
+          job={null} print={print}
+          positioned
+          onPick={kind => { const where = addAt; setAddAt(null); onAddAt(where, kind); }}
+          onClose={() => setAddAt(null)}
+        />
+      )}
     </div>
   );
 }
@@ -2851,7 +2939,9 @@ function CanvasScreen({
       // places are. Nothing is saved or named on the way: the book is one
       // thing and it is saved as one thing.
       onAddSection={kind => {
-        const made = sectionOf(kind, layout);
+        // Copied from the book's form, not from the page you happen to be
+        // standing on: standing on the cover, that was 片面.
+        const made = sectionOf(kind, bodyOf(book));
         const front = kind === 'cover';
         setBook(b => ({ ...b, sections: withSection(b.sections, made, front) }));
         // A cover is not finished until it has a picture on it, and a blank
@@ -3848,7 +3938,7 @@ function suggestName(book: Book, size: SizeSpec, grain?: FoldGrain): string {
   const what = book.sections.map(sectionLabel).slice(0, 3).join('＋');
   // The form is the book's, and a cover has none of its own: with one on the
   // front, a book of spreads was saving itself as 「ミニ6 片面」.
-  const body = book.sections.find(l => !l.cover) ?? book.sections[0];
+  const body = bodyOf(book);
   return `${size.label} ${formLabel(body, grain)}・${what}`;
 }
 
@@ -3928,19 +4018,27 @@ const SECTION_LABEL = (kind: SectionKind): string => (
   kind === 'cover' ? '表紙' : kind === 'blank' ? '白紙' : PART_LABEL[kind]
 );
 
-function AddSection({ job, print, onPick, onClose }: {
-  job: PaperJob;
+function AddSection({ job, print, positioned = false, onPick, onClose }: {
+  // How much room is left on the last sheet -- or nothing at all, when the
+  // screen asking is one that does not talk about paper (📖).
+  job: PaperJob | null;
   print: PrintOptions;
+  // Pressed on a particular empty page, so what is chosen lands there rather
+  // than on the end of the book. Saying 「末尾に入ります」 in that case is the
+  // sheet contradicting the press that opened it.
+  positioned?: boolean;
   onPick: (kind: SectionKind) => void;
   onClose: () => void;
 }) {
   return (
     <Modal title="中身を足す" onClose={onClose}>
-      <p className="picker m-0 text-[13px] text-muted">
-        {job.spare > 0
-          ? `${PAPERS[print.paper].label}の${job.sheets}枚目に、あとリフィル${job.spare}${job.unit}ぶん入ります`
-          : `いまちょうど${PAPERS[print.paper].label}${job.sheets}枚です。足すと紙が増えます`}
-      </p>
+      {job && (
+        <p className="picker m-0 text-[13px] text-muted">
+          {job.spare > 0
+            ? `${PAPERS[print.paper].label}の${job.sheets}枚目に、あとリフィル${job.spare}${job.unit}ぶん入ります`
+            : `いまちょうど${PAPERS[print.paper].label}${job.sheets}枚です。足すと紙が増えます`}
+        </p>
+      )}
 
       {/* A cover goes on the front, which is the only place a cover goes, so
           it is said here rather than left as five presses of ↑. */}
@@ -3968,7 +4066,9 @@ function AddSection({ job, print, onPick, onClose }: {
         白紙（自分で作る）
       </Button>
       <span className="text-[13px] leading-snug text-muted">
-        足したものは末尾に入ります（表紙だけ先頭）。順番は中身の ↑↓ で変えられます
+        {positioned
+          ? '押したページに入ります。順番は中身の ↑↓ で変えられます'
+          : '足したものは末尾に入ります（表紙だけ先頭）。順番は中身の ↑↓ で変えられます'}
       </span>
     </Modal>
   );
