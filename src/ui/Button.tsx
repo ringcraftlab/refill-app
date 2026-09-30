@@ -28,10 +28,8 @@ export type ButtonVariant =
   | 'edge';
 
 const VARIANT: Record<ButtonVariant, string> = {
-  // The darker orange, not the bright one: white on #E06A0F is 3.37:1, and the
-  // biggest button in the app is the last place to be short of contrast. The
-  // bright orange keeps everything a word is not drawn on -- rings, flashes,
-  // soft grounds.
+  // Ink with white on it: the one button on a screen that is filled. No hue,
+  // so it cannot be mistaken for the size's colour on the rings.
   cta: 'rounded-xl bg-accent-text p-3.5 text-[16px] font-bold text-white',
   action: 'flex-1 rounded-[10px] border border-line-strong bg-white py-3 text-[13px] font-semibold text-label',
   // Wider and borderless, so the export button reads as the end of the row.

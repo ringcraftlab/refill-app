@@ -640,9 +640,13 @@ const SHEET_SLOT = {
   height: Math.max(...Object.values(SIZES).map(s => s.heightMm)) * SHEET_SCALE,
 };
 
-// The nine colours of the sizes, each named: テラコッタレッド, アンバー
-// オレンジ, スカイブルー, ラベンダーパープル, ライムグリーン, フォレスト
-// グリーン, シナモンオレンジ, ローズマゼンタ, サンイエロー.
+// The nine colours of the sizes, each named: コケモモ, マスタード, フィヨルド
+// ブルー, ヘザー, スプルース, モス, ティール, ローズ, スレート. Toned down
+// and brought to one lightness, the way Nordic textiles carry many colours
+// without shouting -- nine full-strength hues side by side were the loudest
+// thing in the app. Their places on the wheel are unchanged, with two
+// exceptions: M5スクエア was orange, the accent's own colour, and A5スリム
+// was a yellow too pale to see on white.
 //
 // The line is the size's badge -- bars, outlines, rings, the border of the
 // chosen card. The fill is the same colour mixed 92% into white, which is to
@@ -650,15 +654,15 @@ const SHEET_SLOT = {
 // stops being paper and becomes a swatch. The colour belongs on the rings,
 // where it is the binder holding the paper.
 const SIZE_COLOR: Record<RefillSize, string> = {
-  M5: '#C93A40',
-  M6: '#DE9610',
-  BIBLE: '#65ACE4',
-  A5: '#9460A0',
-  MINI3: '#56A764',
-  CARD3: '#A0C238',
-  M5SQ: '#D16B16',
-  NARROW: '#CC528B',
-  A5SLIM: '#F2CF01',
+  M5: '#B4474C',
+  M6: '#C38A2C',
+  BIBLE: '#4F86B2',
+  A5: '#86679E',
+  MINI3: '#4C8A64',
+  CARD3: '#879A45',
+  M5SQ: '#3B8C92',
+  NARROW: '#BC5F80',
+  A5SLIM: '#6A7888',
 };
 
 // Paper is white. It was drawn in a wash of the size's own colour, which made
@@ -3231,7 +3235,10 @@ function CanvasScreen({
           key={`${at}:${nth}`}
           className={`flex items-center justify-center ${turnedIn}`}
           ref={setRef}
-          style={{ flexDirection: geo.flow, gap, position: 'relative' }}
+          // Marks drawn over the paper (where a part will land, where it just
+          // did) take the size's colour, not the accent: the accent is ink, and
+          // a grey wash on white paper reads as something that will print.
+          style={{ flexDirection: geo.flow, gap, position: 'relative', ['--size' as string]: SIZE_COLOR[layout.size] }}
           // Tapping the paper places what the tray has selected. Dragging is
           // the better gesture and stays the one the app teaches, but it rides
           // on pointer capture and on the browser not taking the gesture for a
@@ -3303,7 +3310,7 @@ function CanvasScreen({
               <PageSvg page={pages[i]} scale={scale} showGuides />
               {pg.spanRect && (
                 <button
-                  className="hitbox absolute cursor-pointer p-0 hover:bg-[rgba(224,106,15,0.05)]"
+                  className="hitbox absolute cursor-pointer p-0 hover:bg-[color-mix(in_srgb,var(--size)_7%,transparent)]"
                   onClick={() => setSheet('spanning')}
                   style={{
                     left: pg.spanRect.x * scale, top: pg.spanRect.y * scale,
@@ -3330,7 +3337,7 @@ function CanvasScreen({
           {preview?.map(b => (
             <div
               key={`preview-${b.key}`}
-              className="pointer-events-none absolute z-[3] rounded-[3px] border-[1.5px] border-accent/55 bg-accent-soft/55"
+              className="pointer-events-none absolute z-[3] rounded-[3px] border-[1.5px] border-[color-mix(in_srgb,var(--size)_60%,transparent)] bg-[color-mix(in_srgb,var(--size)_12%,transparent)]"
               style={{ left: b.left, top: b.top, width: b.width, height: b.height }}
             />
           ))}
@@ -3340,7 +3347,7 @@ function CanvasScreen({
           {landedOn?.map(b => (
             <div
               key={`landed-${b.key}`}
-              className="drop-flash pointer-events-none absolute z-[3] rounded-[3px] bg-accent"
+              className="drop-flash pointer-events-none absolute z-[3] rounded-[3px] bg-[var(--size)]"
               style={{ left: b.left, top: b.top, width: b.width, height: b.height }}
             />
           ))}
@@ -3356,7 +3363,7 @@ function CanvasScreen({
             return (
               <div
                 key={b.key}
-                className={`hitbox part absolute cursor-grab touch-none p-0 hover:bg-[rgba(224,106,15,0.05)] active:cursor-grabbing active:bg-[rgba(224,106,15,0.08)] ${
+                className={`hitbox part absolute cursor-grab touch-none p-0 hover:bg-[color-mix(in_srgb,var(--size)_7%,transparent)] active:cursor-grabbing active:bg-[color-mix(in_srgb,var(--size)_12%,transparent)] ${
                   waiting ? 'flex items-center justify-center rounded-[3px] border border-dashed border-line-strong' : ''
                 }`}
                 style={{ left: b.left, top: b.top, width: b.width, height: b.height }}
@@ -3531,7 +3538,7 @@ function CanvasScreen({
               className={`stamp relative flex w-[84px] shrink-0 cursor-grab touch-pan-x flex-col items-center gap-[3px] rounded-xl border-[1.5px] py-[8px] text-[13px] font-semibold transition-[transform,box-shadow,background-color,border-color] duration-[120ms] ease-out active:cursor-grabbing active:scale-95 motion-reduce:transition-none lg:w-full lg:gap-1 lg:py-3 lg:text-[13px] ${
                 idx >= 0
                   // Picked up: it stands off the tray until it is put down.
-                  ? '-translate-y-0.5 border-accent bg-accent-soft shadow-[0_3px_8px_rgba(224,106,15,0.22)]'
+                  ? '-translate-y-0.5 border-accent bg-accent-soft shadow-[0_3px_8px_rgba(38,36,31,0.16)]'
                   : 'border-line bg-white hover:border-line-strong hover:shadow-[0_2px_8px_rgba(38,36,31,0.12)]'
               }`}
               onPointerDown={e => startDrag(e, idx >= 0 && traySelected.length > 1 ? [...traySelected] : [t.kind], null)}

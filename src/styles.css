@@ -25,15 +25,17 @@
   --color-faint: #ABA69A;
   --color-line: #EEEAE2;
   --color-line-strong: #E0DACE;
-  /* Vivid enough to read as the one colour that acts, dark enough that a 10px
-     note in it stays legible on white -- the point most pop palettes miss. */
-  --color-accent: #E06A0F;
-  /* The same orange, dark enough to read at 11px: #E06A0F on the ground comes
-     to 3.2:1, which is fine for a fill and not fine for a word. Measured, not
-     guessed -- 82% of the brand orange is where 4.5:1 lands. Fills keep the
-     bright one; anything that is read uses this. */
-  --color-accent-text: #B8570C;
-  --color-accent-soft: #FFF2E4;
+  /* The colour that acts is ink. Nine sizes already spread their colours
+     round the wheel, so any hue given to the accent lands on one of them --
+     the orange this used to be was M5スクエア's own. Ink is on no size's
+     part of the wheel, and a screen where the only colour is the size you
+     are making is the quiet the Nordic reference was after. */
+  --color-accent: #26241F;
+  /* The same ink: it already reads at any size, so words and fills share it.
+     Kept as its own name so the places that are read stay findable. */
+  --color-accent-text: #26241F;
+  /* A warm grey under what is chosen, a step darker than the ground. */
+  --color-accent-soft: #EFECE6;
   /* Reads as ink on a label, but lighter, so a row of controls does not shout. */
   --color-label: #5C574E;
   --color-danger: #E0443B;
@@ -72,7 +74,8 @@
 
 /* What just landed on the paper. A part dropped into a quarter of a spread
    was a change you had to look for; this is where to look. */
-@keyframes dropFlash { 0% { opacity: 0.5 } 100% { opacity: 0 } }
+/* In the size's own colour (set on the sheet as --size). */
+@keyframes dropFlash { 0% { opacity: 0.35 } 100% { opacity: 0 } }
 .drop-flash { animation: dropFlash 420ms ease-out forwards }
 
 /* Turning a leaf in the book. It goes over on the ring axis -- a page that
@@ -96,8 +99,8 @@
 }
 
 @keyframes knobPulse {
-  0%, 100% { box-shadow: 0 1px 3px rgba(38, 36, 31, 0.18), 0 0 0 0 rgba(224, 106, 15, 0.45); }
-  60% { box-shadow: 0 1px 3px rgba(38, 36, 31, 0.18), 0 0 0 8px rgba(224, 106, 15, 0); }
+  0%, 100% { box-shadow: 0 1px 3px rgba(38, 36, 31, 0.18), 0 0 0 0 rgba(38, 36, 31, 0.35); }
+  60% { box-shadow: 0 1px 3px rgba(38, 36, 31, 0.18), 0 0 0 8px rgba(38, 36, 31, 0); }
 }
 
 @layer base {
