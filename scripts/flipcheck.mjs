@@ -195,8 +195,11 @@ await shot('08-白紙に足した');
 // 手本にすると片面の束が見開きの本に混ざる。
 await page.locator('.bookpage').first().click();
 await page.locator('.page').first().waitFor();
-const form = await page.locator('.papernow').innerText();
-check(form.includes('1ページ'), `空ページから足したものは1ページの束（いま「${form.trim()}」）`);
+const form = await page.locator('.formnow').innerText();
+check(
+  await page.locator('.page').count() === 1,
+  `空ページから足したものは1ページの束（紙${await page.locator('.page').count()}ページ・体裁「${form.replace(/\s+/g, ' ').trim()}」）`,
+);
 await page.locator('.tobook').click();
 await settle();
 

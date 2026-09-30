@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { PRESS } from './Button';
 
 // A labelled row inside a sheet. Every setting looks the same because they all
 // come through here.
@@ -13,23 +14,34 @@ export function Field({ label, children }: { label: ReactNode; children: ReactNo
 
 // Two or three choices, one of them on. The whole app's settings are this
 // shape, which is why nothing here needs a dropdown.
-export function Segmented<T extends string | number>({ options, value, onPick }: {
-  options: { v: T; label: string }[];
+export function Segmented<T extends string | number>({ options, value, onPick, tight = false }: {
+  options: { v: T; label: string; icon?: ReactNode }[];
   value: T;
   onPick: (v: T) => void;
+  // The same control standing in a row of chips beside the paper rather than
+  // owning its line in a sheet: pill-shaped and chip-sized, so the row reads
+  // as one row. Nothing else about it changes -- it is still the whole set of
+  // answers with the current one filled in, which is what lets it be read
+  // without being opened.
+  tight?: boolean;
 }) {
   return (
-    <div className="flex gap-2">
+    <div className={tight ? 'flex gap-1' : 'flex gap-2'}>
       {options.map(o => (
         <button
           key={String(o.v)}
           onClick={() => onPick(o.v)}
-          className={`flex-1 rounded-[9px] border px-1 py-[11px] text-[13px] font-semibold ${
+          className={`${
+            tight
+              ? 'flex shrink-0 items-center gap-1 rounded-full border px-2.5 py-1 text-[13px]'
+              : 'flex-1 rounded-[9px] border px-1 py-[11px] text-[13px] font-semibold'
+          } ${PRESS} ${
             o.v === value
               ? 'border-ink bg-ink text-white'
               : 'border-line-strong bg-white text-label'
           }`}
         >
+          {o.icon}
           {o.label}
         </button>
       ))}

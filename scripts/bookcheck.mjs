@@ -626,17 +626,15 @@ await page.locator('.leaf:not(.empty)').last().click();
 await page.locator('.page').first().waitFor();
 await page.waitForTimeout(300);
 check(await page.locator('.page').count() === 2, 'メモはまだ見開き（2ページ）');
-await page.locator('.papernow').click();
-await page.locator('.sheet').waitFor();
-await page.waitForTimeout(300);
-await page.locator('.sheet .card', { hasText: '片面' }).first().click();
-await page.waitForTimeout(400);
-await shut();
-check(await page.locator('.page').count() === 1, `メモだけ片面になる（${await page.locator('.page').count()}ページ）`);
+// 切り替えは紙の横にあり、押した瞬間に効く。開くシートも同じ値を持つが、
+// 2状態で足りるものをシートまで行かせない。
 check(
-  (await flat('.papernow')).includes('片面'),
-  `紙のチップはこの束の体裁を言う（${await flat('.papernow')}）`,
+  (await flat('.formnow')).includes('見開き') && (await flat('.formnow')).includes('片面'),
+  `体裁は紙の横に、答えが全部出ている（${await flat('.formnow')}）`,
 );
+await page.locator('.formnow button', { hasText: '片面' }).click();
+await page.waitForTimeout(500);
+check(await page.locator('.page').count() === 1, `メモだけ片面になる（${await page.locator('.page').count()}ページ）`);
 await page.screenshot({ path: `${OUT}/43-メモだけ片面.png` });
 
 await toContents();

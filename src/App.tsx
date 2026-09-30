@@ -3101,9 +3101,12 @@ function CanvasScreen({
               「片面」 here -- the form of this section, truthfully -- told
               anyone standing on the cover of a book of spreads that their
               book had become single-sided. It says which page it is instead. */}
-          {' ・ '}{layout.cover ? '表紙（1ページ）'
-            : layout.single ? '1ページ'
-            : formLabel(layout, foldNow?.grain)}
+            {/* The form used to be said here as well. It is a control of its own
+              now, one row down, so this says what the refill is and that one
+              says how it is folded -- and on a phone, where this chip
+              truncates, the form no longer falls off the end of it. A cover is
+              the exception: it has no control, because it has no choice. */}
+          {layout.cover && <>{' ・ '}表紙（1ページ）</>}
         </Button>
         {/* Below 360px even these give up their words: what they were pushing
             out of the title is worth more. The icons stay, and so do the
@@ -3129,6 +3132,47 @@ function CanvasScreen({
           covers and the ground it prints on. Above the paper, because both are
           design decisions and neither belongs inside the export sheet. */}
       <div className="mb-0.5 ml-3.5 mr-3 flex shrink-0 flex-wrap items-center gap-1.5 self-start">
+        {/* How this section is folded: the whole answer, with the current one
+            filled in, so it reads without being opened and changes with one
+            press. It belongs to the section on screen, not to the book -- a
+            planner is mixed, the monthly a spread and the notes at the back
+            single sheets -- which is why it stands beside the paper it
+            describes rather than in a sheet three presses away.
+
+            A cover has no form to choose (one page whatever the book is), so
+            it gets nothing here. A folded strip does not fit two choices, so
+            the fold itself is the third, and pressing it opens the cards where
+            the panel count and the grain are. */}
+        {!layout.cover && (
+          <span className="formnow flex items-center">
+            <Segmented
+              tight
+              value={folded ? 'fold' : layout.spread ? 'spread' : 'single'}
+              options={[
+                ...(folded
+                  ? [{
+                      v: 'fold' as const,
+                      label: formLabel(layout, foldNow?.grain),
+                      icon: <FormGlyph kind="fold" panels={layout.fold} />,
+                    }]
+                  : []),
+                { v: 'spread' as const, label: '見開き', icon: <FormGlyph kind="spread" /> },
+                { v: 'single' as const, label: '片面', icon: <FormGlyph kind="single" /> },
+              ]}
+              onPick={v => {
+                if (v === 'fold') { setSheet('sheet'); return; }
+                setLayout(l => ({
+                  ...l,
+                  spread: v === 'spread',
+                  fold: 1,
+                  // Born as one page to fill an empty page; asked for a form,
+                  // it is an ordinary section from now on.
+                  single: undefined,
+                }));
+              }}
+            />
+          </span>
+        )}
       {dated && (
         <button
           className="range flex shrink-0 items-center gap-2 rounded-full border border-line-strong bg-white px-3 py-1.5 text-[13px] text-ink"
@@ -4049,6 +4093,42 @@ function InsertMark({ pages }: { pages: number }) {
   );
 }
 
+// The form a refill is folded into, drawn small enough to stand in a chip:
+// one sheet, two facing pages, or a strip with creases in it. Solid, because
+// unlike the ＋'s mark this is a thing that exists -- dashes are this app's
+// word for 「not there yet」.
+function FormGlyph({ kind, panels = 3 }: { kind: 'spread' | 'single' | 'fold'; panels?: number }) {
+  const w = kind === 'spread' ? 22 : 15;
+  const dots = (x: number) => [3.6, 7.5, 11.4].map(y => (
+    <circle key={y} cx={x} cy={y} r={0.9} fill="currentColor" opacity={0.85} />
+  ));
+  return (
+    <svg width={w} height={15} viewBox={`0 0 ${w} 15`} aria-hidden="true" className="block shrink-0">
+      {kind === 'spread' ? (
+        <>
+          <rect x={0.6} y={0.9} width={9.4} height={13.2} rx={1.2} fill="none" stroke="currentColor" strokeWidth={1.1} />
+          <rect x={12} y={0.9} width={9.4} height={13.2} rx={1.2} fill="none" stroke="currentColor" strokeWidth={1.1} />
+          {dots(11)}
+        </>
+      ) : (
+        <>
+          <rect x={0.6} y={0.9} width={13.8} height={13.2} rx={1.2} fill="none" stroke="currentColor" strokeWidth={1.1} />
+          {kind === 'single'
+            ? dots(3.4)
+            : Array.from({ length: Math.max(1, panels - 1) }, (_, i) => (
+                <line
+                  key={i}
+                  x1={0.6 + (13.8 * (i + 1)) / panels} y1={1.6}
+                  x2={0.6 + (13.8 * (i + 1)) / panels} y2={13.4}
+                  stroke="currentColor" strokeWidth={1} strokeDasharray="1.6 1.4"
+                />
+              ))}
+        </>
+      )}
+    </svg>
+  );
+}
+
 // An open book, drawn rather than named -- two leaves lifting away from the
 // rings in the middle. Same trick as the list: the button and the screen it
 // opens are the same picture, so nothing has to be written to say where it
@@ -4695,12 +4775,18 @@ function PartSheet({
               />
             )}
 
-            <Choice
-              label="印刷"
-              options={[{ v: 'both', label: '両面' }, { v: 'one', label: '片面' }]}
-              value={print.duplex ? 'both' : 'one'}
-              onPick={v => setPrint(p => ({ ...p, duplex: v === 'both' }))}
-            />
+            {/* 「片面」 means two things in this app -- a refill that is one
+                page rather than a spread, and paper printed on one side -- so
+                this one carries a name of its own for anything looking for
+                it. What tells them apart on screen is the label above each. */}
+            <span className="duplexpick block">
+              <Choice
+                label="印刷"
+                options={[{ v: 'both', label: '両面' }, { v: 'one', label: '片面' }]}
+                value={print.duplex ? 'both' : 'one'}
+                onPick={v => setPrint(p => ({ ...p, duplex: v === 'both' }))}
+              />
+            </span>
             {/* Which way to turn the paper over is not a preference: get it
                 wrong and every back lands on the wrong refill, or upside down,
                 and there is no way to tell until the paper is out. It depends

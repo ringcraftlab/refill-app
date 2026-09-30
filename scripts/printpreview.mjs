@@ -59,7 +59,7 @@ console.log('面番号 1枚目裏:', (await numbersOn(1)).join(' '));
 console.log('面番号 2枚目表:', (await numbersOn(2)).join(' '));
 
 // Turning duplex off has to change what is shown, live.
-await page.getByRole('button', { name: '片面' }).click();
+await page.locator('.duplexpick').getByRole('button', { name: '片面' }).click();
 await page.waitForTimeout(400);
 console.log('single-sided:', await page.locator('.field-label').filter({ hasText: '刷り上がり' }).textContent());
 console.log('captions:', await page.locator('.preview figcaption').allTextContents());
@@ -67,7 +67,7 @@ console.log('片面の面番号 1枚目:', (await numbersOn(0)).join(' '));
 await page.screenshot({ path: `${OUT}/02-片面にすると変わる.png` });
 
 // A thumbnail is too small to read, so any of them opens full size.
-await page.getByRole('button', { name: '両面' }).click();
+await page.locator('.duplexpick').getByRole('button', { name: '両面' }).click();
 await page.locator('.preview figure button').nth(1).click();
 await page.locator('.lightbox svg').waitFor();
 console.log('enlarged:', await page.locator('.lightbox-bar span').textContent());

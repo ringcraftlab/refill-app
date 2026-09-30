@@ -51,7 +51,7 @@ interface Props extends ButtonHTMLAttributes<HTMLButtonElement> {
 // when it was pressed: a tap changed the screen, or a border, and the moment
 // in between -- the one that says the press landed -- was missing everywhere
 // at once. 90ms and 4%: felt rather than watched.
-const PRESS = 'transition-transform duration-[90ms] ease-out active:scale-[0.96]'
+export const PRESS = 'transition-transform duration-[90ms] ease-out active:scale-[0.96]'
   + ' motion-reduce:transition-none motion-reduce:active:scale-100';
 
 export function Button({ variant = 'action', className = '', ...rest }: Props) {
