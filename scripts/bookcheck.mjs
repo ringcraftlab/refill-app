@@ -233,9 +233,20 @@ const pageno = () => flat('.pageno');
 check((await pageno()).startsWith('2–3'), `いま何ページ目かが紙の下に出る（${await pageno()}）`);
 check(
   await page.locator('.turn-left .addbefore').count() === 1
-    && (await flat('.turn-left')).includes('足す')
     && await page.locator('.addafter').count() === 0,
   '紙の上に残っているのは＋だけ（左に1つ）',
+);
+// ＋の下は「足す」という言葉ではなく、入るものの絵。1ページ目の前に入るのは
+// 表紙＝1ページ、束の途中に入るのはこの本の1枚＝見開きなら2ページ。
+// 言葉は＋が既に言っていることを繰り返すだけで、量を言っていなかった。
+const goesIn = () => page.locator('.turn-left .insertmark rect').count();
+check(
+  !(await flat('.turn-left')).includes('足す') && await goesIn() === 1,
+  `＋の下は入るものの絵（1ページ目の前は表紙＝1ページ・いま${await goesIn()}ページぶん）`,
+);
+check(
+  (await page.locator('.addbefore').getAttribute('aria-label')) === '前に1ページ足す',
+  '読み上げにも何ページ入るかが出る',
 );
 // Turning sat on the drawing: a spread binds in the middle, so both outer
 // edges are the refill's own content and the round buttons were over the

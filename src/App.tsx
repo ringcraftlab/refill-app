@@ -2043,13 +2043,31 @@ function BookView({ book, at, nth, print, onClose, onEdit, onAddAt }: {
             aria-label="このページに中身を足す"
           >
             {page && <PageSvg page={page} scale={scale} showGuides />}
-            <span className="pointer-events-none absolute inset-0 flex items-center justify-center">
-              <BlankMark flip={seam === 'lo'} />
+            <span className="pointer-events-none absolute inset-0">
+              <span
+                className="blankmark absolute flex items-center justify-center rounded-[3px] border-[1.4px] border-dashed border-muted/70 text-[26px] leading-none text-muted"
+                style={emptyFrame(leaf, seam, pw, ph)}
+              >＋</span>
             </span>
           </button>
         )}
       </>
     );
+  };
+
+  // Where 「nothing here yet」 is drawn: inside the page, clear of the margin
+  // the rings run through, so the dashes read as the empty room on the sheet
+  // rather than as a second sheet lying on it.
+  const emptyFrame = (leaf: Leaf, seam: 'lo' | 'hi', pw: number, ph: number) => {
+    const { shape } = paperOf(leaf, seam);
+    const ring = (size.ringMarginMm * scale);
+    const onTop = shape ? shape.ringBand.w > shape.ringBand.h : false;
+    const pad = Math.max(6, pw * 0.07);
+    const left = !onTop && seam === 'hi' ? ring : pad;
+    const right = !onTop && seam === 'lo' ? ring : pad;
+    const top = onTop && seam === 'hi' ? ring : pad;
+    const bottom = onTop && seam === 'lo' ? ring : pad;
+    return { left, top, width: pw - left - right, height: ph - top - bottom };
   };
 
   // The rings, drawn where they grip: one bar per punch, through both pages of
@@ -2455,6 +2473,11 @@ function CanvasScreen({
   // because the spread was leaving page 1 blank anyway and a cover is the
   // outside of the stack, not a pair of facing pages. Further in, a page
   // matches the book, or it would break the pairing of every spread after it.
+  // How many pages the ＋ puts in: a cover is one page whatever the book is,
+  // and anywhere else it is a sheet of this book -- which is two pages when
+  // the book is spreads and one when it is not.
+  const goesIn = at === 0 ? 1 : geo.pages.length;
+
   const addPageHere = () => {
     const where = at;
     const front = where === 0;
@@ -3136,11 +3159,23 @@ function CanvasScreen({
               stack. Between the cover and the first month is reached from the
               ＋ on that month, which is where that page would go. */}
           {nth === 0 && !layout.cover && (
-            <span className="flex flex-col items-center gap-0.5">
-              <Button variant="edge" className="addbefore" onClick={() => addPageHere()} aria-label="前にページを足す">
+            <span className="flex flex-col items-center gap-1">
+              <Button
+                variant="edge"
+                className="addbefore"
+                onClick={() => addPageHere()}
+                aria-label={goesIn === 1 ? '前に1ページ足す' : '前に見開きを足す'}
+              >
                 ＋
               </Button>
-              <em className="not-italic text-[13px] leading-none text-muted">足す</em>
+              {/* What the ＋ puts there, where the word 「足す」 was. 「足す」
+                  said what the ＋ already says and left the question anyone
+                  actually has -- how much goes in, one page or a pair --
+                  unanswered. A cover is one page; anywhere else the book's
+                  own form goes in, because a single page in the middle of a
+                  book of spreads would break the pairing of every spread
+                  after it. */}
+              <InsertMark pages={goesIn} />
             </span>
           )}
         </span>
@@ -3942,37 +3977,34 @@ function ListGlyph() {
   );
 }
 
-// What a press on an empty page puts there, drawn rather than named: one
-// page, punched on the same side as the sheet it is lying on -- so on a back
-// face, which is what most empty pages are, the holes are on the right and
-// the mark reads as the back of a sheet.
-//
-// A ＋ on its own said 「something goes here」 and stopped. What was
-// surprising was not that something could go in but how much: one page, never
-// a spread -- put a spread in an empty page and it takes two and leaves the
-// same empty page one further on. The mark is the answer to that, and it is a
-// drawing of a page rather than the sentence 「1ページ入ります」.
-function BlankMark({ flip }: { flip: boolean }) {
-  // Far enough from the punched edge that the ＋ is not sitting in the
-  // margin the rings run through.
-  const cx = flip ? 15 : 19;
+// The page -- or the pair -- that the ＋ beside the paper would put there,
+// drawn as an outline that is not a sheet yet. Dashes are already this app's
+// word for 「nothing here yet」 (the empty pages of the list wear them), and
+// the punches say which edge it binds on: down the outer edge for a single
+// page, down the seam for a pair.
+function InsertMark({ pages }: { pages: number }) {
+  const w = pages > 1 ? 21 : 23;
+  const dots = (x: number) => [7, 14.5, 22].map(y => (
+    <circle key={`${x}-${y}`} cx={x} cy={y} r={1.1} fill="currentColor" opacity={0.75} />
+  ));
   return (
-    <span className="blankmark block rounded-[3px] text-muted drop-shadow-[0_2px_6px_rgba(38,36,31,0.22)]">
-      <svg width="34" height="44" viewBox="0 0 34 44" aria-hidden="true" className="block">
-        <rect
-          x={0.6} y={0.6} width={32.8} height={42.8} rx={2.5}
-          fill="#fff" stroke="currentColor" strokeWidth={1.2}
-        />
-        {[11, 22, 33].map(y => (
-          <circle
-            key={y} cx={flip ? 28 : 6} cy={y} r={1.7}
-            fill="#fff" stroke="currentColor" strokeWidth={1}
+    <span className="insertmark block text-muted" aria-hidden="true">
+      <svg
+        width={pages > 1 ? 44 : 23} height={29}
+        viewBox={`0 0 ${pages > 1 ? 44 : 23} 29`}
+        className="block"
+      >
+        {Array.from({ length: pages }, (_, i) => (
+          <rect
+            key={i}
+            x={i * (w + 2) + 0.7} y={0.7} width={w - 1.4} height={27.6} rx={1.6}
+            fill="none" stroke="currentColor" strokeWidth={1.2} strokeDasharray="3 2.2"
           />
         ))}
-        <path
-          d={`M ${cx - 5.5} 22 h 11 M ${cx} 16.5 v 11`}
-          stroke="currentColor" strokeWidth={1.6} strokeLinecap="round"
-        />
+        {/* One column of punches down the seam for a pair: two columns, one
+            per facing edge, run into each other at this size and read as a
+            smudge rather than as the rings both pages hang on. */}
+        {pages > 1 ? dots(w + 1) : dots(4.5)}
       </svg>
     </span>
   );
