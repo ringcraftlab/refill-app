@@ -310,7 +310,7 @@ function createLayout(): Layout {
 // ruled, dotted, blank) or 'blank', which is an empty sheet for someone to
 // design. The note sections are the answer to "the paper has three places
 // left": they are one sheet each and need nothing decided about them.
-type SectionKind = PartKind | 'blank' | 'cover';
+type SectionKind = PartKind | 'blank' | 'cover' | 'backcover';
 
 // How long a dated run starts out, from how fast it eats paper.
 //
@@ -357,6 +357,12 @@ function sectionOf(kind: SectionKind, base: Layout, single = false): Layout {
     pages: 1,
   };
   if (kind === 'blank') return sheet;
+  // The back cover is the cover's twin at the other end: one page, nothing
+  // on it, named for what it is. It fills the face the last spread leaves,
+  // so it is `single` -- which is also what turns its holes to the right.
+  if (kind === 'backcover') {
+    return { ...sheet, name: '裏表紙', backCover: true, single: true, spread: base.fold > 1 ? base.spread : false };
+  }
   // A cover is a picture filling the sheet. Nobody would arrive at that by
   // dropping a 写真 part on a blank section and stretching it, so it is a
   // thing you can ask for by name -- and it keeps that name, because what it
@@ -393,7 +399,10 @@ function isPlaceholder(l: Layout): boolean {
 // is chosen exactly there.
 function withSection(sections: Layout[], made: Layout, where: number | boolean): Layout[] {
   const rest = sections.length === 1 && isPlaceholder(sections[0]) ? [] : sections;
-  const at = where === true ? 0 : where === false ? rest.length : Math.min(where, rest.length);
+  let at = where === true ? 0 : where === false ? rest.length : Math.min(where, rest.length);
+  // The back cover stays the last page: what is added "at the end" goes in
+  // front of it.
+  if (at === rest.length && rest[rest.length - 1]?.backCover && !made.backCover) at--;
   return [...rest.slice(0, at), made, ...rest.slice(at)];
 }
 
@@ -403,6 +412,7 @@ function sectionLabel(l: Layout): string {
   // A cover is a cover, not 「写真」: what it is for is not readable from
   // what is on it.
   if (l.cover) return '表紙';
+  if (l.backCover) return '裏表紙';
   if (l.name && l.name !== '新しいリフィル') return l.name;
   const parts = [
     ...(l.spanning ? ['マンスリー'] : []),
@@ -1558,7 +1568,7 @@ function ContentsScreen({ book, setBook, print, at, nth, onOpen, onBack }: {
                 {/* Only where it is not already said at the top: in a mixed
                     book this is what explains the empty page between two
                     sections -- a spread has to start on an even page. */}
-                {!same && !sec.cover && (
+                {!same && !sec.cover && !sec.backCover && (
                   <>・{sec.single ? '1ページ' : formLabel(sec, foldOf(sec, size)?.grain)}</>
                 )}
               </em>
@@ -2057,7 +2067,8 @@ function BookView({ book, at, nth, print, onClose, onEdit, onAddAt }: {
     // takes a press and the other of which asks for one. The cover says which
     // it is -- 「表紙」 on the paper, the way the editor says it on its own.
     const sec = leaf.at === null ? null : book.sections[leaf.at];
-    const naming = sec?.cover && isPlaceholder(sec) ? '表紙' : null;
+    const naming = sec?.cover && isPlaceholder(sec) ? '表紙'
+      : sec?.backCover && isPlaceholder(sec) ? '裏表紙' : null;
     const { pw, ph, x, y } = placeOf(page, seam);
     const away = seam === 'hi' ? 1 : -1;
     const sheet = { left: x, top: y, width: pw, height: ph };
@@ -2404,7 +2415,7 @@ function CanvasScreen({
   // runs on dates belongs in it -- and offering a part only to refuse it after
   // the drag is worse than not offering it: turning the pages is meant to be
   // something you do without stopping.
-  const trayParts = layout.cover ? TRAY.filter(t => !isDatedKind(t.kind)) : TRAY;
+  const trayParts = layout.cover || layout.backCover ? TRAY.filter(t => !isDatedKind(t.kind)) : TRAY;
   const [sheet, setSheet] = useState<SheetTarget>(null);
   const [toast, setToast] = useState<ReactNode>('');
   const [ghost, setGhost] = useState<{ x: number; y: number; kinds: PartKind[] } | null>(null);
@@ -2520,8 +2531,8 @@ function CanvasScreen({
   // go on it: a tap on the paper must never place something the tray on that
   // page does not even show.
   useLayoutEffect(() => {
-    if (layout.cover) setTraySelected(sel => (sel.some(isDatedKind) ? sel.filter(k => !isDatedKind(k)) : sel));
-  }, [layout.cover]);
+    if (layout.cover || layout.backCover) setTraySelected(sel => (sel.some(isDatedKind) ? sel.filter(k => !isDatedKind(k)) : sel));
+  }, [layout.cover, layout.backCover]);
 
   const say = (text: ReactNode, ms = 1800) => {
     setToast(text);
@@ -2545,7 +2556,6 @@ function CanvasScreen({
   // the book is spreads and one when it is not.
   const goesIn = at === 0 ? 1 : geo.pages.length;
 
-  const [fillBack, setFillBack] = useState(false);
   // A cover, from the rail. It always goes on the front: the front is the
   // only place a cover is.
   const addCover = () => {
@@ -2565,6 +2575,25 @@ function CanvasScreen({
       <>
         {front ? '表紙になる白紙を入れました' : '白紙を入れました'}
         <button className="undoadd ml-2 underline underline-offset-2" onClick={back}>取り消す</button>
+      </>,
+      5000,
+    );
+  };
+
+  // The back cover, the way the cover goes in: a blank page appears where the
+  // ＋ was and the editor is on it. Not a menu of note sections -- the back
+  // of a planner is a page to make, like the front.
+  const addBackCover = () => {
+    const was = book.sections;
+    const where = was.length;
+    const undo = () => { setBook(b => ({ ...b, sections: was })); goTo(at, nth); setToast(''); };
+    const made = sectionOf('backcover', bodyOf(book));
+    setBook(b => ({ ...b, sections: [...b.sections, made] }));
+    goTo(where, 0);
+    say(
+      <>
+        裏表紙になる白紙を入れました
+        <button className="undoadd ml-2 underline underline-offset-2" onClick={undo}>取り消す</button>
       </>,
       5000,
     );
@@ -3088,7 +3117,7 @@ function CanvasScreen({
           job={job}
           onGo={i => goTo(i, 0)}
           onAddCover={addCover}
-          onFillBack={() => setFillBack(true)}
+          onFillBack={addBackCover}
           onList={onList}
           onPaper={() => setSheet('paper')}
         />
@@ -3141,7 +3170,7 @@ function CanvasScreen({
             one section and one sheet there is no book to be lost in, and
             the form the refill is folded into is what a phone has room to
             say instead. */}
-        {book.sections.length > 1 && !layout.cover && (
+        {book.sections.length > 1 && !layout.cover && !layout.backCover && (
           <>{sectionLabel(layout)}<span className="mx-1 text-muted">・</span></>
         )}
         {size.label}
@@ -3161,6 +3190,7 @@ function CanvasScreen({
             anyone standing on the cover of a book of spreads that their
             book had become single-sided. It says which page it is instead. */}
         {' ・ '}{layout.cover ? '表紙（1ページ）'
+          : layout.backCover ? '裏表紙（1ページ）'
           : layout.single ? '1ページ'
           : formLabel(layout, foldNow?.grain)}
         {/* It opens the sizes and the forms, and says so the way a
@@ -3257,26 +3287,6 @@ function CanvasScreen({
       )}
 
       {!wide && railEl}
-      {fillBack && (
-        <AddSection
-          job={null} print={print}
-          positioned
-          cover={false}
-          onPick={kind => {
-            setFillBack(false);
-            const where = book.sections.length;
-            setBook(b => ({
-              ...b,
-              sections: withSection(b.sections, sectionOf(kind, bodyOf(b), true), where),
-            }));
-            // Straight onto it: the back is a page of its own, holes on the
-            // right, and what was just put there is what to look at next.
-            goTo(where, 0);
-            say(`${SECTION_LABEL(kind)}を裏表紙に入れました`);
-          }}
-          onClose={() => setFillBack(false)}
-        />
-      )}
 
       <div className="relative flex min-h-0 grow items-center justify-center px-3 py-2" ref={boxRef}>
         {/* The book, turned. A planner is something you flip through, so the
@@ -3389,8 +3399,8 @@ function CanvasScreen({
               {/* A cover is a single page in a book of spreads, and an empty
                   page looks like any other empty page. It says so itself,
                   because the paper is what anyone is looking at. */}
-              {layout.cover
-                ? <span className="coverhint">表紙（1ページ）<br />写真や背景を置けます</span>
+              {layout.cover || layout.backCover
+                ? <span className="coverhint">{layout.cover ? '表紙' : '裏表紙'}（1ページ）<br />写真や背景を置けます</span>
                 : <>スタンプをドラッグして<br />ここに配置</>}
             </div>
           )}
@@ -4134,7 +4144,8 @@ function BindingRail({ sections, at, size, print, job, onGo, onAddCover, onFillB
     while (all[to + 1] && all[to + 1].at === i) to++;
     return from === to ? `p.${from + 1}` : `p.${from + 1}–${to + 1}`;
   };
-  const body = sections.map((sec, i) => ({ sec, i })).filter(({ sec }) => !sec.cover);
+  const body = sections.map((sec, i) => ({ sec, i })).filter(({ sec }) => !sec.cover && !sec.backCover);
+  const backAt = sections.findIndex(s => s.backCover);
   const hasCover = !!sections[0]?.cover;
   // The empty cover and back are the pages a spread leaves: page 1 alone on
   // the right, and the back of the last sheet. A book of single pages leaves
@@ -4150,7 +4161,7 @@ function BindingRail({ sections, at, size, print, job, onGo, onAddCover, onFillB
   // The back cannot be filled until the book has something in it: a back
   // page on an empty book is a page after nothing, and the empty spread it
   // would follow is a placeholder that the first real section replaces.
-  const filled = sections.some(s => !s.cover && !isPlaceholder(s));
+  const filled = sections.some(s => !s.cover && !s.backCover && !isPlaceholder(s));
   const waiting = (
     <span
       className="grid place-items-center rounded-[2px] border border-dashed border-line-strong text-[15px] leading-none text-faint"
@@ -4209,7 +4220,10 @@ function BindingRail({ sections, at, size, print, job, onGo, onAddCover, onFillB
           return tile(`s${i}`, at === i, picture, name,
             `${pagesFor(i)}${dated && n > 1 ? `・${n}回` : ''}`, () => onGo(i), '');
         })}
-        {backBlank && (filled
+        {backAt >= 0 && tile('back', at === backAt,
+          <SizeIcon size={size} color={color} scale={k} rings flip={backSideOf(sections, backAt, 0, print.duplex)} />,
+          '裏表紙', pagesFor(backAt), () => onGo(backAt), '')}
+        {backAt < 0 && backBlank && (filled
           ? tile('back', false, empty, '裏表紙', `p.${all.length}`, onFillBack, 'fillback', '裏表紙に入れる')
           : tile('back', false, waiting, '裏表紙', `p.${all.length}`, () => {}, 'fillback cursor-default',
               '裏表紙（見開きに何か置くと入れられます）', true))}
@@ -4450,7 +4464,7 @@ const SECTION_MENU: { title: string; kinds: SectionKind[]; run?: boolean }[] = [
 ];
 
 const SECTION_LABEL = (kind: SectionKind): string => (
-  kind === 'cover' ? '表紙' : kind === 'blank' ? '白紙' : PART_LABEL[kind]
+  kind === 'cover' ? '表紙' : kind === 'backcover' ? '裏表紙' : kind === 'blank' ? '白紙' : PART_LABEL[kind]
 );
 
 function AddSection({ job, print, positioned = false, cover = true, onPick, onClose }: {
@@ -4838,7 +4852,7 @@ function PartSheet({
                 A cover has no form to choose -- it is one page whatever the
                 book is -- so it gets no cards rather than cards that would
                 lie about what they change. */}
-            {!layout.cover && (
+            {!layout.cover && !layout.backCover && (
               <FormCards
                 size={layout.size}
                 spread={layout.spread}

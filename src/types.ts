@@ -250,6 +250,10 @@ export interface Layout {
   // book every time the book changes (\`sidesOf\`), because moving it moves
   // which side of the paper it is on.
   onBack?: boolean;
+  // The back cover: the last page of a book of spreads, made the way the
+  // cover is -- a blank page for a picture, a background or nothing -- rather
+  // than a note section that happens to sit at the end.
+  backCover?: boolean;
   // How many identical sheets a section with no dates prints. A note section
   // is "ten sheets of squared paper" -- there is nothing in its content to say
   // how much of it you want, unlike a monthly, which is as long as its months.
