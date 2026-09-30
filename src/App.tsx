@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import type { PointerEvent as ReactPointerEvent, ReactNode } from 'react';
+import type { CSSProperties, PointerEvent as ReactPointerEvent, ReactNode } from 'react';
 import type {
   Background, BackgroundKind, Book, DateWords, FoldCount, FoldGrain, InkTone, Layout, PartKind,
   RefillSize, RuleWeight, SizeSpec,
@@ -2521,9 +2521,12 @@ function CanvasScreen({
   // the book is spreads and one when it is not.
   const goesIn = at === 0 ? 1 : geo.pages.length;
 
-  const addPageHere = () => {
-    const where = at;
-    const front = where === 0;
+  const [fillBack, setFillBack] = useState(false);
+  // A cover, from the rail. It always goes on the front: the front is the
+  // only place a cover is.
+  const addCover = () => {
+    const where = 0;
+    const front = true;
     const was = book.sections;
     const back = () => { setBook(b => ({ ...b, sections: was })); goTo(at, nth); setToast(''); };
     // Put in, never instead of. `withSection` drops an empty starting section,
@@ -3048,6 +3051,25 @@ function CanvasScreen({
     />
   );
 
+  // Above the paper on a phone, where the paper is the whole screen and the
+  // book's order is read before the page. On a wide screen the paper has the
+  // window's height to itself and the tools stand beside it, so the order of
+  // the book stands there too, at the top of the column.
+  const railEl = (
+    <BindingRail
+          sections={book.sections}
+          at={at}
+          size={size}
+          print={print}
+          job={job}
+          onGo={i => goTo(i, 0)}
+          onAddCover={addCover}
+          onFillBack={() => setFillBack(true)}
+          onList={onList}
+          onPaper={() => setSheet('paper')}
+        />
+  );
+
   return (
     <div className={CANVAS_SCREEN}>
       {/* The paper's side of a wide screen; the whole screen on a narrow one,
@@ -3086,9 +3108,14 @@ function CanvasScreen({
             sheet behind the chip. */}
         <Button
           variant="chip"
-          className="papernow min-w-0 truncate"
+          className="papernow min-w-0"
+          // The chip variant never shrinks; this one has to, or on the cover
+          // (「表紙（1ページ）」) it pushed 大きく off the screen. The words give
+          // way, the ▾ does not: it is what says the chip opens something.
+          style={{ flexShrink: 1 }}
           onClick={() => setSheet('sheet')}
         >
+          <span className="min-w-0 truncate">
           {/* Which page of the book, and which section it came from -- with
               one section and one sheet there is no book to be lost in, and
               the form the refill is folded into is what a phone has room to
@@ -3115,6 +3142,10 @@ function CanvasScreen({
           {' ・ '}{layout.cover ? '表紙（1ページ）'
             : layout.single ? '1ページ'
             : formLabel(layout, foldNow?.grain)}
+          {/* It opens the sizes and the forms, and says so the way a
+              choice does. */}
+</span>
+          <span className="ml-1 text-[13px] leading-none text-muted" aria-hidden="true">▾</span>
         </Button>
         {/* Below 360px even these give up their words: what they were pushing
             out of the title is worth more. The icons stay, and so do the
@@ -3125,7 +3156,10 @@ function CanvasScreen({
         </Button>
         <Button variant="chip" className="magnify" onClick={() => setZoomed(true)} aria-label="大きく見る">
           <span className="text-[14px] leading-none">⤢</span>
-          <span className="hidden min-[360px]:inline">大きく</span>
+          {/* The first word to go on a phone: the ▾ on the title made room
+              for itself here, because the form in the title never gives way
+              and ⤢ reads without its word. */}
+          <span className="hidden min-[420px]:inline">大きく</span>
         </Button>
       </header>
 
@@ -3136,58 +3170,25 @@ function CanvasScreen({
         <ZoomView pages={pages} flow={geo.flow} onClose={() => setZoomed(false)} />
       )}
 
-      {/* What the whole refill is, rather than what one part is: the months it
-          covers and the ground it prints on. Above the paper, because both are
-          design decisions and neither belongs inside the export sheet. */}
-      <div className="mb-0.5 ml-3.5 mr-3 flex shrink-0 flex-wrap items-center gap-1.5 self-start">
-      {dated && (
-        <button
-          className="range flex shrink-0 items-center gap-2 rounded-full border border-line-strong bg-white px-3 py-1.5 text-[13px] text-ink"
-          onClick={() => setSheet(monthlyTarget)}
-        >
-          {byDay
-            ? `${ymd(firstDay)} → ${ymd(lastDay)}`
-            : `${layout.year}年${layout.month}月 → ${lastMonth.year}年${lastMonth.month}月`}
-          {/* Months and sheets stop being the same number as soon as a sheet
-              carries two calendars, and which one matters depends on what is
-              being decided, so both are said when they differ. */}
-          <em className="not-italic text-muted">
-            {byDay ? `${sheetCount(layout)}枚`
-              : sheetCount(layout) === layout.monthCount ? `${layout.monthCount}ヶ月分`
-              : `${layout.monthCount}ヶ月分・${sheetCount(layout)}枚`}
-          </em>
-        </button>
+      {!wide && railEl}
+      {fillBack && (
+        <AddSection
+          job={null} print={print}
+          positioned
+          cover={false}
+          onPick={kind => {
+            setFillBack(false);
+            const where = book.sections.length;
+            setBook(b => ({
+              ...b,
+              sections: withSection(b.sections, sectionOf(kind, bodyOf(b), true), where),
+            }));
+            if (kind === 'blank') goTo(where, 0);
+            say(`${SECTION_LABEL(kind)}を裏表紙に入れました`);
+          }}
+          onClose={() => setFillBack(false)}
+        />
       )}
-        {/* The sheet of paper: which one, how many of them, and how much of
-            the last one stays empty. The emptiness is what makes anyone want
-            to put something else on it, so it is said before it is asked
-            for -- and the chip opens the picture where that is done. */}
-        <Button variant="chip" className="paper" onClick={() => setSheet('paper')}>
-          <span className="text-[14px] leading-none">▭</span>
-          {print.impose
-            ? `${PAPERS[print.paper].label} ${job.sheets}枚`
-            : `${PAPERS[print.paper].label} 原寸`}
-          {print.impose && job.spare > 0 && (
-            <em className="not-italic text-accent-text">あと{job.spare}{job.unit}ぶん</em>
-          )}
-        </Button>
-        <Button variant="chip" onClick={() => setSheet('background')}>
-          <span className="text-[14px] leading-none">▦</span>
-          {BACKGROUND_LABEL[layout.background?.kind ?? 'none']}
-        </Button>
-        {/* The chip is the sample. It says the words it is set to, in the ink
-            it is set to, so what the体裁 is can be read without opening it --
-            which is the whole reason this is not a gear icon. */}
-        <Button
-          variant="chip"
-          className="look"
-          onClick={() => setSheet('look')}
-          style={{ color: cssColor(paletteOf(layout).ink) }}
-        >
-          <span className="text-[14px] font-semibold leading-none">Aa</span>
-          {WORD_SAMPLE[layout.words ?? 'mix']}
-        </Button>
-      </div>
 
       <div className="relative flex min-h-0 grow items-center justify-center px-3 py-2" ref={boxRef}>
         {/* The book, turned. A planner is something you flip through, so the
@@ -3204,31 +3205,6 @@ function CanvasScreen({
             nothing by being at the right edge, and a spread binds in the
             middle -- so both outer edges are the refill's own content, and
             a round button sat on the dates. Turning moved under the paper. */}
-        <span className="turn-left absolute left-1 top-1/2 z-10 flex w-[52px] -translate-y-1/2 flex-col items-center gap-2">
-          {/* Nothing goes in front of the cover -- it is the outside of the
-              stack. Between the cover and the first month is reached from the
-              ＋ on that month, which is where that page would go. */}
-          {nth === 0 && !layout.cover && (
-            <span className="flex flex-col items-center gap-1">
-              <Button
-                variant="edge"
-                className="addbefore"
-                onClick={() => addPageHere()}
-                aria-label={goesIn === 1 ? '前に1ページ足す' : '前に見開きを足す'}
-              >
-                ＋
-              </Button>
-              {/* What the ＋ puts there, where the word 「足す」 was. 「足す」
-                  said what the ＋ already says and left the question anyone
-                  actually has -- how much goes in, one page or a pair --
-                  unanswered. A cover is one page; anywhere else the book's
-                  own form goes in, because a single page in the middle of a
-                  book of spreads would break the pairing of every spread
-                  after it. */}
-              <InsertMark pages={goesIn} />
-            </span>
-          )}
-        </span>
         <div
           // Keyed on the page, so turning to another one starts the animation
           // over rather than leaving the paper where it was.
@@ -3501,6 +3477,7 @@ function CanvasScreen({
       {/* The tools. Under the paper on a phone, beside it on a desktop, and
           the same blocks in the same order either way. */}
       <aside className="flex min-h-0 shrink-0 flex-col lg:w-[340px] lg:border-l lg:border-line lg:bg-paper">
+      {wide && <div className="border-b border-line pb-2 pt-2">{railEl}</div>}
 
       {/* The row is wider than the screen, and until now nothing said so: it
           ran off the edge with no sign that there was more, and could not be
@@ -3579,6 +3556,44 @@ function CanvasScreen({
       </div>
 
       {wide && sheetEl}
+
+      {/* What the whole of this refill is printed as, rather than what one
+          part of it is: its months, the ground under everything, its words
+          and ink. Down here, together and named, rather than as chips over
+          the paper -- above the paper there is only where you are. */}
+      <div className="papersettings shrink-0 bg-paper px-3 pt-1">
+        <div className="flex items-center gap-2 px-0.5 pb-1 text-[13px] text-muted">
+          この紙の設定<i className="h-px flex-1 bg-line" />
+        </div>
+        <div className={`grid gap-1.5 ${dated ? 'grid-cols-3' : 'grid-cols-2'}`}>
+          {dated && (
+            <PaperSetting
+              className="range"
+              label={byDay ? `期間 ${sheetCount(layout)}枚` : `期間 ${layout.monthCount}ヶ月`}
+              sample={<CalendarGlyph />}
+              value={byDay
+                ? `${firstDay.getMonth() + 1}/${firstDay.getDate()}〜`
+                : `${layout.month}月〜${lastMonth.month}月`}
+              onClick={() => setSheet(monthlyTarget)}
+            />
+          )}
+          <PaperSetting
+            label="背景"
+            sample={<BackgroundSample bg={layout.background} />}
+            value={BACKGROUND_LABEL[layout.background?.kind ?? 'none'].replace(/^背景[：]?/, '')}
+            onClick={() => setSheet('background')}
+          />
+          {/* The sample is the setting: the words it is set to, in the ink it
+              is set to, which is why this is not a gear icon. */}
+          <PaperSetting
+            className="look"
+            label="書体と色"
+            sample={<span className="text-[13px] font-bold leading-none" style={{ color: cssColor(paletteOf(layout).ink) }}>Aa</span>}
+            value={<span style={{ color: cssColor(paletteOf(layout).ink) }}>{WORD_SAMPLE[layout.words ?? 'mix']}</span>}
+            onClick={() => setSheet('look')}
+          />
+        </div>
+      </div>
 
       <div className="flex shrink-0 gap-2 bg-paper px-3 pb-3.5 pt-2 lg:mt-auto lg:border-t lg:border-line lg:px-4 lg:pt-3">
         <Button onClick={() => setSheet('load')}>読み込み</Button>
@@ -4046,6 +4061,149 @@ function ListGlyph() {
 // word for 「nothing here yet」 (the empty pages of the list wear them), and
 // the punches say which edge it binds on: down the outer edge for a single
 // page, down the seam for a pair.
+// The book in the order it is bound -- 表紙, what is inside, 裏表紙 -- over the
+// paper, so where this page sits in the planner is read before the page is.
+// Each place is drawn rather than thumbnailed: the page below is already the
+// full-size picture of the one you are on, and a small copy of it beside it
+// is the same drawing twice (4章). The drawing is the page-layout card's, in
+// the size's colour, so the spread chosen three screens ago is recognisably
+// the one here.
+//
+// A cover goes in from here and nowhere else. It used to be a ＋ on the left
+// edge of the paper, which also put pages in the middle of the book; putting
+// something between two months is a question about the order of the whole
+// book, and that is what 並びを整える answers.
+function BindingRail({ sections, at, size, print, job, onGo, onAddCover, onFillBack, onList, onPaper }: {
+  sections: Layout[];
+  at: number;
+  size: SizeSpec;
+  print: PrintOptions;
+  job: PaperJob;
+  onGo: (i: number) => void;
+  onAddCover: () => void;
+  onFillBack: () => void;
+  onList: () => void;
+  onPaper: () => void;
+}) {
+  const color = SIZE_COLOR[size.id];
+  const k = Math.min(44 / size.heightMm, 40 / size.widthMm);
+  const all = pagesOf(sections);
+  const pagesFor = (i: number) => {
+    const from = all.findIndex(l => l.at === i);
+    if (from < 0) return '';
+    let to = from;
+    while (all[to + 1] && all[to + 1].at === i) to++;
+    return from === to ? `p.${from + 1}` : `p.${from + 1}–${to + 1}`;
+  };
+  const body = sections.map((sec, i) => ({ sec, i })).filter(({ sec }) => !sec.cover);
+  const hasCover = !!sections[0]?.cover;
+  const backBlank = all.length > 0 && all[all.length - 1].at === null;
+  const empty = (
+    <span
+      className="grid place-items-center rounded-[2px] border border-dashed border-faint text-[15px] leading-none text-muted"
+      style={{ width: size.widthMm * k, height: size.heightMm * k }}
+    >＋</span>
+  );
+  const tile = (key: string, on: boolean, picture: ReactNode, name: ReactNode, pn: string,
+    onClick: () => void, extra: string, label?: string) => (
+    <button
+      key={key}
+      className={`railtile relative flex min-w-[76px] shrink-0 grow flex-col items-center gap-1 rounded-[10px] px-1.5 pb-1.5 pt-2 ${
+        on ? 'on bg-white shadow-[0_0_0_1px_var(--color-line-strong)]' : ''} ${extra}`}
+      onClick={onClick}
+      aria-label={label}
+      aria-current={on ? 'page' : undefined}
+    >
+      {on && <i className="absolute -top-px left-0 right-0 h-[3px] rounded-t-[10px] bg-ink" />}
+      <span className="flex h-[46px] items-center justify-center gap-[2px]">{picture}</span>
+      <span className="whitespace-nowrap text-[13px] font-semibold leading-none text-ink">{name}</span>
+      <span className="text-[13px] leading-none text-muted tabular-nums">{pn}</span>
+    </button>
+  );
+  return (
+    <div className="rail shrink-0 px-3 pt-1">
+      <div className="flex items-center gap-2 px-1 pb-1 text-[13px] text-muted">
+        <span>綴じた順</span>
+        <i className="h-px flex-1 bg-line-strong" />
+        <Button variant="chip" className="torail-list" onClick={onList} aria-label="並びを整える">
+          <ListGlyph />並びを整える
+        </Button>
+      </div>
+      <div className="flex gap-1.5 overflow-x-auto">
+        {hasCover
+          ? tile('cover', at === 0, <SizeIcon size={size} color={color} scale={k} rings />,
+              '表紙', 'p.1', () => onGo(0), '')
+          : tile('cover', false, empty, '表紙', 'p.1', onAddCover, 'addbefore', '表紙を入れる')}
+        {body.map(({ sec, i }) => {
+          const one = body.length === 1;
+          const dated = hasDatedPart(sec);
+          const end = dated ? runEnd(sec) : null;
+          const n = sheetCount(sec);
+          const picture = sec.fold > 1 ? <span style={{ color }}><FormGlyph kind="fold" panels={sec.fold} /></span>
+            : sec.spread
+              ? <><SizeIcon size={size} color={color} scale={k} rings flip /><SizeIcon size={size} color={color} scale={k} rings /></>
+              : <SizeIcon size={size} color={color} scale={k} rings />;
+          const name = (
+            <>
+              {one ? formLabel(sec) : sectionLabel(sec)}
+              <small className="ml-1 text-[13px] font-normal text-muted">
+                {dated && end ? `${sec.month}月〜${end.month}月` : `${n}枚`}
+              </small>
+            </>
+          );
+          return tile(`s${i}`, at === i, picture, name,
+            `${pagesFor(i)}${dated && n > 1 ? `・${n}回` : ''}`, () => onGo(i), '');
+        })}
+        {backBlank && tile('back', false, empty, '裏表紙', `p.${all.length}`, onFillBack, 'fillback', '裏表紙に入れる')}
+      </div>
+      {/* How much paper the book comes to, and how much of the last sheet is
+          still empty -- a fact about the whole book, so it sits under the
+          book rather than on a chip above one page of it. */}
+      <div className="flex justify-center pt-1">
+        <button className="paper flex items-center gap-1.5 px-2 py-1 text-[13px] text-muted" onClick={onPaper}>
+          <span className="text-[14px] leading-none">▭</span>
+          {print.impose
+            ? `${PAPERS[print.paper].label} ${job.sheets}枚`
+            : `${PAPERS[print.paper].label} 原寸`}
+          {print.impose && job.spare > 0 && (
+            <em className="not-italic">（あと{job.spare}{job.unit}ぶん）</em>
+          )}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// A setting of this paper that can be changed, laid out so that it reads as
+// one: what it is, what it is now, a small sample of it, and a way in. A chip
+// that only said 「背景なし」 read as a report of the state, not as the door
+// to change it.
+function PaperSetting({ className = '', label, value, sample, onClick }: {
+  className?: string;
+  label: ReactNode;
+  value: ReactNode;
+  sample: ReactNode;
+  onClick: () => void;
+}) {
+  // Three of these share a phone's width, which leaves each about a hundred
+  // pixels: the sample sits in the label's line rather than in a box of its
+  // own, so the value keeps the whole width under it.
+  return (
+    <button
+      className={`papersetting flex min-h-[50px] min-w-0 items-center gap-1 rounded-[10px] border border-line-strong bg-white py-1.5 pl-2.5 pr-1.5 text-left ${className}`}
+      onClick={onClick}
+    >
+      <span className="flex min-w-0 flex-1 flex-col gap-1">
+        <span className="flex min-w-0 items-center gap-1 whitespace-nowrap text-[13px] leading-none text-muted">
+          <span className="grid shrink-0 place-items-center text-ink">{sample}</span>{label}
+        </span>
+        <span className="truncate whitespace-nowrap text-[13px] font-semibold leading-tight text-ink">{value}</span>
+      </span>
+      <span className="shrink-0 text-[16px] leading-none text-muted" aria-hidden="true">›</span>
+    </button>
+  );
+}
+
 function InsertMark({ pages }: { pages: number }) {
   const w = pages > 1 ? 21 : 23;
   const dots = (x: number) => [7, 14.5, 22].map(y => (
@@ -4114,6 +4272,28 @@ function FormGlyph({ kind, panels = 3 }: { kind: 'spread' | 'single' | 'fold'; p
 // rings in the middle. Same trick as the list: the button and the screen it
 // opens are the same picture, so nothing has to be written to say where it
 // goes, and the way back out wears it too.
+function CalendarGlyph() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" aria-hidden="true">
+      <rect x="3" y="5" width="18" height="16" rx="2" /><path d="M3 10h18M8 3v4M16 3v4" />
+    </svg>
+  );
+}
+
+// The ground as a swatch: what is printed under everything, in miniature.
+function BackgroundSample({ bg }: { bg?: Background }) {
+  const kind = bg?.kind ?? 'none';
+  const line = bg?.color ?? '#B9B2A2';
+  const style: CSSProperties =
+    kind === 'tint' ? { background: bg?.color }
+    : kind === 'grid' ? { backgroundImage: `linear-gradient(${line} 1px,transparent 1px),linear-gradient(90deg,${line} 1px,transparent 1px)`, backgroundSize: '5px 5px' }
+    : kind === 'dot' ? { backgroundImage: `radial-gradient(circle,${line} 0.8px,transparent 1.1px)`, backgroundSize: '5px 5px' }
+    : kind === 'lines' ? { backgroundImage: `repeating-linear-gradient(to bottom,transparent 0 4px,${line} 4px 5px)` }
+    : kind === 'image' && bg?.src ? { backgroundImage: `url(${bg.src})`, backgroundSize: 'cover', backgroundPosition: 'center' }
+    : {};
+  return <span className="block size-[14px] rounded-[2px] border border-line-strong bg-white" style={style} />;
+}
+
 function BookGlyph() {
   return (
     <svg width="16" height="13" viewBox="0 0 16 13" aria-hidden="true" className="block">

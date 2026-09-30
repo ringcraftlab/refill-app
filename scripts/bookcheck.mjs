@@ -225,28 +225,31 @@ await page.screenshot({ path: `${OUT}/25-片面のページ.png` });
 
 // ---- the book, turned, in the editor ------------------------------------
 // A planner is something you flip through, so the page being edited has the
-// next one to its right and a ＋ where a page can go before it. That ＋ is
-// how a cover is reached without knowing the contents screen exists: five
-// presses from opening the app, all of them on the paper.
+// next one to its right -- and above the paper, the book in the order it is
+// bound: 表紙 | what is inside | 裏表紙. The empty 表紙 there is how a cover is
+// reached without knowing the contents screen exists. Putting a page in the
+// middle of the book is a question about its order, answered by 並びを整える.
 await start('80×128mm', '見開き', 'マンスリー');
 const pageno = () => flat('.pageno');
 check((await pageno()).startsWith('2–3'), `いま何ページ目かが紙の下に出る（${await pageno()}）`);
 check(
-  await page.locator('.turn-left .addbefore').count() === 1
+  await page.locator('.turn-left').count() === 0
     && await page.locator('.addafter').count() === 0,
-  '紙の上に残っているのは＋だけ（左に1つ）',
-);
-// ＋の下は「足す」という言葉ではなく、入るものの絵。1ページ目の前に入るのは
-// 表紙＝1ページ、束の途中に入るのはこの本の1枚＝見開きなら2ページ。
-// 言葉は＋が既に言っていることを繰り返すだけで、量を言っていなかった。
-const goesIn = () => page.locator('.turn-left .insertmark rect').count();
-check(
-  !(await flat('.turn-left')).includes('足す') && await goesIn() === 1,
-  `＋の下は入るものの絵（1ページ目の前は表紙＝1ページ・いま${await goesIn()}ページぶん）`,
+  '紙の上には＋が無い（表紙は帯から、途中に挟むのは並びを整えるから）',
 );
 check(
-  (await page.locator('.addbefore').getAttribute('aria-label')) === '前に1ページ足す',
-  '読み上げにも何ページ入るかが出る',
+  await page.locator('.rail .addbefore').count() === 1
+    && (await flat('.rail .addbefore')).includes('表紙'),
+  `帯に空の表紙がある（${await flat('.rail .addbefore')}）`,
+);
+check(
+  (await page.locator('.rail .addbefore').getAttribute('aria-label')) === '表紙を入れる',
+  '読み上げでも表紙を入れるボタンだと分かる',
+);
+check(
+  await page.locator('.rail .railtile.on').count() === 1
+    && (await flat('.rail .railtile.on')).includes('見開き'),
+  `帯でいまの場所（見開き）に印がある（${await flat('.rail .railtile.on')}）`,
 );
 // Turning sat on the drawing: a spread binds in the middle, so both outer
 // edges are the refill's own content and the round buttons were over the
@@ -310,7 +313,7 @@ check(
 );
 check(
   (await pageno()).startsWith('1/'),
-  `左端の＋で入れたページが1ページ目になる（${await pageno()}）`,
+  `帯の表紙で入れたページが1ページ目になる（${await pageno()}）`,
 );
 check(
   await page.locator('.hitbox.part').count() === 0 && await page.locator('.page').count() === 1,
@@ -353,8 +356,9 @@ check(
   `見出しも表紙と言う（片面と言わない）（${(await flat('header')).slice(0, 40)}）`,
 );
 check(
-  await page.locator('.turn-left .addbefore').count() === 0,
-  '表紙の前には足せない（＋を出さない）',
+  await page.locator('.rail .addbefore').count() === 0
+    && (await flat('.rail .railtile.on')).includes('表紙'),
+  `表紙が入ったら帯の表紙は空でなくなり、いまの場所になる（${await flat('.rail .railtile.on')}）`,
 );
 await page.screenshot({ path: `${OUT}/33-表紙になった.png` });
 
