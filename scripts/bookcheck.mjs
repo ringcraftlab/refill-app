@@ -597,5 +597,88 @@ await page.waitForTimeout(600);
 check(await drawn() > first, `スクロールすると描かれる（${first} → ${await drawn()}枚）`);
 await page.screenshot({ path: `${OUT}/42-もくじのサムネイル.png` });
 
+
+// ---- a mixed book: the form belongs to the section ----------------------
+// A planner is mixed. The monthly is a spread; the notes at the back are
+// single sheets. The size cannot be mixed -- a sheet punched differently does
+// not go in the same binder -- but the form can, and the paper does not care:
+// the faces run in one chain and are cut two to a sheet at the end.
+//
+// What this checks is that the three answers still agree when the book is
+// mixed: the pages in the panel, the paper in the note under it, and the PDF
+// that comes out. They are computed by different functions from the same
+// chain (`chainCount` / `buildPrintSheets`), and a mixed book is where they
+// would drift apart.
+await start('80×128mm', '見開き', 'マンスリー');
+await toContents();
+const wasLeaves = await leaves().count();
+await page.locator('.sections .addsection').click();
+await page.locator('.modal').waitFor();
+await page.locator('.fillers button', { hasText: 'メモ' }).click();
+await page.waitForTimeout(400);
+check(
+  await leaves().count() === wasLeaves + 2,
+  `足したメモは束の体裁を継ぐ＝見開き2ページ（${wasLeaves} → ${await leaves().count()}）`,
+);
+
+// Open the memo and make that section -- only that section -- single-sided.
+await page.locator('.leaf:not(.empty)').last().click();
+await page.locator('.page').first().waitFor();
+await page.waitForTimeout(300);
+check(await page.locator('.page').count() === 2, 'メモはまだ見開き（2ページ）');
+await page.locator('.papernow').click();
+await page.locator('.sheet').waitFor();
+await page.waitForTimeout(300);
+await page.locator('.sheet .card', { hasText: '片面' }).first().click();
+await page.waitForTimeout(400);
+await shut();
+check(await page.locator('.page').count() === 1, `メモだけ片面になる（${await page.locator('.page').count()}ページ）`);
+check(
+  (await flat('.papernow')).includes('片面'),
+  `紙のチップはこの束の体裁を言う（${await flat('.papernow')}）`,
+);
+await page.screenshot({ path: `${OUT}/43-メモだけ片面.png` });
+
+await toContents();
+const marks = (await page.locator('.sections .section em').allTextContents()).map(t => t.replace(/\s+/g, ''));
+check(
+  marks.some(t => t.includes('見開き')) && marks.some(t => t.includes('片面')),
+  `混ざったら体裁は型ごとに出る（${marks.join(' / ')}）`,
+);
+check(
+  !(await flat('header')).includes('見開き') && !(await flat('header')).includes('片面'),
+  `上の見出しは1つの体裁を名乗らない（${await flat('header')}）`,
+);
+await page.locator('.leaf:not(.empty)').last().click();
+await page.locator('.page').first().waitFor();
+await page.waitForTimeout(300);
+check(await page.locator('.page').count() === 1, 'そのページを開くと片面のまま');
+await page.locator('.prevpage').click();
+await page.waitForTimeout(400);
+check(await page.locator('.page').count() === 2, `前のページは見開きのまま（${await page.locator('.page').count()}ページ）`);
+await page.screenshot({ path: `${OUT}/44-混ざった束.png` });
+
+// The pages, the paper and the PDF have to agree.
+await toContents();
+const note = await paper();
+const sheets = Number(note.match(/(\d+)枚/)[1]);
+await page.locator('.leaf:not(.empty)').first().click();
+await page.locator('.page').first().waitFor();
+await page.getByRole('button', { name: 'PDF出力プレビュー' }).click();
+await page.locator('.preview').waitFor();
+await page.waitForTimeout(400);
+const dl2 = page.waitForEvent('download');
+await page.getByRole('button', { name: '書き出す' }).click();
+const mixedFile = `${OUT}/mixed.pdf`;
+await (await dl2).saveAs(mixedFile);
+const mixed = await PDFDocument.load(await readFile(mixedFile));
+// 紙の枚数はパネル側（`chainCount`）、PDFのページ数は組み立て側
+// （`buildPrintSheets`）が別々に数える。既定は両面なので紙1枚＝PDF2ページ。
+// 混ざった束はこの2つがずれるとしたらここ、という場所。
+check(
+  mixed.getPageCount() === sheets * 2,
+  `混ざった束でも、数えた紙と出てくる紙が同じ（${note} → PDF ${mixed.getPageCount()}ページ＝両面）`,
+);
+
 await browser.close();
 if (bad) process.exitCode = 1;

@@ -414,6 +414,19 @@ function sectionLabel(l: Layout): string {
 // look. Never the cover, whatever order the book is in -- a cover is one page
 // however the book is folded, so it carries 片面, and a monthly added to a book
 // of spreads after a cover had been put on the front came out single-sided.
+// The one form the whole book is in, or nothing when it is in more than one.
+// A planner is allowed to be mixed -- the monthly a spread, the notes at the
+// back single sheets -- and then there is no single answer to 「この束の体裁」,
+// so the panel says the size and lets each section say its own.
+const oneForm = (sections: Layout[]): Layout | null => {
+  const real = sections.filter(l => !l.cover && !l.single);
+  const first = real[0];
+  if (!first) return null;
+  return real.every(l => (
+    l.spread === first.spread && l.fold === first.fold && l.foldGrain === first.foldGrain
+  )) ? first : null;
+};
+
 const bodyOf = (b: Book): Layout =>
   b.sections.find(l => !l.cover && !l.single) ?? b.sections.find(l => !l.cover) ?? b.sections[0];
 
@@ -462,6 +475,15 @@ export function App() {
   // A cover stays one page whatever the book is folded into, so the form the
   // picker shows -- and the form it sets -- is the rest of the book's.
   const body = bodyOf(book);
+  // The section being worked on. The form belongs to it -- a book of spreads
+  // with single-sheet notes at the back is an ordinary planner -- while the
+  // size belongs to the book, because a sheet punched differently does not go
+  // in the same binder.
+  const onlyHere = (fn: (l: Layout) => Layout) =>
+    setBook(b => ({
+      ...b,
+      sections: b.sections.map((l, i) => (i === Math.min(at, b.sections.length - 1) ? fn(l) : l)),
+    }));
   const every = (fn: (l: Layout) => Layout) =>
     setBook(b => ({
       ...b,
@@ -479,15 +501,18 @@ export function App() {
     );
   }
   if (stage === 'sides') {
+    // The refill being made, which on the first run through is the only one.
+    const here = book.sections[Math.min(at, book.sections.length - 1)];
     return (
       <SidesScreen
-        size={body.size}
-        spread={body.spread}
-        fold={body.fold}
-        foldGrain={body.foldGrain}
-        onPick={(v) => every(l => ({
+        size={here.size}
+        spread={here.spread}
+        fold={here.fold}
+        foldGrain={here.foldGrain}
+        onPick={(v) => onlyHere(l => ({
           ...l,
           ...v,
+          single: undefined,
           // A fold holds one part per panel and has no band, so anything the
           // previous shape carried beyond that goes rather than staying in the
           // layout as a part with nowhere to be drawn.
@@ -1415,8 +1440,10 @@ function ContentsScreen({ book, setBook, print, at, nth, onOpen, onBack }: {
 }) {
   const size = SIZES[book.sections[0].size];
   // A cover is one page in a book of spreads, so it is not what the form of
-  // the book is read from.
-  const body = bodyOf(book);
+  // the book is read from -- and neither is a section that is mixed in with a
+  // form of its own. `same` is null for a mixed book, and then the form is
+  // said on each chip instead of once at the top, where it would be a lie.
+  const same = oneForm(book.sections);
   const job = usePaperJob(book.sections, size, print);
   const [adding, setAdding] = useState(false);
   const [ask, setAsk] = useState<number | null>(null);
@@ -1490,8 +1517,12 @@ function ContentsScreen({ book, setBook, print, at, nth, onOpen, onBack }: {
         <Button variant="icon" onClick={onBack} aria-label="戻る">←</Button>
         <span className="min-w-0 truncate">
           {size.label} {size.widthMm}×{size.heightMm}mm
-          <span className="mx-1.5 text-muted">・</span>
-          {formLabel(body, foldOf(body, size)?.grain)}
+          {same && (
+            <>
+              <span className="mx-1.5 text-muted">・</span>
+              {formLabel(same, foldOf(same, size)?.grain)}
+            </>
+          )}
         </span>
       </header>
       <h1 className="m-0 mb-0.5 text-[20px]">
@@ -1515,7 +1546,15 @@ function ContentsScreen({ book, setBook, print, at, nth, onOpen, onBack }: {
             >
               <span className="text-accent-text">{sectionMark(book.sections, i)}</span>
               <span className="secname">{sectionLabel(sec)}</span>
-              <em className="not-italic text-muted">{runText(sec)}</em>
+              <em className="not-italic text-muted">
+                {runText(sec)}
+                {/* Only where it is not already said at the top: in a mixed
+                    book this is what explains the empty page between two
+                    sections -- a spread has to start on an even page. */}
+                {!same && !sec.cover && (
+                  <>・{sec.single ? '1ページ' : formLabel(sec, foldOf(sec, size)?.grain)}</>
+                )}
+              </em>
             </Button>
           </li>
         ))}
@@ -4486,19 +4525,33 @@ function PartSheet({
                 }))}
               />
             </Field>
-            <FormCards
-              size={layout.size}
-              spread={layout.spread}
-              fold={layout.fold}
-              foldGrain={layout.foldGrain}
-              wide={!!inline}
-              onPick={v => setBook(b => ({
-                ...b,
-                sections: b.sections.map(l => ({
+            {/* The form is this section's, not the book's. A planner is
+                mixed -- the monthly is a spread and the notes at the back are
+                single sheets -- and the paper is the same either way, so a
+                book binds both. The size above cannot be mixed: a sheet with
+                different holes does not go in the same binder, which is why
+                one of these cards changes the whole book and the other
+                changes what the chip above says. The chip is what makes that
+                readable: it names the section it belongs to
+                （マンスリー ・ ミニ6 ・ 見開き）, so what is being changed is
+                whatever the chip you pressed was describing.
+
+                A cover has no form to choose -- it is one page whatever the
+                book is -- so it gets no cards rather than cards that would
+                lie about what they change. */}
+            {!layout.cover && (
+              <FormCards
+                size={layout.size}
+                spread={layout.spread}
+                fold={layout.fold}
+                foldGrain={layout.foldGrain}
+                wide={!!inline}
+                onPick={v => setLayout(l => ({
                   ...l,
                   ...v,
-                  // A cover stays one page whatever the rest of the book does.
-                  spread: l.cover ? l.spread : v.spread,
+                  // Born as one page to fill an empty page; asked for a form,
+                  // it is an ordinary section of the book from now on.
+                  single: undefined,
                   spanning: v.fold > 1 ? null : l.spanning,
                   surface: v.fold > 1
                     ? {
@@ -4507,9 +4560,9 @@ function PartSheet({
                         page: undefined, ratios: {}, fold: undefined,
                       }
                     : l.surface,
-                })),
-              }))}
-            />
+                }))}
+              />
+            )}
           </>
         )}
 
