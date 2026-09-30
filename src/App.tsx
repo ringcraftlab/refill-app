@@ -59,7 +59,8 @@ const SCREEN = 'relative mx-auto flex h-full max-w-[430px] flex-col overflow-hid
 // the room and the tools stand beside it. The pickers stay a column -- a list
 // of sizes 1400px wide is harder to read, not easier.
 const CANVAS_SCREEN = `${SCREEN} screen-in lg:max-w-[1440px] lg:flex-row`;
-const WIDE = '(min-width: 1024px)';
+// Kept in step with the `lg` variant in styles.css.
+const WIDE = '(min-width: 1024px), (orientation: landscape) and (max-height: 540px) and (min-width: 640px)';
 
 // A mouse and a window are a different shape from a thumb and a phone, and the
 // difference is structural rather than a matter of spacing: the tray turns
@@ -3501,7 +3502,7 @@ function CanvasScreen({
 
       {/* The tools. Under the paper on a phone, beside it on a desktop, and
           the same blocks in the same order either way. */}
-      <aside className="flex min-h-0 shrink-0 flex-col lg:w-[340px] lg:border-l lg:border-line lg:bg-paper">
+      <aside className="flex min-h-0 shrink-0 flex-col lg:w-[340px] lg:overflow-y-auto lg:border-l lg:border-line lg:bg-paper">
       {wide && <div className="border-b border-line pb-2 pt-2">{railEl}</div>}
 
       {/* The row is wider than the screen, and until now nothing said so: it

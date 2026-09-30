@@ -4,6 +4,15 @@
    uses, and a stylesheet that changes when only a script changed. */
 @import "tailwindcss" source("./");
 
+/* "Wide" is a desk, and also a phone turned on its side. Stacked, a phone
+   held landscape gave the rail, the tray and the settings all of its 390px of
+   height and the paper none; side by side, the paper gets the height and the
+   tools scroll beside it. Kept in step with WIDE in App.tsx. */
+@custom-variant lg {
+  @media (min-width: 1024px) { @slot; }
+  @media (orientation: landscape) and (max-height: 540px) and (min-width: 640px) { @slot; }
+}
+
 /* The palette is the app's whole visual identity: white cards on a cool light
    ground, neutral type, saturated colour used only where it means something.
    Declared here so utilities like `bg-paper` and `text-faint` exist and
