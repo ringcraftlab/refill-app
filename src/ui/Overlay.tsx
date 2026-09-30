@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
 import { Button } from './Button';
 
 // Everything that covers the screen lives here, so the dimming, the rounding
@@ -17,9 +17,16 @@ export function Sheet({ title, onClose, inline = false, children }: {
   inline?: boolean;
   children: ReactNode;
 }) {
+  // The column beside the paper scrolls (a phone on its side is 390px tall),
+  // so the panel keeps its own height rather than being squeezed to its title
+  // by everything above it, and brings itself into view when it opens.
+  const ref = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (inline) ref.current?.scrollIntoView({ block: 'nearest' });
+  }, [inline, title]);
   if (inline) {
     return (
-      <section className="sheet panel flex min-h-0 grow flex-col gap-3.5 overflow-y-auto border-t border-line bg-white px-[18px] pb-4 pt-2.5">
+      <section ref={ref} className="sheet panel flex shrink-0 grow flex-col gap-3.5 border-t border-line bg-white px-[18px] pb-4 pt-2.5">
         <div className="flex shrink-0 items-center gap-2">
           <h2 className="m-0 text-[15px] font-bold">{title}</h2>
           <Button variant="icon" className="ml-auto" onClick={onClose} aria-label="閉じる">×</Button>
