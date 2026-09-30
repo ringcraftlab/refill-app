@@ -3235,10 +3235,7 @@ function CanvasScreen({
           key={`${at}:${nth}`}
           className={`flex items-center justify-center ${turnedIn}`}
           ref={setRef}
-          // Marks drawn over the paper (where a part will land, where it just
-          // did) take the size's colour, not the accent: the accent is ink, and
-          // a grey wash on white paper reads as something that will print.
-          style={{ flexDirection: geo.flow, gap, position: 'relative', ['--size' as string]: SIZE_COLOR[layout.size] }}
+          style={{ flexDirection: geo.flow, gap, position: 'relative' }}
           // Tapping the paper places what the tray has selected. Dragging is
           // the better gesture and stays the one the app teaches, but it rides
           // on pointer capture and on the browser not taking the gesture for a
@@ -3310,7 +3307,7 @@ function CanvasScreen({
               <PageSvg page={pages[i]} scale={scale} showGuides />
               {pg.spanRect && (
                 <button
-                  className="hitbox absolute cursor-pointer p-0 hover:bg-[color-mix(in_srgb,var(--size)_7%,transparent)]"
+                  className="hitbox absolute cursor-pointer p-0 hover:bg-[color-mix(in_srgb,var(--color-mark)_6%,transparent)]"
                   onClick={() => setSheet('spanning')}
                   style={{
                     left: pg.spanRect.x * scale, top: pg.spanRect.y * scale,
@@ -3337,7 +3334,7 @@ function CanvasScreen({
           {preview?.map(b => (
             <div
               key={`preview-${b.key}`}
-              className="pointer-events-none absolute z-[3] rounded-[3px] border-[1.5px] border-[color-mix(in_srgb,var(--size)_60%,transparent)] bg-[color-mix(in_srgb,var(--size)_12%,transparent)]"
+              className="droptarget pointer-events-none absolute z-[3] rounded-[3px] border-[1.5px] border-[color-mix(in_srgb,var(--color-mark)_60%,transparent)] bg-[color-mix(in_srgb,var(--color-mark)_14%,transparent)]"
               style={{ left: b.left, top: b.top, width: b.width, height: b.height }}
             />
           ))}
@@ -3347,7 +3344,7 @@ function CanvasScreen({
           {landedOn?.map(b => (
             <div
               key={`landed-${b.key}`}
-              className="drop-flash pointer-events-none absolute z-[3] rounded-[3px] bg-[var(--size)]"
+              className="drop-flash pointer-events-none absolute z-[3] rounded-[3px] bg-mark"
               style={{ left: b.left, top: b.top, width: b.width, height: b.height }}
             />
           ))}
@@ -3363,7 +3360,7 @@ function CanvasScreen({
             return (
               <div
                 key={b.key}
-                className={`hitbox part absolute cursor-grab touch-none p-0 hover:bg-[color-mix(in_srgb,var(--size)_7%,transparent)] active:cursor-grabbing active:bg-[color-mix(in_srgb,var(--size)_12%,transparent)] ${
+                className={`hitbox part absolute cursor-grab touch-none p-0 hover:bg-[color-mix(in_srgb,var(--color-mark)_6%,transparent)] active:cursor-grabbing active:bg-[color-mix(in_srgb,var(--color-mark)_10%,transparent)] ${
                   waiting ? 'flex items-center justify-center rounded-[3px] border border-dashed border-line-strong' : ''
                 }`}
                 style={{ left: b.left, top: b.top, width: b.width, height: b.height }}
@@ -4333,7 +4330,7 @@ function PlaceNumbers({ plan, tile, count, mirror, scalePercent, numberOf, small
           className="faceno pointer-events-none absolute flex items-start justify-start"
           style={placeStyle(plan, tile, i, mirror, scalePercent)}
         >
-          <em className={`rounded-[2px] bg-white/85 not-italic text-accent-text ${
+          <em className={`rounded-[2px] bg-white/85 not-italic text-mark-text ${
             small ? 'm-px px-px text-[7px] leading-[9px]' : 'm-[3px] px-1 text-[13px] leading-4'
           }`}>{numberOf(i)}</em>
         </span>
@@ -5189,10 +5186,11 @@ function PrintPreview({ layout, size, print, also, job, onPlus, onPage }: {
           </button>
         )}
       </div>
-      {/* The numbers are unexplained otherwise, and an orange number on a
-          drawing of paper reads as something that will be on the paper. */}
+      {/* The numbers are unexplained otherwise, and a coloured number on a
+          drawing of paper reads as something that will be on the paper. The
+          colour is not named, so changing --color-mark cannot make this lie. */}
       <p className="faceno-note m-0 text-[13px] leading-[1.7] text-muted">
-        オレンジの番号はページの順番です（画面だけ・紙には刷りません）
+        色の付いた番号はページの順番です（画面だけ・紙には刷りません）
       </p>
       {print.duplex && layout.spread && hasDatedPart(layout) && (
         <p className="m-0 text-[13px] leading-[1.7] text-muted">

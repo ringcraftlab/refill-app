@@ -34,6 +34,17 @@
   /* The same ink: it already reads at any size, so words and fills share it.
      Kept as its own name so the places that are read stay findable. */
   --color-accent-text: #26241F;
+  /* Marks that are on the screen and never on the paper: where a dragged
+     part will land, the flash where it just did, the page numbers over the
+     print preview. They sit on the paper's contents -- ink, grey rules, red
+     Sundays, blue Saturdays -- and have to stand out from all of them, often
+     with a finger covering half the sheet. Ink cannot, and no size colour may:
+     a mark means the same thing on every size. */
+  --color-mark: #5A4FD6;
+  /* The same mark as a word (the page numbers). 藍紫 already reads on white
+     (5.9:1), so the word and the fill are one colour; kept as its own name so
+     a lighter mark later has somewhere to put its darker word. */
+  --color-mark-text: #5A4FD6;
   /* A warm grey under what is chosen, a step darker than the ground. */
   --color-accent-soft: #EFECE6;
   /* Reads as ink on a label, but lighter, so a row of controls does not shout. */
@@ -96,6 +107,8 @@
 @media (prefers-reduced-motion: reduce) {
   .turn-next, .turn-prev, .screen-in, .drop-flash,
   .leaf-fwd-y, .leaf-back-y, .leaf-fwd-x, .leaf-back-x { animation: none }
+  /* Without its fade the flash is a solid block over the part it marks. */
+  .drop-flash { display: none }
 }
 
 @keyframes knobPulse {
