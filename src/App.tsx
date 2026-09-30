@@ -3094,6 +3094,151 @@ function CanvasScreen({
         />
   );
 
+  // On a phone these sit over and under the paper. Beside a desk-width
+  // paper they stand at the top of the tools instead: a single page is
+  // tall and narrow, so the height they took was the one thing it was
+  // short of, while the width either side of it went unused.
+  const headerEl = (
+    <header className="flex shrink-0 items-center gap-2 px-4 pb-2 pt-3 text-[13px] font-semibold text-label">
+      {/* The way back, and only when there is one: the editor is the
+          workshop, so it has no exit of its own. What it wears is the
+          picture of the place it would return to -- the pages laid out in
+          rows, or the sheet the form was chosen on -- which is why no word
+          is needed to say where it goes. 「← 中身」 was that word. */}
+      {backTo && (
+        <Button
+          variant="chip"
+          className={`goback ${backTo === 'contents' ? 'tolist' : backTo === 'book' ? 'tobook' : 'toform'}`}
+          onClick={onBack}
+          aria-label={backTo === 'contents' ? '並びへもどる'
+            : backTo === 'book' ? 'めくって見るへもどる' : '構成へもどる'}
+        >
+          <span className="text-[14px] leading-none">←</span>
+          {backTo === 'contents'
+            ? <ListGlyph />
+            : backTo === 'book'
+              ? <BookGlyph />
+              : <SizeIcon size={size} color={SIZE_COLOR[layout.size]} scale={0.1} />}
+        </Button>
+      )}
+      {/* The paper itself, pressable. It used to be a line of text saying
+          what had been chosen three screens ago, and the way back to change
+          it was a button on another screen labelled 「サイズを選び直す」 --
+          a sentence explaining a door. The paper IS the door: press it and
+          the sizes and the forms are there, and what you pick redraws the
+          sheet behind the chip. */}
+      <Button
+        variant="chip"
+        className="papernow min-w-0"
+        // The chip variant never shrinks; this one has to, or on the cover
+        // (「表紙（1ページ）」) it pushed 大きく off the screen. The words give
+        // way, the ▾ does not: it is what says the chip opens something.
+        style={{ flexShrink: 1 }}
+        onClick={() => setSheet('sheet')}
+      >
+        <span className="min-w-0 truncate">
+        {/* Which page of the book, and which section it came from -- with
+            one section and one sheet there is no book to be lost in, and
+            the form the refill is folded into is what a phone has room to
+            say instead. */}
+        {book.sections.length > 1 && !layout.cover && (
+          <>{sectionLabel(layout)}<span className="mx-1 text-muted">・</span></>
+        )}
+        {size.label}
+        {/* What gives way, in order, as the screen narrows: the millimetres
+            first, then the words on the two chips. The form the refill is
+            folded into never does -- on a phone it is what the title is
+            for, and the picker cannot be consulted afterwards. The chips
+            hold on to their words the longest they can, because a button
+            nobody recognises is a feature nobody finds. */}
+        <span className="hidden min-[400px]:inline"> {size.widthMm}×{size.heightMm}mm</span>
+        {/* A cover is one page whatever the book is folded into, so saying
+            「片面」 here -- the form of this section, truthfully -- told
+            anyone standing on the cover of a book of spreads that their
+            book had become single-sided. It says which page it is instead. */}
+          {/* A cover is one page whatever the book is folded into, so saying
+            「片面」 here -- the form of this section, truthfully -- told
+            anyone standing on the cover of a book of spreads that their
+            book had become single-sided. It says which page it is instead. */}
+        {' ・ '}{layout.cover ? '表紙（1ページ）'
+          : layout.single ? '1ページ'
+          : formLabel(layout, foldNow?.grain)}
+        {/* It opens the sizes and the forms, and says so the way a
+            choice does. */}
+  </span>
+        <span className="ml-1 text-[13px] leading-none text-muted" aria-hidden="true">▾</span>
+      </Button>
+      {/* Below 360px even these give up their words: what they were pushing
+          out of the title is worth more. The icons stay, and so do the
+          labels a screen reader reads. */}
+      <Button variant="chip" className="rotate ml-auto" onClick={turn} aria-label="リフィルを回転">
+        <span className="text-[14px] leading-none">↻</span>
+        <span className="hidden min-[360px]:inline">{turnLabel}</span>
+      </Button>
+      <Button variant="chip" className="magnify" onClick={() => setZoomed(true)} aria-label="大きく見る">
+        <span className="text-[14px] leading-none">⤢</span>
+        {/* The first word to go on a phone: the ▾ on the title made room
+            for itself here, because the form in the title never gives way
+            and ⤢ reads without its word. */}
+        <span className="hidden min-[420px]:inline">大きく</span>
+      </Button>
+    </header>
+  );
+  const pagerEl = (
+    <div className="pager flex shrink-0 items-center justify-center gap-2.5 px-3.5 pt-1">
+      {/* The two sides take the same room, so that turning the page stays in
+          the middle of the row however wide the word on the right is. */}
+      <span className="flex-1" aria-hidden="true" />
+      {/* The arrows only exist when there is somewhere to turn to. The
+          number is always here, because it is also the door to the pages
+          laid out in rows -- a book of one page still has to have one. */}
+      {leaves.length > 1 && (
+        <Button
+          variant="edge"
+          className="prevpage size-8 text-[16px]"
+          disabled={cursor <= 0}
+          onClick={() => goTo(leaves[cursor - 1].at, leaves[cursor - 1].nth)}
+          aria-label="前のページ"
+        >‹</Button>
+      )}
+      {paging && (
+        <Button variant="chip" className="pageno" onClick={onList} aria-label="並びを見る">
+          {paging.from === paging.to ? paging.from : `${paging.from}–${paging.to}`}
+          <span className="text-muted">/{paging.of}ページ</span>
+        </Button>
+      )}
+      {leaves.length > 1 && (
+        <Button
+          variant="edge"
+          className="nextpage size-8 text-[16px]"
+          disabled={cursor < 0 || cursor >= leaves.length - 1}
+          onClick={() => goTo(leaves[cursor + 1].at, leaves[cursor + 1].nth)}
+          aria-label="次のページ"
+        >›</Button>
+      )}
+      {/* The other way of looking at what has been made. It belongs in this
+          row rather than up in the header: the number beside it opens the
+          pages laid out to be rearranged, this opens the book to be turned,
+          and those are the two of them. An open book rather than a word --
+          the screen it opens is that same picture filling the glass, which
+          is also what the way back out of it wears. */}
+      <span className="flex flex-1 justify-end">
+        <Button variant="chip" className="toflip" onClick={onFlip} aria-label="めくって見る">
+          <BookGlyph />
+          <span className="hidden min-[360px]:inline">めくる</span>
+        </Button>
+      </span>
+    </div>
+  );
+  const alsoEl = book.sections.length > 1 && (
+      <button
+        className="alsonote m-0 shrink-0 px-3.5 pt-1 text-left text-[13px] text-accent-text"
+        onClick={onList}
+      >
+        {book.sections.map(sectionLabel).join(' → ')}
+      </button>
+  );
+
   return (
     <div className={CANVAS_SCREEN}>
       {/* The paper's side of a wide screen; the whole screen on a narrow one,
@@ -3102,90 +3247,7 @@ function CanvasScreen({
       {/* Turning belongs up here rather than over the paper. A folded strip
           turned a quarter turn fills the drawing area top to bottom, and a
           button floating in its corner sat on the refill itself. */}
-      <header className="flex shrink-0 items-center gap-2 px-4 pb-2 pt-3 text-[13px] font-semibold text-label">
-        {/* The way back, and only when there is one: the editor is the
-            workshop, so it has no exit of its own. What it wears is the
-            picture of the place it would return to -- the pages laid out in
-            rows, or the sheet the form was chosen on -- which is why no word
-            is needed to say where it goes. 「← 中身」 was that word. */}
-        {backTo && (
-          <Button
-            variant="chip"
-            className={`goback ${backTo === 'contents' ? 'tolist' : backTo === 'book' ? 'tobook' : 'toform'}`}
-            onClick={onBack}
-            aria-label={backTo === 'contents' ? '並びへもどる'
-              : backTo === 'book' ? 'めくって見るへもどる' : '構成へもどる'}
-          >
-            <span className="text-[14px] leading-none">←</span>
-            {backTo === 'contents'
-              ? <ListGlyph />
-              : backTo === 'book'
-                ? <BookGlyph />
-                : <SizeIcon size={size} color={SIZE_COLOR[layout.size]} scale={0.1} />}
-          </Button>
-        )}
-        {/* The paper itself, pressable. It used to be a line of text saying
-            what had been chosen three screens ago, and the way back to change
-            it was a button on another screen labelled 「サイズを選び直す」 --
-            a sentence explaining a door. The paper IS the door: press it and
-            the sizes and the forms are there, and what you pick redraws the
-            sheet behind the chip. */}
-        <Button
-          variant="chip"
-          className="papernow min-w-0"
-          // The chip variant never shrinks; this one has to, or on the cover
-          // (「表紙（1ページ）」) it pushed 大きく off the screen. The words give
-          // way, the ▾ does not: it is what says the chip opens something.
-          style={{ flexShrink: 1 }}
-          onClick={() => setSheet('sheet')}
-        >
-          <span className="min-w-0 truncate">
-          {/* Which page of the book, and which section it came from -- with
-              one section and one sheet there is no book to be lost in, and
-              the form the refill is folded into is what a phone has room to
-              say instead. */}
-          {book.sections.length > 1 && !layout.cover && (
-            <>{sectionLabel(layout)}<span className="mx-1 text-muted">・</span></>
-          )}
-          {size.label}
-          {/* What gives way, in order, as the screen narrows: the millimetres
-              first, then the words on the two chips. The form the refill is
-              folded into never does -- on a phone it is what the title is
-              for, and the picker cannot be consulted afterwards. The chips
-              hold on to their words the longest they can, because a button
-              nobody recognises is a feature nobody finds. */}
-          <span className="hidden min-[400px]:inline"> {size.widthMm}×{size.heightMm}mm</span>
-          {/* A cover is one page whatever the book is folded into, so saying
-              「片面」 here -- the form of this section, truthfully -- told
-              anyone standing on the cover of a book of spreads that their
-              book had become single-sided. It says which page it is instead. */}
-            {/* A cover is one page whatever the book is folded into, so saying
-              「片面」 here -- the form of this section, truthfully -- told
-              anyone standing on the cover of a book of spreads that their
-              book had become single-sided. It says which page it is instead. */}
-          {' ・ '}{layout.cover ? '表紙（1ページ）'
-            : layout.single ? '1ページ'
-            : formLabel(layout, foldNow?.grain)}
-          {/* It opens the sizes and the forms, and says so the way a
-              choice does. */}
-</span>
-          <span className="ml-1 text-[13px] leading-none text-muted" aria-hidden="true">▾</span>
-        </Button>
-        {/* Below 360px even these give up their words: what they were pushing
-            out of the title is worth more. The icons stay, and so do the
-            labels a screen reader reads. */}
-        <Button variant="chip" className="rotate ml-auto" onClick={turn} aria-label="リフィルを回転">
-          <span className="text-[14px] leading-none">↻</span>
-          <span className="hidden min-[360px]:inline">{turnLabel}</span>
-        </Button>
-        <Button variant="chip" className="magnify" onClick={() => setZoomed(true)} aria-label="大きく見る">
-          <span className="text-[14px] leading-none">⤢</span>
-          {/* The first word to go on a phone: the ▾ on the title made room
-              for itself here, because the form in the title never gives way
-              and ⤢ reads without its word. */}
-          <span className="hidden min-[420px]:inline">大きく</span>
-        </Button>
-      </header>
+      {!wide && headerEl}
 
       {/* The design filling the glass, to check rather than to edit. Editing
           needs the tray and the borders, which are what make the drawing small
@@ -3442,60 +3504,10 @@ function CanvasScreen({
           The number is a button. Twenty-six pages is more than anyone turns
           through one at a time, and the number is where the eye already is
           when someone wants to be somewhere else. */}
-      <div className="pager flex shrink-0 items-center justify-center gap-2.5 px-3.5 pt-1">
-        {/* The two sides take the same room, so that turning the page stays in
-            the middle of the row however wide the word on the right is. */}
-        <span className="flex-1" aria-hidden="true" />
-        {/* The arrows only exist when there is somewhere to turn to. The
-            number is always here, because it is also the door to the pages
-            laid out in rows -- a book of one page still has to have one. */}
-        {leaves.length > 1 && (
-          <Button
-            variant="edge"
-            className="prevpage size-8 text-[16px]"
-            disabled={cursor <= 0}
-            onClick={() => goTo(leaves[cursor - 1].at, leaves[cursor - 1].nth)}
-            aria-label="前のページ"
-          >‹</Button>
-        )}
-        {paging && (
-          <Button variant="chip" className="pageno" onClick={onList} aria-label="並びを見る">
-            {paging.from === paging.to ? paging.from : `${paging.from}–${paging.to}`}
-            <span className="text-muted">/{paging.of}ページ</span>
-          </Button>
-        )}
-        {leaves.length > 1 && (
-          <Button
-            variant="edge"
-            className="nextpage size-8 text-[16px]"
-            disabled={cursor < 0 || cursor >= leaves.length - 1}
-            onClick={() => goTo(leaves[cursor + 1].at, leaves[cursor + 1].nth)}
-            aria-label="次のページ"
-          >›</Button>
-        )}
-        {/* The other way of looking at what has been made. It belongs in this
-            row rather than up in the header: the number beside it opens the
-            pages laid out to be rearranged, this opens the book to be turned,
-            and those are the two of them. An open book rather than a word --
-            the screen it opens is that same picture filling the glass, which
-            is also what the way back out of it wears. */}
-        <span className="flex flex-1 justify-end">
-          <Button variant="chip" className="toflip" onClick={onFlip} aria-label="めくって見る">
-            <BookGlyph />
-            <span className="hidden min-[360px]:inline">めくる</span>
-          </Button>
-        </span>
-      </div>
+      {!wide && pagerEl}
 
       {/* What the rest of the book is, from inside one section of it. */}
-      {book.sections.length > 1 && (
-        <button
-          className="alsonote m-0 shrink-0 px-3.5 pt-1 text-left text-[13px] text-accent-text"
-          onClick={onList}
-        >
-          {book.sections.map(sectionLabel).join(' → ')}
-        </button>
-      )}
+      {!wide && alsoEl}
 
 
       </div>
@@ -3503,6 +3515,7 @@ function CanvasScreen({
       {/* The tools. Under the paper on a phone, beside it on a desktop, and
           the same blocks in the same order either way. */}
       <aside className="flex min-h-0 shrink-0 flex-col lg:w-[340px] lg:overflow-y-auto lg:border-l lg:border-line lg:bg-paper">
+      {wide && <div className="asidehead border-b border-line pb-2">{headerEl}{pagerEl}{alsoEl}</div>}
       {wide && <div className="border-b border-line pb-2 pt-2">{railEl}</div>}
 
       {/* The row is wider than the screen, and until now nothing said so: it
@@ -3621,7 +3634,7 @@ function CanvasScreen({
         </div>
       </div>
 
-      <div className="flex shrink-0 gap-2 bg-paper px-3 pb-3.5 pt-2 lg:mt-auto lg:border-t lg:border-line lg:px-4 lg:pt-3">
+      <div className="flex shrink-0 gap-2 bg-paper px-3 pb-3.5 pt-2 lg:sticky lg:bottom-0 lg:z-10 lg:mt-auto lg:border-t lg:border-line lg:px-4 lg:pt-3">
         <Button onClick={() => setSheet('load')}>読み込み</Button>
         {/* Named on the way in. Everything saved used to be called 新しい
             リフィル, which is no name at all once there are three of them --

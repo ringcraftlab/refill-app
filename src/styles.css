@@ -158,6 +158,14 @@
   button { cursor: pointer; }
 }
 
+/* The editor's header and page row, moved to the top of the tools column
+   beside a wide paper. 340px is narrower than the row they had: the paper's
+   name gets a line of its own, and the page number sits at the left rather
+   than centred between two spacers that no longer fit. */
+.asidehead header { flex-wrap: wrap; row-gap: 6px; }
+.asidehead .papernow { flex: 1 1 calc(100% - 64px) !important; }
+.asidehead .pager > span[aria-hidden]:first-child { display: none; }
+
 /* A heading over a group: a small yellow square, then the words. */
 .sect::before { content: ""; flex: none; width: 7px; height: 7px; background: var(--color-hi); }
 /* What is chosen: an ink edge, and the yellow square in its corner. */

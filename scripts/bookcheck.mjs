@@ -253,13 +253,16 @@ check(
 );
 // Turning sat on the drawing: a spread binds in the middle, so both outer
 // edges are the refill's own content and the round buttons were over the
-// dates. The paper carries only what its position means.
+// dates. The paper carries only what its position means. Under the paper on
+// a phone; beside a wide paper they stand at the top of the tools column, so
+// the height goes to the paper -- either way, never on it.
 const boxOf = async (sel) => await page.locator(sel).first().boundingBox();
 const sheetBox = await boxOf('.page');
+const spreadRight = Math.max(...(await page.locator('.page').evaluateAll(els => els.map(e => e.getBoundingClientRect().right))));
 const pagerBox = await boxOf('.pager');
 check(
-  pagerBox.y > sheetBox.y + sheetBox.height - 1,
-  `めくるボタンは紙の下にある（紙の下端 ${Math.round(sheetBox.y + sheetBox.height)} < ページャ ${Math.round(pagerBox.y)}）`,
+  pagerBox.y > sheetBox.y + sheetBox.height - 1 || pagerBox.x > spreadRight - 1,
+  `めくるボタンは紙に重ならない（紙の下端 ${Math.round(sheetBox.y + sheetBox.height)}・右端 ${Math.round(spreadRight)} / ページャ ${Math.round(pagerBox.x)},${Math.round(pagerBox.y)}）`,
 );
 check(
   await page.locator('.pager .prevpage').count() === 1
