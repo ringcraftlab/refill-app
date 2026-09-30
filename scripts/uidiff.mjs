@@ -34,7 +34,7 @@ async function measure(base) {
   // baseline.sh runs this against an older build as well as the current one,
   // so a card is picked by its millimetres, not by its name: renaming a size
   // would otherwise make every comparison with a past commit fail to start.
-  await page.locator('.sizerow', { hasText: '80×128mm' }).click();
+  await page.locator('.sizerow', { hasText: '80×128mm' }).click(); await page.locator('.sizego').click({ timeout: 1500 }).catch(() => {});
   await grab('card', '.card');
   await page.locator('.card', { hasText: '見開き' }).click();
   await page.getByRole('button', { name: 'この構成で作る' }).click();

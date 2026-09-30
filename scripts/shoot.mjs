@@ -46,7 +46,7 @@ await shot('01-サイズ選択');
 // baseline.sh runs this against an older build as well as the current one,
 // so a card is picked by its millimetres, not by its name: renaming a size
 // would otherwise make every comparison with a past commit fail to start.
-await page.locator('.sizerow', { hasText: '80×128mm' }).click();
+await page.locator('.sizerow', { hasText: '80×128mm' }).click(); await page.locator('.sizego').click({ timeout: 1500 }).catch(() => {});
 await shot('02-ページ構成');
 
 await page.locator('.card', { hasText: '見開き' }).click();
@@ -80,7 +80,7 @@ await shot('07-右に方眼を落とす');
 // A fresh spread: the habit tracker needs width for its 31 day columns, so it
 // should take a band across the whole spread rather than half a page.
 await page.goto(BASE);
-await page.locator('.sizerow', { hasText: '80×128mm' }).click();
+await page.locator('.sizerow', { hasText: '80×128mm' }).click(); await page.locator('.sizego').click({ timeout: 1500 }).catch(() => {});
 await page.locator('.card', { hasText: '見開き' }).click();
 await page.getByRole('button', { name: 'この構成で作る' }).click();
 await page.locator('.page').first().waitFor();
@@ -98,7 +98,7 @@ await shot('09-TODOを足す');
 // Splitting the spread by week turns both pages landscape and stacks them,
 // with the fuller page first and the shorter page's leftover free to write in.
 await page.goto(BASE);
-await page.locator('.sizerow', { hasText: '80×128mm' }).click();
+await page.locator('.sizerow', { hasText: '80×128mm' }).click(); await page.locator('.sizego').click({ timeout: 1500 }).catch(() => {});
 await page.locator('.card', { hasText: '見開き' }).click();
 await page.getByRole('button', { name: 'この構成で作る' }).click();
 await page.locator('.page').first().waitFor();
@@ -129,7 +129,7 @@ await shot('12-2つ外してマンスリーだけ');
 // carries the hour scale. A change to it went through the twelve scenes above
 // without moving a pixel, which is how this one came to be here.
 await page.goto(BASE);
-await page.locator('.sizerow', { hasText: '95×170mm' }).click();
+await page.locator('.sizerow', { hasText: '95×170mm' }).click(); await page.locator('.sizego').click({ timeout: 1500 }).catch(() => {});
 await page.locator('.card', { hasText: '見開き' }).click();
 await page.getByRole('button', { name: 'この構成で作る' }).click();
 await page.locator('.page').first().waitFor();
@@ -160,7 +160,7 @@ await shot('14-バーチカルを8時から20時に');
 // from `drawSpanningMonthly`, and a change to the label they share went
 // through every scene above without moving a pixel.
 await page.goto(BASE);
-await page.locator('.sizerow', { hasText: '95×170mm' }).click();
+await page.locator('.sizerow', { hasText: '95×170mm' }).click(); await page.locator('.sizego').click({ timeout: 1500 }).catch(() => {});
 await page.locator('.card', { hasText: '片面' }).click();
 await page.getByRole('button', { name: 'この構成で作る' }).click();
 await page.locator('.page').first().waitFor();
@@ -172,7 +172,7 @@ await shot('15-片面にマンスリーと日付リスト');
 
 // The vertical folded into two bands, each carrying its own hour scale.
 await page.goto(BASE);
-await page.locator('.sizerow', { hasText: '95×170mm' }).click();
+await page.locator('.sizerow', { hasText: '95×170mm' }).click(); await page.locator('.sizego').click({ timeout: 1500 }).catch(() => {});
 await page.locator('.card', { hasText: '見開き' }).click();
 await page.getByRole('button', { name: 'この構成で作る' }).click();
 await page.locator('.page').first().waitFor();
@@ -189,7 +189,7 @@ await shot('16-バーチカルを2段に');
 // blank. Folded into two bands as well, which is the shape the request came
 // in as -- a week on one page you can actually write in.
 await page.goto(BASE);
-await page.locator('.sizerow', { hasText: '95×170mm' }).click();
+await page.locator('.sizerow', { hasText: '95×170mm' }).click(); await page.locator('.sizego').click({ timeout: 1500 }).catch(() => {});
 await page.locator('.card', { hasText: '見開き' }).click();
 await page.getByRole('button', { name: 'この構成で作る' }).click();
 await page.locator('.page').first().waitFor();
@@ -210,7 +210,7 @@ await shot('17-左端に落として片ページ2段');
 // and baseline shoots both builds in the same minute, so this is no less
 // comparable than the rest.
 await page.goto(BASE);
-await page.locator('.sizerow', { hasText: '95×170mm' }).click();
+await page.locator('.sizerow', { hasText: '95×170mm' }).click(); await page.locator('.sizego').click({ timeout: 1500 }).catch(() => {});
 await page.locator('.card', { hasText: '見開き' }).click();
 await page.getByRole('button', { name: 'この構成で作る' }).click();
 await page.locator('.page').first().waitFor();
@@ -227,7 +227,7 @@ await shot('18-バーチカルを今日から');
 // rings take up. The card is looked for rather than assumed, so baseline can
 // still replay this script against a build from before folding existed.
 await page.goto(BASE);
-await page.locator('.sizerow', { hasText: '62×105mm' }).click();
+await page.locator('.sizerow', { hasText: '62×105mm' }).click(); await page.locator('.sizego').click({ timeout: 1500 }).catch(() => {});
 const foldCard = page.locator('.card', { hasText: '蛇腹3面' });
 if (await foldCard.count()) {
   await foldCard.click();
@@ -250,7 +250,7 @@ if (await foldCard.count()) {
 
   // Then one per panel, which is the other thing a fold is for.
   await page.goto(BASE);
-  await page.locator('.sizerow', { hasText: '62×105mm' }).click();
+  await page.locator('.sizerow', { hasText: '62×105mm' }).click(); await page.locator('.sizego').click({ timeout: 1500 }).catch(() => {});
   await page.locator('.card', { hasText: '蛇腹3面' }).click();
   await page.getByRole('button', { name: 'この構成で作る' }).click();
   await page.locator('.page').first().waitFor();
@@ -264,7 +264,7 @@ if (await foldCard.count()) {
   // Selected in the tray, then placed by tapping the paper -- the path that
   // does not depend on the browser letting go of the gesture.
   await page.goto(BASE);
-  await page.locator('.sizerow', { hasText: '62×105mm' }).click();
+  await page.locator('.sizerow', { hasText: '62×105mm' }).click(); await page.locator('.sizego').click({ timeout: 1500 }).catch(() => {});
   await page.locator('.card', { hasText: '蛇腹2面' }).click();
   await page.getByRole('button', { name: 'この構成で作る' }).click();
   await page.locator('.page').first().waitFor();
@@ -281,7 +281,7 @@ if (await foldCard.count()) {
   // Turned a quarter turn: the panels hang from the rings instead of running
   // out sideways. Same strip of paper, same punch -- only the content turns.
   await page.goto(BASE);
-  await page.locator('.sizerow', { hasText: '62×105mm' }).click();
+  await page.locator('.sizerow', { hasText: '62×105mm' }).click(); await page.locator('.sizego').click({ timeout: 1500 }).catch(() => {});
   await page.locator('.card', { hasText: '蛇腹3面' }).click();
   await page.getByRole('button', { name: 'この構成で作る' }).click();
   await page.locator('.page').first().waitFor();
@@ -308,7 +308,7 @@ if (await foldCard.count()) {
   // instead and the inner panels are cut back to clear the holes -- an L, not
   // a rectangle, which is the one shape in the app that is not one.
   await page.goto(BASE);
-  await page.locator('.sizerow', { hasText: '91×55mm' }).click();
+  await page.locator('.sizerow', { hasText: '91×55mm' }).click(); await page.locator('.sizego').click({ timeout: 1500 }).catch(() => {});
   // This size alone offers both directions, so the card has to be picked by
   // the one it is.
   await page.locator('.card', { hasText: 'L字3面' }).click();
@@ -327,7 +327,7 @@ if (await foldCard.count()) {
   // a rectangle, at the cost of a 260mm ribbon. Both are offered because
   // neither is plainly right, which is true of this size alone.
   await page.goto(BASE);
-  await page.locator('.sizerow', { hasText: '91×55mm' }).click();
+  await page.locator('.sizerow', { hasText: '91×55mm' }).click(); await page.locator('.sizego').click({ timeout: 1500 }).catch(() => {});
   await page.locator('.card', { hasText: '蛇腹3面' }).click();
   await page.getByRole('button', { name: 'この構成で作る' }).click();
   await page.locator('.page').first().waitFor();
@@ -344,7 +344,7 @@ if (await foldCard.count()) {
 // because a background that stopped at the content would read as a panel laid
 // on the paper rather than as the paper.
 await page.goto(BASE);
-await page.locator('.sizerow', { hasText: '80×128mm' }).click();
+await page.locator('.sizerow', { hasText: '80×128mm' }).click(); await page.locator('.sizego').click({ timeout: 1500 }).catch(() => {});
 await page.locator('.card', { hasText: '見開き' }).click();
 await page.getByRole('button', { name: 'この構成で作る' }).click();
 await page.locator('.page').first().waitFor();
@@ -391,7 +391,7 @@ async function feedPhoto() {
 }
 
 await page.goto(BASE);
-await page.locator('.sizerow', { hasText: '80×128mm' }).click();
+await page.locator('.sizerow', { hasText: '80×128mm' }).click(); await page.locator('.sizego').click({ timeout: 1500 }).catch(() => {});
 await page.locator('.card', { hasText: '見開き' }).click();
 await page.getByRole('button', { name: 'この構成で作る' }).click();
 await page.locator('.page').first().waitFor();
@@ -413,7 +413,7 @@ if (await photoStamp.count()) {
   // The same picture across the gutter: one box cut by the fold of the
   // spread, which each sheet has to carry its half of at the same scale.
   await page.goto(BASE);
-  await page.locator('.sizerow', { hasText: '80×128mm' }).click();
+  await page.locator('.sizerow', { hasText: '80×128mm' }).click(); await page.locator('.sizego').click({ timeout: 1500 }).catch(() => {});
   await page.locator('.card', { hasText: '見開き' }).click();
   await page.getByRole('button', { name: 'この構成で作る' }).click();
   await page.locator('.page').first().waitFor();
@@ -429,7 +429,7 @@ if (await photoStamp.count()) {
 // to draw the day a third taller than the other; a spare cell makes it four
 // and four, and the spare one is the memo every printed weekly has.
 await page.goto(BASE);
-await page.locator('.sizerow', { hasText: '95×170mm' }).click();
+await page.locator('.sizerow', { hasText: '95×170mm' }).click(); await page.locator('.sizego').click({ timeout: 1500 }).catch(() => {});
 await page.locator('.card', { hasText: '見開き' }).click();
 await page.getByRole('button', { name: 'この構成で作る' }).click();
 await page.locator('.page').first().waitFor();
@@ -448,7 +448,7 @@ await shot('36-見開きの週間は8マス');
 // One decision for the whole refill, so it sits in a chip above the paper
 // rather than in every part's settings.
 await page.goto(BASE);
-await page.locator('.sizerow', { hasText: '80×128mm' }).click();
+await page.locator('.sizerow', { hasText: '80×128mm' }).click(); await page.locator('.sizego').click({ timeout: 1500 }).catch(() => {});
 await page.locator('.card', { hasText: '見開き' }).click();
 await page.getByRole('button', { name: 'この構成で作る' }).click();
 await page.locator('.page').first().waitFor();
@@ -469,7 +469,7 @@ if (await lookChip.count()) {
 // Last month and next month in the cells the month left empty. The space is
 // dead otherwise, and a monthly on its own page had nowhere else for them.
 await page.goto(BASE);
-await page.locator('.sizerow', { hasText: '80×128mm' }).click();
+await page.locator('.sizerow', { hasText: '80×128mm' }).click(); await page.locator('.sizego').click({ timeout: 1500 }).catch(() => {});
 await page.locator('.card', { hasText: '片面' }).first().click();
 await page.getByRole('button', { name: 'この構成で作る' }).click();
 await page.locator('.page').first().waitFor();
@@ -489,7 +489,7 @@ if (await miniChoice.count()) {
 // the spread's own monthly -- so a monthly dropped under it used to count
 // itself as the first calendar on the sheet and print September twice.
 await page.goto(BASE);
-await page.locator('.sizerow', { hasText: '148×210mm' }).click();
+await page.locator('.sizerow', { hasText: '148×210mm' }).click(); await page.locator('.sizego').click({ timeout: 1500 }).catch(() => {});
 await page.locator('.card', { hasText: '見開き' }).first().click();
 await page.getByRole('button', { name: 'この構成で作る' }).click();
 await page.locator('.page').first().waitFor();

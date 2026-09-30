@@ -60,7 +60,7 @@ const toContents = async () => {
 };
 async function start(sizeText, form, part) {
   await page.goto(BASE);
-  await page.locator('.sizerow', { hasText: sizeText }).click();
+  await page.locator('.sizerow', { hasText: sizeText }).click(); await page.locator('.sizego').click({ timeout: 1500 }).catch(() => {});
   await page.locator('.card', { hasText: form }).first().click();
   await page.getByRole('button', { name: 'この構成で作る' }).click();
   await page.locator('.page').first().waitFor();
@@ -389,7 +389,7 @@ check(
 // screen: the empty section was the one `withSection` cleans away, and the
 // book became a one-page cover with no 次へ and no way back to a spread.
 await page.goto(BASE);
-await page.locator('.sizerow', { hasText: '80×128mm' }).click();
+await page.locator('.sizerow', { hasText: '80×128mm' }).click(); await page.locator('.sizego').click({ timeout: 1500 }).catch(() => {});
 await page.locator('.card', { hasText: '見開き' }).first().click();
 await page.getByRole('button', { name: 'この構成で作る' }).click();
 await page.locator('.page').first().waitFor();
@@ -506,7 +506,7 @@ await page.screenshot({ path: `${OUT}/38-インク見本.png` });
 // exactly as the two pages of a spread do, so the grid stops at the crease and
 // starts again on the other side.
 await page.goto(BASE);
-await page.locator('.sizerow', { hasText: '110×210mm' }).click();
+await page.locator('.sizerow', { hasText: '110×210mm' }).click(); await page.locator('.sizego').click({ timeout: 1500 }).catch(() => {});
 await page.locator('.card', { hasText: '蛇腹2面' }).first().click();
 await page.getByRole('button', { name: 'この構成で作る' }).click();
 await page.locator('.page').first().waitFor();
@@ -534,7 +534,7 @@ await page.screenshot({ path: `${OUT}/40-折り目と曜日.png` });
 // screen while the period is being set.
 const newBook = async (size, part) => {
   await page.goto(BASE);
-  await page.locator('.sizerow', { hasText: size }).click();
+  await page.locator('.sizerow', { hasText: size }).click(); await page.locator('.sizego').click({ timeout: 1500 }).catch(() => {});
   await page.locator('.card', { hasText: '見開き' }).first().click();
   await page.getByRole('button', { name: 'この構成で作る' }).click();
   await page.locator('.page').first().waitFor();

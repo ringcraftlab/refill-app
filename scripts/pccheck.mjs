@@ -37,7 +37,7 @@ const stamp = async (label) => {
 
 async function build() {
   await page.goto(BASE);
-  await page.locator('.sizerow', { hasText: '80×128mm' }).click();
+  await page.locator('.sizerow', { hasText: '80×128mm' }).click(); await page.locator('.sizego').click({ timeout: 1500 }).catch(() => {});
   await page.locator('.card', { hasText: '見開き' }).click();
   await page.getByRole('button', { name: 'この構成で作る' }).click();
   await page.locator('.page').first().waitFor();
@@ -127,7 +127,7 @@ check(
 // cards get the most room, A5スリム up there read as a thinner paper than the
 // one being chosen.
 await page.goto(BASE);
-await page.locator('.sizerow', { hasText: '110×210mm' }).click();
+await page.locator('.sizerow', { hasText: '110×210mm' }).click(); await page.locator('.sizego').click({ timeout: 1500 }).catch(() => {});
 await page.locator('.card').first().waitFor();
 await page.waitForTimeout(300);
 const shown = await page.locator('.sizenow svg').boundingBox();
@@ -144,7 +144,7 @@ await page.screenshot({ path: `${OUT}/04-構成の画面.png` });
 // the millimetres in it and the name and the sheet clipped away.
 await page.setViewportSize({ width: 390, height: 500 });
 await page.goto(BASE);
-await page.locator('.sizerow', { hasText: '62×105mm' }).click();
+await page.locator('.sizerow', { hasText: '62×105mm' }).click(); await page.locator('.sizego').click({ timeout: 1500 }).catch(() => {});
 await page.locator('.card').first().waitFor();
 await page.waitForTimeout(300);
 const strip = await page.locator('.sizenow').boundingBox();

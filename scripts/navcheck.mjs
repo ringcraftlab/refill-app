@@ -38,7 +38,7 @@ const settle = () => page.waitForTimeout(350);
 
 const start = async () => {
   await page.goto(BASE);
-  await page.locator('.sizerow', { hasText: '95×170mm' }).click();
+  await page.locator('.sizerow', { hasText: '95×170mm' }).click(); await page.locator('.sizego').click({ timeout: 1500 }).catch(() => {});
   await page.locator('.card').first().waitFor();
 };
 
@@ -50,7 +50,7 @@ await settle();
 check(await where() === 'サイズ', `構成から戻ると、開いた場所（サイズ）へ帰る（いま ${await where()}）`);
 
 // ---- 2. 構成 → 編集 -------------------------------------------------------
-await page.locator('.sizerow', { hasText: '95×170mm' }).click();
+await page.locator('.sizerow', { hasText: '95×170mm' }).click(); await page.locator('.sizego').click({ timeout: 1500 }).catch(() => {});
 await page.locator('.card', { hasText: '見開き' }).first().click();
 await page.getByRole('button', { name: 'この構成で作る' }).click();
 await page.locator('.page').first().waitFor();

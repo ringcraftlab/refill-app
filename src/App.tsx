@@ -758,7 +758,7 @@ const nameSize = (name: string) =>
 // rather than a mark on it, and on the picker, where the chosen card sits
 // among others, the haze reached them too. Enough to see, not enough to be
 // the loudest thing on the screen.
-const CARD_SHADOW = 'none';
+const CARD_SHADOW = '0 1px 3px rgba(38,36,31,0.07)';
 // Chosen has to be visible from arm's length. A 1.5px border in the size's own
 // colour is nothing at all on the pale ones -- Bible's blue against white is a
 // hairline, and on the recording of a real phone you cannot tell which card is
@@ -766,9 +766,9 @@ const CARD_SHADOW = 'none';
 // without moving anything by a pixel.
 const cardSkin = (on: boolean, line: string) =>
   ({
-    borderColor: on ? 'var(--color-ink)' : 'var(--color-line)',
+    borderColor: on ? line : 'var(--color-line)',
     background: '#fff',
-    boxShadow: CARD_SHADOW,
+    boxShadow: on ? `0 0 0 3px ${line}33, ${CARD_SHADOW}` : CARD_SHADOW,
     transition: 'box-shadow 140ms ease-out, border-color 140ms ease-out',
   }) as const;
 
@@ -908,7 +908,7 @@ function SizeCards({ selected, wide, onPick }: {
                         <button
                           key={id}
                           onClick={() => onPick(id)}
-                          className={`sizerow relative flex min-w-0 items-center gap-1 overflow-hidden rounded-lg border-[1.5px] py-2 pl-3 pr-1 text-left ${selected === id ? 'picked' : ''}`}
+                          className={`sizerow relative flex min-w-0 items-center gap-1 overflow-hidden rounded-[18px] border-[1.5px] py-2 pl-3 pr-1 text-left`}
                           style={cardSkin(selected === id, SIZE_COLOR[id])}
                           aria-pressed={selected === id}
                         >
@@ -962,24 +962,14 @@ function SizeCards({ selected, wide, onPick }: {
   );
 }
 
-// How long the screen stays after a size is pressed. Pressing used to change
-// the screen in the same frame: the card you touched never got to show that it
-// was the one, so the tap read as "the app moved" rather than as "I chose
-// this". Long enough for the ring to land, short enough that nobody waits.
-const PICK_HOLD_MS = 130;
-
+// Choosing a size and going on are two presses, as they are on the form
+// screen: the card pressed stays chosen where it can be seen and changed,
+// and the move to the next screen is the button's, not the card's.
 function SizeScreen({ selected, onPick }: { selected: RefillSize; onPick: (s: RefillSize) => void }) {
   const wide = useWide();
-  // What was just pressed, so it can be seen being chosen before the screen
-  // goes. A second press while the first is still showing is the same press.
-  const [taken, setTaken] = useState<RefillSize | null>(null);
-  const take = (s: RefillSize) => {
-    if (taken) return;
-    setTaken(s);
-    window.setTimeout(() => onPick(s), PICK_HOLD_MS);
-  };
+  const [chosen, setChosen] = useState<RefillSize>(selected);
   return (
-    <div className={PICK_SCREEN}>
+    <div className={`sizescreen ${PICK_SCREEN}`}>
       <div className="relative text-[14px] font-bold tracking-[0.04em] text-muted">
         RingCraftLab
         {/* The one decoration in the app: two squares, one filled yellow and
@@ -999,8 +989,11 @@ function SizeScreen({ selected, onPick }: { selected: RefillSize; onPick: (s: Re
           overflows -- `justify-center` on a scrolling column would push the
           first row above the scroll origin, where nothing can reach it. */}
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
-        <SizeCards selected={taken ?? selected} wide={wide} onPick={take} />
+        <SizeCards selected={chosen} wide={wide} onPick={setChosen} />
       </div>
+      <Button variant="cta" className="sizego shrink-0" onClick={() => onPick(chosen)}>
+        {SIZE_NAME[chosen]}で作る
+      </Button>
     </div>
   );
 }
@@ -1120,7 +1113,7 @@ function FormCards({ size, spread, fold, foldGrain, wide, onPick, onScale }: {
   const card = (choice: Choice) => (
     <button
       key={choice.key}
-      className={`card flex flex-col items-center gap-2 rounded-lg border-[1.5px] px-2 py-3 text-center ${choice.on ? 'picked' : ''}`}
+      className="card flex flex-col items-center gap-2 rounded-[18px] border-[1.5px] px-2 py-3 text-center"
       style={cardSkin(choice.on, color)}
       aria-pressed={choice.on}
       onClick={() => onPick(choice.pick)}
@@ -1768,6 +1761,18 @@ function pagesOf(sections: Layout[]): Leaf[] {
   return out;
 }
 
+// Whether this sheet of a one-page section is printed on the back of the
+// paper. The pages of the book alternate front and back when both sides are
+// printed, and a one-page section takes whichever the book has free there --
+// which is how the back of the last spread becomes a page with its holes on
+// the right.
+function backSideOf(sections: Layout[], at: number, nth: number, duplex: boolean): boolean {
+  const sec = sections[at];
+  if (!duplex || !sec?.single || sec.fold > 1) return false;
+  const i = pagesOf(sections).findIndex(l => l.at === at && l.nth === nth);
+  return i >= 0 && i % 2 === 1;
+}
+
 // The smallest change that gets a section down to `want` sheets or fewer.
 // A note section is however many sheets it says; a dated one is as long as
 // its dates, so it is shortened a month at a time -- a weekly cannot stop
@@ -1959,8 +1964,9 @@ function BookView({ book, at, nth, print, onClose, onEdit, onAddAt }: {
     let one = made.get(key);
     if (!one) {
       const sheet = sheetOf(leaf);
-      const pages = buildPages(sheet, size, back);
-      const geo = buildGeometry(sheet, size, back);
+      // Relative to the side the section already knows it is on.
+      const pages = buildPages(sheet, size, back !== !!sheet.onBack);
+      const geo = buildGeometry(sheet, size, back !== !!sheet.onBack);
       const i = Math.min(leaf.side, pages.length - 1);
       one = { page: pages[i] ?? null, shape: geo.pages[Math.min(leaf.side, geo.pages.length - 1)] ?? null };
       made.set(key, one);
@@ -2346,7 +2352,15 @@ function CanvasScreen({
 }) {
   // The section being edited. Everything below this line is written against
   // one refill, exactly as it was before books existed.
-  const layout = book.sections[at];
+  // A one-page section on the back of a sheet (the last page of a book of
+  // spreads) is drawn with its holes on the right, as it will be printed.
+  // Worked out here, from where it sits, never trusted from what was saved:
+  // moving a section moves which side of the paper it is on.
+  const backSide = useMemo(() => backSideOf(book.sections, at, nth, print.duplex), [book.sections, at, nth, print.duplex]);
+  const layout = useMemo(
+    () => ({ ...book.sections[at], onBack: backSide }),
+    [book.sections, at, backSide],
+  );
   const setLayout = (fn: (l: Layout) => Layout) => setBook(b => ({
     ...b,
     sections: b.sections.map((sec, i) => (i === at ? fn(sec) : sec)),
@@ -3192,7 +3206,9 @@ function CanvasScreen({
               ...b,
               sections: withSection(b.sections, sectionOf(kind, bodyOf(b), true), where),
             }));
-            if (kind === 'blank') goTo(where, 0);
+            // Straight onto it: the back is a page of its own, holes on the
+            // right, and what was just put there is what to look at next.
+            goTo(where, 0);
             say(`${SECTION_LABEL(kind)}を裏表紙に入れました`);
           }}
           onClose={() => setFillBack(false)}
@@ -4113,10 +4129,21 @@ function BindingRail({ sections, at, size, print, job, onGo, onAddCover, onFillB
       style={{ width: size.widthMm * k, height: size.heightMm * k }}
     >＋</span>
   );
+  // The back cannot be filled until the book has something in it: a back
+  // page on an empty book is a page after nothing, and the empty spread it
+  // would follow is a placeholder that the first real section replaces.
+  const filled = sections.some(s => !s.cover && !isPlaceholder(s));
+  const waiting = (
+    <span
+      className="grid place-items-center rounded-[2px] border border-dashed border-line-strong text-[15px] leading-none text-faint"
+      style={{ width: size.widthMm * k, height: size.heightMm * k }}
+    >＋</span>
+  );
   const tile = (key: string, on: boolean, picture: ReactNode, name: ReactNode, pn: string,
-    onClick: () => void, extra: string, label?: string) => (
+    onClick: () => void, extra: string, label?: string, disabled = false) => (
     <button
       key={key}
+      disabled={disabled}
       className={`railtile relative flex min-w-[76px] shrink-0 grow flex-col items-center gap-1 rounded-md px-1.5 pb-1.5 pt-2 ${
         on ? 'on bg-white shadow-[0_0_0_1px_var(--color-line-strong)]' : ''} ${extra}`}
       onClick={onClick}
@@ -4125,7 +4152,7 @@ function BindingRail({ sections, at, size, print, job, onGo, onAddCover, onFillB
     >
       {on && <i className="absolute -top-px left-0 right-0 h-1 rounded-t-md bg-hi" />}
       <span className="flex h-[46px] items-center justify-center gap-[2px]">{picture}</span>
-      <span className="whitespace-nowrap text-[13px] font-semibold leading-none text-ink">{name}</span>
+      <span className={`whitespace-nowrap text-[13px] font-semibold leading-none ${disabled ? 'text-faint' : 'text-ink'}`}>{name}</span>
       <span className="text-[13px] leading-none text-muted tabular-nums">{pn}</span>
     </button>
   );
@@ -4151,7 +4178,8 @@ function BindingRail({ sections, at, size, print, job, onGo, onAddCover, onFillB
           const picture = sec.fold > 1 ? <span style={{ color }}><FormGlyph kind="fold" panels={sec.fold} /></span>
             : sec.spread
               ? <><SizeIcon size={size} color={color} scale={k} rings flip /><SizeIcon size={size} color={color} scale={k} rings /></>
-              : <SizeIcon size={size} color={color} scale={k} rings />;
+              // A page on the back of a sheet has its holes on the right.
+              : <SizeIcon size={size} color={color} scale={k} rings flip={backSideOf(sections, i, 0, print.duplex)} />;
           const name = (
             <>
               {one ? formLabel(sec) : sectionLabel(sec)}
@@ -4163,7 +4191,10 @@ function BindingRail({ sections, at, size, print, job, onGo, onAddCover, onFillB
           return tile(`s${i}`, at === i, picture, name,
             `${pagesFor(i)}${dated && n > 1 ? `・${n}回` : ''}`, () => onGo(i), '');
         })}
-        {backBlank && tile('back', false, empty, '裏表紙', `p.${all.length}`, onFillBack, 'fillback', '裏表紙に入れる')}
+        {backBlank && (filled
+          ? tile('back', false, empty, '裏表紙', `p.${all.length}`, onFillBack, 'fillback', '裏表紙に入れる')
+          : tile('back', false, waiting, '裏表紙', `p.${all.length}`, () => {}, 'fillback cursor-default',
+              '裏表紙（見開きに何か置くと入れられます）', true))}
       </div>
       {/* How much paper the book comes to, and how much of the last sheet is
           still empty -- a fact about the whole book, so it sits under the

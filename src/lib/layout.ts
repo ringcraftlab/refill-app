@@ -418,8 +418,12 @@ const groupSurface = (g: FoldGroup, placed: PartKind[], r: Rect): Surface => ({
 });
 
 // `flipBinding` mirrors a single page's binding edge, for when that page is
-// printed on the back of a sheet.
-export function buildGeometry(layout: Layout, size: SizeSpec, flipBinding = false): Geometry {
+// printed on the back of a sheet. A section that already knows it is on a
+// back (`onBack`) is drawn that way by default, so the editor, the hit areas
+// and the drop targets all agree; asking for the flip on top of that turns
+// it back.
+export function buildGeometry(layout: Layout, size: SizeSpec, flip = false): Geometry {
+  const flipBinding = flip !== !!layout.onBack;
   const fold = foldOf(layout, size);
   const landscape = isLandscape(layout);
   // Where the rings are is not the same question as which way the sheet is

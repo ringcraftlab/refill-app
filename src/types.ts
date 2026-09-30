@@ -244,6 +244,12 @@ export interface Layout {
   // leaves the same gap somewhere else. It is not read as the book's own form
   // (`bodyOf`), for the same reason a cover is not.
   single?: boolean;
+  // A one-page section that lands on the back of a sheet: the last page of a
+  // book of spreads is the left-hand page, so its holes are on its right.
+  // Not chosen by anyone -- worked out from where the section sits in the
+  // book every time the book changes (\`sidesOf\`), because moving it moves
+  // which side of the paper it is on.
+  onBack?: boolean;
   // How many identical sheets a section with no dates prints. A note section
   // is "ten sheets of squared paper" -- there is nothing in its content to say
   // how much of it you want, unlike a monthly, which is as long as its months.

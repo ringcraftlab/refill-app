@@ -37,7 +37,7 @@ export function Segmented<T extends string | number>({ options, value, onPick, t
               : 'flex-1 rounded-lg border px-1 py-[11px] text-[13px] font-semibold'
           } ${PRESS} ${
             o.v === value
-              ? 'picked border-ink bg-white text-ink shadow-[inset_0_0_0_0.5px_var(--color-ink)]'
+              ? 'picked border-ink bg-ink text-white'
               : 'border-line-strong bg-white text-label'
           }`}
         >

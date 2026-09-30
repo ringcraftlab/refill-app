@@ -497,7 +497,7 @@ export function runEnd(layout: Layout): { year: number; month: number } {
 }
 
 // Every printable face in binder order, sheet after sheet.
-function facesInOrder(layout: Layout, size: SizeSpec, duplex: boolean): Face[] {
+function facesInOrder(layout: Layout, size: SizeSpec, duplex: boolean, startBack = false): Face[] {
   const faces: Face[] = [];
 
   const [near, far] = bindingPair(size);
@@ -517,8 +517,12 @@ function facesInOrder(layout: Layout, size: SizeSpec, duplex: boolean): Face[] {
     } else {
       // Single pages run front, back, front, back down the stack, and a page
       // on a back binds on the other edge.
-      const onBack = duplex && faces.length % 2 === 1;
-      const page = buildPages(sheet, size, onBack)[0];
+      // `startBack` is a page that fills the face the book left free -- the
+      // back of the last spread -- so it starts on a back rather than asking
+      // for a fresh sheet. The flip is asked for relative to what the section
+      // already knows about itself (`onBack`), which buildGeometry applies.
+      const onBack = duplex && (faces.length + (startBack ? 1 : 0)) % 2 === 1;
+      const page = buildPages(sheet, size, onBack !== !!layout.onBack)[0];
       faces.push({ primitives: flattenToSheet(page), side: onBack ? far : near });
     }
   }
@@ -530,7 +534,7 @@ function facesInOrder(layout: Layout, size: SizeSpec, duplex: boolean): Face[] {
 // several sections can be chained into one run of paper.
 interface Placed { side: Side; sheet: SheetContent }
 
-function placedFaces(layout: Layout, size: SizeSpec, opts: PrintOptions): Placed[] {
+function placedFaces(layout: Layout, size: SizeSpec, opts: PrintOptions, startBack = false): Placed[] {
   const fold = foldOf(layout, size);
   const sheetSize = sheetSizeOf(layout, size);
   // On a fold the far edge is the turned-over strip, which is what decides
@@ -546,7 +550,7 @@ function placedFaces(layout: Layout, size: SizeSpec, opts: PrintOptions): Placed
         ]
       : f.primitives,
   });
-  return facesInOrder(layout, size, opts.duplex)
+  return facesInOrder(layout, size, opts.duplex, startBack)
     .map(f => ({ side: f.side, sheet: asSheet(f) }));
 }
 
@@ -586,7 +590,10 @@ function chainFaces(
   const put = (p: Placed, at: number | null) => { faces.push(p); owners.push(at); };
 
   sections.forEach((l, at) => {
-    for (const placed of placedFaces(l, size, opts)) {
+    // A one-page section fills whichever face is next -- that is what it is
+    // for -- so it never pushes the chain onto a fresh sheet.
+    const fills = !!l.single && opts.duplex && !foldOf(l, size) && faces.length % 2 === 1;
+    for (const placed of placedFaces(l, size, opts, fills)) {
       // Duplex decides which side of the paper a face lands on: one that
       // belongs on a back cannot be printed on a front, so the chain leaves
       // the front for whoever comes next -- and prints filler if nobody does.
