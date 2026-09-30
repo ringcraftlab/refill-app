@@ -33,11 +33,11 @@ export function Segmented<T extends string | number>({ options, value, onPick, t
           onClick={() => onPick(o.v)}
           className={`${
             tight
-              ? 'flex shrink-0 items-center gap-1 rounded-full border px-2.5 py-1 text-[13px]'
-              : 'flex-1 rounded-[9px] border px-1 py-[11px] text-[13px] font-semibold'
+              ? 'flex shrink-0 items-center gap-1 rounded-md border px-2.5 py-1 text-[13px]'
+              : 'flex-1 rounded-lg border px-1 py-[11px] text-[13px] font-semibold'
           } ${PRESS} ${
             o.v === value
-              ? 'border-ink bg-ink text-white'
+              ? 'picked border-ink bg-white text-ink shadow-[inset_0_0_0_0.5px_var(--color-ink)]'
               : 'border-line-strong bg-white text-label'
           }`}
         >

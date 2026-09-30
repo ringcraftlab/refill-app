@@ -30,15 +30,15 @@ export type ButtonVariant =
 const VARIANT: Record<ButtonVariant, string> = {
   // Ink with white on it: the one button on a screen that is filled. No hue,
   // so it cannot be mistaken for the size's colour on the rings.
-  cta: 'rounded-xl bg-accent-text p-3.5 text-[16px] font-bold text-white',
-  action: 'flex-1 rounded-[10px] border border-line-strong bg-white py-3 text-[13px] font-semibold text-label',
+  cta: 'rounded-lg bg-act p-3.5 text-[16px] font-bold text-white',
+  action: 'flex-1 rounded-lg border border-line-strong bg-white py-3 text-[13px] font-semibold text-label',
   // Wider and borderless, so the export button reads as the end of the row.
-  actionWide: 'flex-[1.3] rounded-[10px] bg-white py-3 text-[13px] font-semibold text-label',
-  quiet: 'rounded-[9px] border border-line-strong bg-bg px-3 py-[11px] text-[13px] text-muted',
-  danger: 'rounded-[10px] border border-line-strong bg-white p-3 text-[14px] font-semibold text-danger',
+  actionWide: 'flex-[1.3] rounded-lg bg-act py-3 text-[13px] font-semibold text-white',
+  quiet: 'rounded-lg border border-line-strong bg-bg px-3 py-[11px] text-[13px] text-muted',
+  danger: 'rounded-lg border border-line-strong bg-white p-3 text-[14px] font-semibold text-danger',
   icon: 'px-1 text-lg leading-none',
-  chip: 'flex shrink-0 items-center gap-1 rounded-full border border-line-strong bg-white px-2.5 py-1 text-[13px] font-normal text-label',
-  edge: 'size-9 rounded-full border border-line-strong bg-white text-[18px] leading-none text-muted shadow-[0_2px_6px_rgba(38,36,31,0.16)] hover:border-accent hover:text-accent disabled:opacity-35',
+  chip: 'flex shrink-0 items-center gap-1 rounded-md border border-line-strong bg-white px-2.5 py-1 text-[13px] font-normal text-label',
+  edge: 'size-9 rounded-md border border-line-strong bg-white text-[18px] leading-none text-muted hover:border-accent hover:text-accent disabled:opacity-35',
 };
 
 interface Props extends ButtonHTMLAttributes<HTMLButtonElement> {

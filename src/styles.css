@@ -14,26 +14,32 @@
    printed on); neither reads a CSS variable, because the print path never
    passes through CSS. */
 @theme {
-  --color-bg: #FBF9F5;
+  --color-bg: #F4F4F2;
   --color-paper: #FFFFFF;
   /* The greys lean the way the ground does. They were mixed cool while the
      background was cool, and a cool rule on warm paper reads as a different
      material rather than as a quieter line. Same lightness, warm hue: the
      contrast each one was chosen for is unchanged. */
-  --color-ink: #26241F;
-  --color-muted: #736D62;
-  --color-faint: #ABA69A;
-  --color-line: #EEEAE2;
-  --color-line-strong: #E0DACE;
+  --color-ink: #2B2B2B;
+  --color-muted: #6A6A67;
+  --color-faint: #A3A39F;
+  --color-line: #E6E6E3;
+  --color-line-strong: #D8D8D4;
   /* The colour that acts is ink. Nine sizes already spread their colours
      round the wheel, so any hue given to the accent lands on one of them --
      the orange this used to be was M5スクエア's own. Ink is on no size's
      part of the wheel, and a screen where the only colour is the size you
      are making is the quiet the Nordic reference was after. */
-  --color-accent: #26241F;
+  --color-accent: #2B2B2B;
   /* The same ink: it already reads at any size, so words and fills share it.
      Kept as its own name so the places that are read stay findable. */
-  --color-accent-text: #26241F;
+  --color-accent-text: #1D73BE;
+  /* Blue: what acts -- the one filled button on a screen, and words that
+     open something. Yellow: marks only -- the square before a heading, the
+     corner of what is chosen. Never a word's colour; on white it cannot be
+     read. */
+  --color-act: #1D73BE;
+  --color-hi: #FBD212;
   /* Marks that are on the screen and never on the paper: where a dragged
      part will land, the flash where it just did, the page numbers over the
      print preview. They sit on the paper's contents -- ink, grey rules, red
@@ -46,12 +52,13 @@
      a lighter mark later has somewhere to put its darker word. */
   --color-mark-text: #5A4FD6;
   /* A warm grey under what is chosen, a step darker than the ground. */
-  --color-accent-soft: #EFECE6;
+  --color-accent-soft: #EDEDEA;
   /* Reads as ink on a label, but lighter, so a row of controls does not shout. */
-  --color-label: #5C574E;
+  --color-label: #545454;
   --color-danger: #E0443B;
 
   --font-sans: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic", sans-serif;
+  --font-serif: "Hiragino Mincho ProN", "Yu Mincho", "Noto Serif JP", serif;
 
   /* Tailwind pairs each size with a line-height. This is a dense phone UI laid
      out against a drawing, where a label one line-box taller pushes the sheet
@@ -112,8 +119,8 @@
 }
 
 @keyframes knobPulse {
-  0%, 100% { box-shadow: 0 1px 3px rgba(38, 36, 31, 0.18), 0 0 0 0 rgba(38, 36, 31, 0.35); }
-  60% { box-shadow: 0 1px 3px rgba(38, 36, 31, 0.18), 0 0 0 8px rgba(38, 36, 31, 0); }
+  0%, 100% { box-shadow: 0 1px 3px rgba(0, 0, 0, 0.14), 0 0 0 0 rgba(43, 43, 43, 0.35); }
+  60% { box-shadow: 0 1px 3px rgba(0, 0, 0, 0.14), 0 0 0 8px rgba(43, 43, 43, 0); }
 }
 
 @layer base {
@@ -141,3 +148,9 @@
 
   button { cursor: pointer; }
 }
+
+/* A heading over a group: a small yellow square, then the words. */
+.sect::before { content: ""; flex: none; width: 7px; height: 7px; background: var(--color-hi); }
+/* What is chosen: an ink edge, and the yellow square in its corner. */
+.picked { position: relative; overflow: hidden; }
+.picked::after { content: ""; position: absolute; right: 0; top: 0; width: 11px; height: 11px; background: var(--color-hi); pointer-events: none; }

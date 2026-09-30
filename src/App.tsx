@@ -758,7 +758,7 @@ const nameSize = (name: string) =>
 // rather than a mark on it, and on the picker, where the chosen card sits
 // among others, the haze reached them too. Enough to see, not enough to be
 // the loudest thing on the screen.
-const CARD_SHADOW = '0 1px 3px rgba(38,36,31,0.07)';
+const CARD_SHADOW = 'none';
 // Chosen has to be visible from arm's length. A 1.5px border in the size's own
 // colour is nothing at all on the pale ones -- Bible's blue against white is a
 // hairline, and on the recording of a real phone you cannot tell which card is
@@ -766,9 +766,9 @@ const CARD_SHADOW = '0 1px 3px rgba(38,36,31,0.07)';
 // without moving anything by a pixel.
 const cardSkin = (on: boolean, line: string) =>
   ({
-    borderColor: on ? line : 'var(--color-line)',
+    borderColor: on ? 'var(--color-ink)' : 'var(--color-line)',
     background: '#fff',
-    boxShadow: on ? `0 0 0 3px ${line}33, ${CARD_SHADOW}` : CARD_SHADOW,
+    boxShadow: CARD_SHADOW,
     transition: 'box-shadow 140ms ease-out, border-color 140ms ease-out',
   }) as const;
 
@@ -893,7 +893,7 @@ function SizeCards({ selected, wide, onPick }: {
           <div className="mb-auto flex w-full flex-col gap-3 py-0.5">
             {SIZE_GROUPS.map(group => (
               <section key={group.title} className="flex flex-col gap-1.5">
-                <h2 className="m-0 text-[13px] font-bold tracking-[0.04em] text-muted">{group.title}</h2>
+                <h2 className="sect m-0 flex items-center gap-2 text-[13px] font-bold tracking-[0.04em] text-muted">{group.title}</h2>
                 {/* A grid, not nested flex rows: its columns are exactly half
                     each, where a flex item would refuse to shrink below its own
                     name and the longest one on a row would push the column edge
@@ -908,7 +908,7 @@ function SizeCards({ selected, wide, onPick }: {
                         <button
                           key={id}
                           onClick={() => onPick(id)}
-                          className="sizerow relative flex min-w-0 items-center gap-1 overflow-hidden rounded-[18px] border-[1.5px] py-2 pl-3 pr-1 text-left"
+                          className={`sizerow relative flex min-w-0 items-center gap-1 overflow-hidden rounded-lg border-[1.5px] py-2 pl-3 pr-1 text-left ${selected === id ? 'picked' : ''}`}
                           style={cardSkin(selected === id, SIZE_COLOR[id])}
                           aria-pressed={selected === id}
                         >
@@ -980,10 +980,19 @@ function SizeScreen({ selected, onPick }: { selected: RefillSize; onPick: (s: Re
   };
   return (
     <div className={PICK_SCREEN}>
-      <div className="text-[14px] font-bold tracking-[0.04em] text-muted">RingCraftLab</div>
+      <div className="relative text-[14px] font-bold tracking-[0.04em] text-muted">
+        RingCraftLab
+        {/* The one decoration in the app: two squares, one filled yellow and
+            one drawn in blue, overlapping. Only here, before anything is made. */}
+        <span aria-hidden="true" className="absolute right-0 top-0 block size-[52px]">
+          <i className="absolute left-0 top-3 size-7 bg-hi" />
+          <i className="absolute left-4 top-0 size-8 border-[1.4px] border-act" />
+        </span>
+      </div>
       <div>
-        <h1 className="text-[20px] font-bold">手帳のサイズを選ぶ</h1>
+        <h1 className="font-serif text-[22px] font-semibold">手帳のサイズを選ぶ</h1>
         <p className="m-0 mt-1 text-[13px] text-muted">お使いの手帳のサイズを選んでください</p>
+        <i aria-hidden="true" className="mt-2.5 block h-[3px] w-7 bg-hi" />
       </div>
       {/* The list starts under the heading rather than floating in the middle
           of the screen, and `mb-auto` keeps it there whether or not it
@@ -1111,7 +1120,7 @@ function FormCards({ size, spread, fold, foldGrain, wide, onPick, onScale }: {
   const card = (choice: Choice) => (
     <button
       key={choice.key}
-      className="card flex flex-col items-center gap-2 rounded-[18px] border-[1.5px] px-2 py-3 text-center"
+      className={`card flex flex-col items-center gap-2 rounded-lg border-[1.5px] px-2 py-3 text-center ${choice.on ? 'picked' : ''}`}
       style={cardSkin(choice.on, color)}
       aria-pressed={choice.on}
       onClick={() => onPick(choice.pick)}
@@ -1225,12 +1234,12 @@ function SidesScreen({ size, spread, fold, foldGrain, onPick, onBack, onConfirm 
           give: on Micro5 it went from 97px to 18px and the name and the sheet
           were clipped away, leaving a bar with 「62×105mm」 in it. */}
       <div className="flex min-h-0 flex-1 flex-col gap-[18px] overflow-y-auto">
-      <span className="m-0 text-[13px] font-bold tracking-[0.04em] text-muted">作るリフィル</span>
+      <span className="sect m-0 flex items-center gap-2 text-[13px] font-bold tracking-[0.04em] text-muted">作るリフィル</span>
       <button
         // Full width on a phone, where everything is; on a wide window it
         // hugs what it holds, because a strip the width of the screen with a
         // name at one end and a sheet at the other is mostly empty room.
-        className="sizenow relative -mt-2 flex w-full min-w-0 shrink-0 items-center gap-3 overflow-hidden rounded-[14px] border border-line py-2 pl-3 pr-2 text-left hover:border-line-strong lg:w-auto lg:self-start lg:pr-4"
+        className="sizenow relative -mt-2 flex w-full min-w-0 shrink-0 items-center gap-3 overflow-hidden rounded-lg border border-line py-2 pl-3 pr-2 text-left hover:border-line-strong lg:w-auto lg:self-start lg:pr-4"
         style={{ background: 'rgba(38,36,31,0.04)' }}
         onClick={onBack}
       >
@@ -3509,11 +3518,11 @@ function CanvasScreen({
               // border takes 3 more. A tray whose stamps are different heights
               // reads as two rows of something, so the longest name decides
               // the width -- it went 60 → 68 → 84 as the type went 9 → 11 → 13.
-              className={`stamp relative flex w-[84px] shrink-0 cursor-grab touch-pan-x flex-col items-center gap-[3px] rounded-xl border-[1.5px] py-[8px] text-[13px] font-semibold transition-[transform,box-shadow,background-color,border-color] duration-[120ms] ease-out active:cursor-grabbing active:scale-95 motion-reduce:transition-none lg:w-full lg:gap-1 lg:py-3 lg:text-[13px] ${
+              className={`stamp relative flex w-[84px] shrink-0 cursor-grab touch-pan-x flex-col items-center gap-[3px] rounded-lg border-[1.5px] py-[8px] text-[13px] font-semibold transition-[transform,box-shadow,background-color,border-color] duration-[120ms] ease-out active:cursor-grabbing active:scale-95 motion-reduce:transition-none lg:w-full lg:gap-1 lg:py-3 lg:text-[13px] ${
                 idx >= 0
                   // Picked up: it stands off the tray until it is put down.
-                  ? '-translate-y-0.5 border-accent bg-accent-soft shadow-[0_3px_8px_rgba(38,36,31,0.16)]'
-                  : 'border-line bg-white hover:border-line-strong hover:shadow-[0_2px_8px_rgba(38,36,31,0.12)]'
+                  ? '-translate-y-0.5 border-ink bg-white shadow-[inset_0_-3px_0_var(--color-hi)]'
+                  : 'border-line bg-white hover:border-line-strong'
               }`}
               onPointerDown={e => startDrag(e, idx >= 0 && traySelected.length > 1 ? [...traySelected] : [t.kind], null)}
               onPointerMove={moveDrag}
@@ -3562,7 +3571,7 @@ function CanvasScreen({
           and ink. Down here, together and named, rather than as chips over
           the paper -- above the paper there is only where you are. */}
       <div className="papersettings shrink-0 bg-paper px-3 pt-1">
-        <div className="flex items-center gap-2 px-0.5 pb-1 text-[13px] text-muted">
+        <div className="sect flex items-center gap-2 px-0.5 pb-1 text-[13px] text-muted">
           この紙の設定<i className="h-px flex-1 bg-line" />
         </div>
         <div className={`grid gap-1.5 ${dated ? 'grid-cols-3' : 'grid-cols-2'}`}>
@@ -4100,7 +4109,7 @@ function BindingRail({ sections, at, size, print, job, onGo, onAddCover, onFillB
   const backBlank = all.length > 0 && all[all.length - 1].at === null;
   const empty = (
     <span
-      className="grid place-items-center rounded-[2px] border border-dashed border-faint text-[15px] leading-none text-muted"
+      className="grid place-items-center rounded-[2px] border-[1.4px] border-dashed border-act text-[15px] font-bold leading-none text-act"
       style={{ width: size.widthMm * k, height: size.heightMm * k }}
     >＋</span>
   );
@@ -4108,13 +4117,13 @@ function BindingRail({ sections, at, size, print, job, onGo, onAddCover, onFillB
     onClick: () => void, extra: string, label?: string) => (
     <button
       key={key}
-      className={`railtile relative flex min-w-[76px] shrink-0 grow flex-col items-center gap-1 rounded-[10px] px-1.5 pb-1.5 pt-2 ${
+      className={`railtile relative flex min-w-[76px] shrink-0 grow flex-col items-center gap-1 rounded-md px-1.5 pb-1.5 pt-2 ${
         on ? 'on bg-white shadow-[0_0_0_1px_var(--color-line-strong)]' : ''} ${extra}`}
       onClick={onClick}
       aria-label={label}
       aria-current={on ? 'page' : undefined}
     >
-      {on && <i className="absolute -top-px left-0 right-0 h-[3px] rounded-t-[10px] bg-ink" />}
+      {on && <i className="absolute -top-px left-0 right-0 h-1 rounded-t-md bg-hi" />}
       <span className="flex h-[46px] items-center justify-center gap-[2px]">{picture}</span>
       <span className="whitespace-nowrap text-[13px] font-semibold leading-none text-ink">{name}</span>
       <span className="text-[13px] leading-none text-muted tabular-nums">{pn}</span>
@@ -4122,7 +4131,7 @@ function BindingRail({ sections, at, size, print, job, onGo, onAddCover, onFillB
   );
   return (
     <div className="rail shrink-0 px-3 pt-1">
-      <div className="flex items-center gap-2 px-1 pb-1 text-[13px] text-muted">
+      <div className="sect flex items-center gap-2 px-1 pb-1 text-[13px] text-muted">
         <span>綴じた順</span>
         <i className="h-px flex-1 bg-line-strong" />
         <Button variant="chip" className="torail-list" onClick={onList} aria-label="並びを整える">
@@ -4190,7 +4199,7 @@ function PaperSetting({ className = '', label, value, sample, onClick }: {
   // own, so the value keeps the whole width under it.
   return (
     <button
-      className={`papersetting flex min-h-[50px] min-w-0 items-center gap-1 rounded-[10px] border border-line-strong bg-white py-1.5 pl-2.5 pr-1.5 text-left ${className}`}
+      className={`papersetting flex min-h-[50px] min-w-0 items-center gap-1 rounded-lg border border-line-strong bg-white py-1.5 pl-2.5 pr-1.5 text-left ${className}`}
       onClick={onClick}
     >
       <span className="flex min-w-0 flex-1 flex-col gap-1">
