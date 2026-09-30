@@ -1,5 +1,5 @@
-import { Fragment, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import type { ReactNode } from 'react';
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import type { PointerEvent as ReactPointerEvent, ReactNode } from 'react';
 import type {
   Background, BackgroundKind, Book, DateWords, FoldCount, FoldGrain, InkTone, Layout, PartKind,
   RefillSize, RuleWeight, SizeSpec,
@@ -36,7 +36,7 @@ import { Button } from './ui/Button';
 import { Field, Segmented, Stepper } from './ui/Field';
 import { Dialog, Modal, Sheet, Toast } from './ui/Overlay';
 
-type Stage = 'size' | 'sides' | 'contents' | 'canvas';
+type Stage = 'size' | 'sides' | 'contents' | 'canvas' | 'book';
 // A rectangle on screen, in the page area's own pixels.
 type Box = { key: string; left: number; top: number; width: number; height: number };
 type SheetTarget =
@@ -512,6 +512,21 @@ export function App() {
       />
     );
   }
+  // Turning through the book as a book. A screen rather than an overlay,
+  // because it is a place you go and come back from: pressing a page there
+  // opens the editor on it, and closing that editor comes back here, to the
+  // same page, still open at the same spread.
+  if (stage === 'book') {
+    return (
+      <BookView
+        book={book}
+        at={Math.min(at, book.sections.length - 1)}
+        nth={nth}
+        onClose={back}
+        onEdit={(i, sheet) => { goTo(i, sheet); go('canvas'); }}
+      />
+    );
+  }
   return (
     <CanvasScreen
       book={book}
@@ -519,9 +534,11 @@ export function App() {
       nth={nth}
       setBook={setBook}
       onList={() => go('contents')}
+      onFlip={() => go('book')}
       // The way home, and where home is. The editor is the workshop, so it has
       // no way out of its own -- only the one back to whatever opened it.
       backTo={openedFrom.canvas === 'contents' || openedFrom.canvas === 'sides'
+        || openedFrom.canvas === 'book'
         ? openedFrom.canvas
         : null}
       onBack={back}
@@ -1699,18 +1716,441 @@ function sectionSpan(l: Layout): string {
   return `${l.year}年${l.month}月 → ${end.year}年${end.month}月・${runText(l)}`;
 }
 
+// ── 📖 めくって見る ──────────────────────────────────────────────────────
+// The book as a book. Someone who has just finished a month does not want to
+// know how many faces fit on A4: they want to know what it will look like in
+// the binder, which is a thing you find out by turning the pages. So nothing
+// about paper, imposition, sides or cut lines gets in here -- that is the
+// export sheet's business, and this screen never mentions it.
+//
+// It opens on the page the editor was on, because checking the page being
+// worked on is what this is used for most, and pressing a page opens it in the
+// editor. That makes this a way of getting to work as much as a way of
+// looking: turn to the week that is wrong, press it, fix it, come back.
+
+// How long one leaf takes to go over: felt, not watched. A riffle is quicker
+// because several are going over at once.
+const TURN_MS = 170;
+const RIFFLE_MS = 90;
+// Past this a swipe is a riffle rather than a turn, in pixels per millisecond.
+// A deliberate turn is a third of the screen in a third of a second, which is
+// 0.4; a flick is the same distance in a tenth, which is 4. The line between
+// them is nearer the flick, because turning one page when three were asked for
+// is a smaller mistake than the other way round.
+const RIFFLE_SPEED = 1.6;
+// How far a swipe has to go before it is a turn at all, and how far down
+// before it is the way out.
+const SWIPE_PX = 30;
+const SHUT_PX = 60;
+// The binder's rings: hardware, so neither the paper's colour nor the app's.
+const RING_INK = '#D2CCC1';
+const RING_EDGE = '#8E887C';
+// How many sheet edges a stack shows before one more stops reading.
+const STACK_MAX = 8;
+
+function BookView({ book, at, nth, onClose, onEdit }: {
+  book: Book;
+  // Where the editor was, so this opens on that page.
+  at: number; nth: number;
+  onClose: () => void;
+  onEdit: (at: number, nth: number) => void;
+}) {
+  const size = SIZES[book.sections[0].size];
+  // A cover is one page whatever the book is folded into, so it is not what
+  // the shape of the book is read from.
+  const body = book.sections.find(l => !l.cover) ?? book.sections[0];
+  // Which way the book opens. The rings hold one edge and the leaf swings
+  // round it, so a refill bound along the top has its pages above and below
+  // each other rather than side by side -- and turning it is a motion up, not
+  // across.
+  const across = !ringsOnTop(body);
+  const leaves = useMemo(() => pagesOf(book.sections), [book.sections]);
+  const rows = Math.max(1, Math.ceil((leaves.length + 1) / 2));
+  const hasCover = book.sections.some(l => l.cover);
+  // Page 1 is alone on the right; every row after it is a facing pair.
+  const halves = (r: number): [Leaf | null, Leaf | null] => (
+    r <= 0
+      ? [null, leaves[0] ?? null]
+      : [leaves[r * 2 - 1] ?? null, leaves[r * 2] ?? null]
+  );
+  const openedAt = leaves.findIndex(l => l.at === at && l.nth === nth);
+  const [row, setRow] = useState(() => (openedAt <= 0 ? 0 : Math.floor((openedAt + 1) / 2)));
+  // The leaf in the air: which pair it left from, which way it is going, and
+  // how long it has. While it is up, the half it is uncovering already shows
+  // the pair being turned to -- that is what the leaf is uncovering.
+  const [flip, setFlip] = useState<{ lo: number; fwd: boolean; ms: number } | null>(null);
+  const rowRef = useRef(row);
+  const busy = useRef(false);
+  const queued = useRef(0);
+  const timer = useRef(0);
+  useLayoutEffect(() => { rowRef.current = row; }, [row]);
+  useEffect(() => () => window.clearTimeout(timer.current), []);
+  const calm = useMemo(
+    () => typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches,
+    [],
+  );
+
+  // One leaf at a time, however many were asked for. A riffle is the same turn
+  // done quickly rather than a jump with a fade: what makes a book feel like a
+  // book is that the pages in between went past.
+  const walk = (n: number) => {
+    if (!n) return;
+    if (busy.current) { queued.current += n; return; }
+    const fwd = n > 0;
+    const from = rowRef.current;
+    const to = from + (fwd ? 1 : -1);
+    if (to < 0 || to >= rows) { queued.current = 0; return; }
+    const rest = n - (fwd ? 1 : -1);
+    const land = () => { setRow(to); rowRef.current = to; };
+    if (calm) { land(); walk(rest); return; }
+    const ms = Math.abs(n) > 1 ? RIFFLE_MS : TURN_MS;
+    busy.current = true;
+    setFlip({ lo: fwd ? from : to, fwd, ms });
+    timer.current = window.setTimeout(() => {
+      land();
+      setFlip(null);
+      busy.current = false;
+      const more = rest + queued.current;
+      queued.current = 0;
+      walk(more);
+    }, ms);
+  };
+  // Going somewhere rather than turning: thirty leaves at ninety milliseconds
+  // is three seconds of watching paper.
+  const jump = (r: number) => {
+    window.clearTimeout(timer.current);
+    busy.current = false;
+    queued.current = 0;
+    setFlip(null);
+    setRow(r);
+    rowRef.current = r;
+  };
+
+  // The sheet each page actually is -- October's page shows October -- and the
+  // drawing of it. Both cached by page, because turning back to a spread must
+  // not rebuild a month's worth of dates.
+  const sheets = useMemo(() => new Map<string, Layout>(), [book.sections]);
+  const drawn = useMemo(() => new Map<string, Page[]>(), [book.sections, size]);
+  const shapes = useMemo(() => new Map<string, Geometry>(), [book.sections, size]);
+  const keyOf = (leaf: Leaf) => `${leaf.at}:${leaf.nth}`;
+  const sheetOf = (leaf: Leaf): Layout | null => {
+    if (leaf.at === null) return null;
+    const key = keyOf(leaf);
+    let made = sheets.get(key);
+    if (!made) { made = sheetAt(book.sections[leaf.at], leaf.nth); sheets.set(key, made); }
+    return made;
+  };
+  const pageOf = (leaf: Leaf | null): Page | null => {
+    const sheet = leaf && sheetOf(leaf);
+    if (!leaf || !sheet) return null;
+    const key = keyOf(leaf);
+    let all = drawn.get(key);
+    if (!all) { all = buildPages(sheet, size); drawn.set(key, all); }
+    return all[Math.min(leaf.side, all.length - 1)] ?? null;
+  };
+  const shapeOf = (leaf: Leaf | null): PageGeometry | null => {
+    const sheet = leaf && sheetOf(leaf);
+    if (!leaf || !sheet) return null;
+    const key = keyOf(leaf);
+    let geo = shapes.get(key);
+    if (!geo) { geo = buildGeometry(sheet, size); shapes.set(key, geo); }
+    return geo.pages[Math.min(leaf.side, geo.pages.length - 1)] ?? null;
+  };
+  // A page with nothing on it is still a page of the book -- the back of the
+  // last sheet, or the one a spread needs in front of it -- so it is drawn as
+  // paper, punched, rather than as a gap.
+  const blank = useMemo(() => {
+    const one: Layout = {
+      ...createLayout(), size: body.size, orientation: body.orientation,
+      spread: false, fold: 1,
+    };
+    return buildPages(one, size)[0] ?? null;
+  }, [body.size, body.orientation, size]);
+
+  // One scale for the whole book, taken from its largest page: nothing may
+  // change size as it is turned.
+  const span = useMemo(() => {
+    let w = 1, h = 1;
+    book.sections.forEach(sec => buildGeometry(sec, size).pages.forEach(p => {
+      w = Math.max(w, p.widthMm); h = Math.max(h, p.heightMm);
+    }));
+    return { w, h };
+  }, [book.sections, size]);
+
+  const boxRef = useRef<HTMLDivElement>(null);
+  const [glass, setGlass] = useState({ w: 320, h: 480 });
+  useLayoutEffect(() => {
+    const el = boxRef.current;
+    if (!el) return;
+    const measure = () => setGlass({ w: el.clientWidth, h: el.clientHeight });
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  // Room for the rings to stand out into on the bound side, and air all round.
+  const out = ringOut(size);
+  const pad = 14;
+  const scale = Math.max(0.2, Math.min(
+    (glass.w - pad * 2 - (across ? GAP : 0)) / ((across ? span.w * 2 : span.w) + (across ? 0 : out)),
+    (glass.h - pad * 2 - (across ? 0 : GAP)) / ((across ? span.h : span.h * 2) + (across ? 0 : out)),
+  ));
+  const boxW = span.w * scale;
+  const boxH = span.h * scale;
+  const overW = across ? boxW * 2 + GAP : boxW;
+  const overH = across ? boxH : boxH * 2 + GAP;
+  // Where the second half sits: past the seam, along the bound edge.
+  const offX = across ? boxW + GAP : 0;
+  const offY = across ? 0 : boxH + GAP;
+
+  // What is on screen. Mid-turn the pair is split across two rows: the half
+  // the leaf came off still shows the pair it left, and the half it is
+  // uncovering already shows the pair it is going to.
+  const lo = flip ? halves(flip.lo)[0] : halves(row)[0];
+  const hi = flip ? halves(flip.lo + 1)[1] : halves(row)[1];
+  const front = flip ? halves(flip.lo)[1] : null;
+  const backOf = flip ? halves(flip.lo + 1)[0] : null;
+  // Which pair the numbers and the thickness belong to: the one being turned
+  // to, from the moment the leaf leaves the paper.
+  const shown = flip ? (flip.fwd ? flip.lo + 1 : flip.lo) : row;
+  const [shownLo, shownHi] = halves(shown);
+  const noOf = (r: number, half: 0 | 1) => (r === 0 ? (half === 1 ? 1 : 0) : r * 2 + half);
+  const numbers = [shownLo ? noOf(shown, 0) : 0, shownHi ? noOf(shown, 1) : 0].filter(n => n > 0);
+  // How thick the book is either side of where it is open. Two pages to a
+  // sheet, and a stack stops saying anything new after eight edges.
+  const edges = (pages: number) => Math.min(STACK_MAX, Math.round(pages / 2));
+  const stackLo = edges(shown === 0 ? 0 : shown * 2 - 1);
+  const stackHi = edges(Math.max(0, leaves.length - (shown === 0 ? 1 : shown * 2 + 1)));
+
+  // Where a page sits inside its half: against the rings, centred the other
+  // way. A section turned on its side is a different shape from the one beside
+  // it, and both are held by the same rings.
+  const placeOf = (page: Page | null, seam: 'lo' | 'hi') => {
+    const pw = (page?.widthMm ?? span.w) * scale;
+    const ph = (page?.heightMm ?? span.h) * scale;
+    return {
+      pw, ph,
+      x: across ? (seam === 'hi' ? 0 : boxW - pw) : (boxW - pw) / 2,
+      y: across ? (boxH - ph) / 2 : (seam === 'hi' ? 0 : boxH - ph),
+    };
+  };
+
+  const down = useRef<{ x: number; y: number; t: number } | null>(null);
+  const dragged = useRef(false);
+
+  // One face of the book: the paper, the edges of the sheets under it, and a
+  // press that opens it in the editor. Not a component -- it is inlined into
+  // this screen's own tree, so turning the page does not throw the drawing
+  // away and build it again.
+  const face = (leaf: Leaf, seam: 'lo' | 'hi', stack: number, live: boolean) => {
+    const page = pageOf(leaf) ?? blank;
+    const { pw, ph, x, y } = placeOf(page, seam);
+    const away = seam === 'hi' ? 1 : -1;
+    const sheet = { left: x, top: y, width: pw, height: ph };
+    return (
+      <>
+        {Array.from({ length: stack }, (_, i) => (
+          <span
+            key={i}
+            aria-hidden="true"
+            className="absolute rounded-[2px] bg-[#F1EDE4] shadow-[0_0_0_0.5px_rgba(0,0,0,0.12)]"
+            style={{
+              ...sheet,
+              left: x + (across ? away * (i + 1) * 1.7 : (i + 1) * 0.7),
+              top: y + (across ? (i + 1) * 0.7 : away * (i + 1) * 1.7),
+            }}
+          />
+        ))}
+        {leaf.at !== null && page ? (
+          <button
+            className="bookpage absolute overflow-hidden rounded-[2px] bg-white p-0 shadow-[0_14px_30px_rgba(0,0,0,0.45)]"
+            style={sheet}
+            disabled={!live}
+            onClick={() => { if (!dragged.current && leaf.at !== null) onEdit(leaf.at, leaf.nth); }}
+            aria-label={`${noOf(shown, seam === 'hi' ? 1 : 0)}ページを直す`}
+          >
+            <PageSvg page={page} scale={scale} showGuides />
+          </button>
+        ) : (
+          <span
+            className="absolute rounded-[2px] bg-white shadow-[0_14px_30px_rgba(0,0,0,0.45)]"
+            style={sheet}
+          >
+            {page && <PageSvg page={page} scale={scale} showGuides />}
+          </span>
+        )}
+      </>
+    );
+  };
+
+  // The rings, drawn where they grip: one bar per punch, through both pages of
+  // the spread and a little past each. This is what says the two pages are
+  // held by the same binder -- and on page 1, alone on the right, what says
+  // there is nothing on the other side of them yet.
+  const ringAt = shapeOf(hi) ?? shapeOf(lo);
+  const ringSeam = (across ? boxW : boxH) + GAP / 2;
+  const reach = size.ringMarginMm * 0.92 * scale + GAP / 2;
+  const ringPlace = placeOf(pageOf(hi ?? lo) ?? blank, hi ? 'hi' : 'lo');
+
+  const onDown = (e: ReactPointerEvent) => {
+    down.current = { x: e.clientX, y: e.clientY, t: Date.now() };
+    dragged.current = false;
+  };
+  const onMove = (e: ReactPointerEvent) => {
+    const d = down.current;
+    if (!d) return;
+    if (Math.abs(e.clientX - d.x) > 10 || Math.abs(e.clientY - d.y) > 10) dragged.current = true;
+  };
+  // A swipe along the bound edge turns the page; a pull downwards closes the
+  // book. Both exist as buttons as well -- a gesture is never the only way to
+  // do something here, because a gesture cannot be seen.
+  const onUp = (e: ReactPointerEvent) => {
+    const d = down.current;
+    down.current = null;
+    if (!d) return;
+    const dx = e.clientX - d.x;
+    const dy = e.clientY - d.y;
+    const along = across ? dx : dy;
+    if (Math.abs(along) < SWIPE_PX) {
+      if (across && dy > SHUT_PX && Math.abs(dx) < 40) { dragged.current = true; onClose(); }
+      return;
+    }
+    const speed = Math.abs(along) / Math.max(1, Date.now() - d.t);
+    const many = speed > RIFFLE_SPEED ? 3 : 1;
+    walk(along < 0 ? many : -many);
+  };
+
+  return (
+    <div className="bookview screen-in fixed inset-0 z-50 flex flex-col bg-[#2E2A25]">
+      <header className="flex shrink-0 items-center gap-2 px-3.5 pb-1 pt-3 text-[13px] text-white">
+        {/* Which page this is. A number is information, so it may be written;
+            it is in the corner because it is not what anyone came to read. */}
+        <span className="bookno font-semibold">
+          {numbers.join('–') || '1'}
+          <span className="ml-1.5 font-normal text-white/70">/ 全{leaves.length}ページ</span>
+        </span>
+        <button
+          className="bookclose ml-auto size-[34px] rounded-full bg-white/20 p-0 text-[18px] leading-[34px] text-white"
+          onClick={onClose}
+          aria-label="閉じる"
+        >×</button>
+      </header>
+
+      <div
+        ref={boxRef}
+        className="relative flex min-h-0 grow touch-none items-center justify-center overflow-hidden"
+        style={{ perspective: 1600 }}
+        onPointerDown={onDown}
+        onPointerMove={onMove}
+        onPointerUp={onUp}
+        onPointerCancel={() => { down.current = null; }}
+      >
+        <div className="relative" style={{ width: overW, height: overH, transformStyle: 'preserve-3d' }}>
+          <span className="absolute" style={{ left: 0, top: 0, width: boxW, height: boxH }}>
+            {lo && face(lo, 'lo', stackLo, !flip)}
+          </span>
+          <span className="absolute" style={{ left: offX, top: offY, width: boxW, height: boxH }}>
+            {hi && face(hi, 'hi', stackHi, !flip)}
+          </span>
+
+          {/* The leaf in the air. Its front is the page it was showing and its
+              back is the page it is about to show -- which is what a sheet of
+              paper is, and why this reads as turning rather than as sliding. */}
+          {flip && front && (
+            <span
+              className={`bookleaf absolute z-10 ${
+                across ? (flip.fwd ? 'leaf-fwd-y' : 'leaf-back-y')
+                  : (flip.fwd ? 'leaf-fwd-x' : 'leaf-back-x')
+              }`}
+              style={{
+                left: offX, top: offY, width: boxW, height: boxH,
+                transformStyle: 'preserve-3d',
+                transformOrigin: across ? 'left center' : 'center top',
+                animationDuration: `${flip.ms}ms`,
+              }}
+            >
+              <span className="absolute inset-0" style={{ backfaceVisibility: 'hidden' }}>
+                {face(front, 'hi', 0, false)}
+              </span>
+              {/* Mirrored about its own middle, so that once the leaf is over
+                  what is drawn on the back of it reads the right way round. */}
+              <span
+                className="absolute inset-0"
+                style={{
+                  backfaceVisibility: 'hidden',
+                  transform: across ? 'rotateY(180deg)' : 'rotateX(180deg)',
+                }}
+              >
+                {backOf && face(backOf, 'lo', 0, false)}
+              </span>
+            </span>
+          )}
+
+          {ringAt && ringAt.holes.map((h, i) => {
+            const thick = Math.max(h.r * 2 * 1.25 * scale, 3.2);
+            const mid = across ? ringPlace.y + h.cy * scale : ringPlace.x + h.cx * scale;
+            return (
+              <span
+                key={i}
+                aria-hidden="true"
+                className="absolute z-20 rounded-full"
+                style={across ? {
+                  left: ringSeam - reach, top: mid - thick / 2,
+                  width: reach * 2, height: thick,
+                  background: `linear-gradient(to bottom, ${RING_INK}, ${RING_EDGE})`,
+                } : {
+                  top: ringSeam - reach, left: mid - thick / 2,
+                  height: reach * 2, width: thick,
+                  background: `linear-gradient(to right, ${RING_INK}, ${RING_EDGE})`,
+                }}
+              />
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Turning, and the one place worth going to in a book of thirty pages.
+          The same row in the same order as the editor's, because turning the
+          page is turning the page wherever you are doing it. */}
+      <div className="bookpager flex shrink-0 items-center justify-center gap-3 px-3.5 pb-5 pt-1">
+        <Button
+          variant="edge"
+          className="bookprev size-10 text-[18px]"
+          disabled={row <= 0}
+          onClick={() => walk(-1)}
+          aria-label="前のページ"
+        >‹</Button>
+        <Button variant="chip" className="bookstart" onClick={() => jump(0)}>
+          <span className="text-[14px] leading-none">«</span>
+          {hasCover ? '表紙へ' : '最初へ'}
+        </Button>
+        <Button
+          variant="edge"
+          className="booknext size-10 text-[18px]"
+          disabled={row >= rows - 1}
+          onClick={() => walk(1)}
+          aria-label="次のページ"
+        >›</Button>
+      </div>
+    </div>
+  );
+}
+
 function CanvasScreen({
-  book, at, nth, setBook, onList, backTo, onBack, goTo, print, setPrint, openOn,
+  book, at, nth, setBook, onList, onFlip, backTo, onBack, goTo, print, setPrint, openOn,
 }: {
   book: Book; at: number; setBook: (fn: (b: Book) => Book) => void;
   // Which sheet of that section the book is turned to.
   nth: number;
   // Opening the list of pages, which is a door forward, not a way back.
   onList: () => void;
+  // Turning through the book as a book: the other of the two ways of looking
+  // at what has been made, and the one that has nothing to do with paper.
+  onFlip: () => void;
   // Where this screen was opened from, or nothing when it is where the app
   // started. The way back wears that place's own picture, so nothing has to
   // be written to say where it goes.
-  backTo: 'sides' | 'contents' | null;
+  backTo: 'sides' | 'contents' | 'book' | null;
   onBack: () => void;
   // Editing a different section of the same book, at one of its sheets:
   // turning the page and adding one both land here.
@@ -2441,14 +2881,17 @@ function CanvasScreen({
         {backTo && (
           <Button
             variant="chip"
-            className={backTo === 'contents' ? 'goback tolist' : 'goback toform'}
+            className={`goback ${backTo === 'contents' ? 'tolist' : backTo === 'book' ? 'tobook' : 'toform'}`}
             onClick={onBack}
-            aria-label={backTo === 'contents' ? '並びへもどる' : '構成へもどる'}
+            aria-label={backTo === 'contents' ? '並びへもどる'
+              : backTo === 'book' ? 'めくって見るへもどる' : '構成へもどる'}
           >
             <span className="text-[14px] leading-none">←</span>
             {backTo === 'contents'
               ? <ListGlyph />
-              : <SizeIcon size={size} color={SIZE_COLOR[layout.size]} scale={0.1} />}
+              : backTo === 'book'
+                ? <BookGlyph />
+                : <SizeIcon size={size} color={SIZE_COLOR[layout.size]} scale={0.1} />}
           </Button>
         )}
         {/* The paper itself, pressable. It used to be a line of text saying
@@ -2773,7 +3216,10 @@ function CanvasScreen({
           The number is a button. Twenty-six pages is more than anyone turns
           through one at a time, and the number is where the eye already is
           when someone wants to be somewhere else. */}
-      <div className="pager flex shrink-0 items-center justify-center gap-2.5 pt-1">
+      <div className="pager flex shrink-0 items-center justify-center gap-2.5 px-3.5 pt-1">
+        {/* The two sides take the same room, so that turning the page stays in
+            the middle of the row however wide the word on the right is. */}
+        <span className="flex-1" aria-hidden="true" />
         {/* The arrows only exist when there is somewhere to turn to. The
             number is always here, because it is also the door to the pages
             laid out in rows -- a book of one page still has to have one. */}
@@ -2801,6 +3247,18 @@ function CanvasScreen({
             aria-label="次のページ"
           >›</Button>
         )}
+        {/* The other way of looking at what has been made. It belongs in this
+            row rather than up in the header: the number beside it opens the
+            pages laid out to be rearranged, this opens the book to be turned,
+            and those are the two of them. An open book rather than a word --
+            the screen it opens is that same picture filling the glass, which
+            is also what the way back out of it wears. */}
+        <span className="flex flex-1 justify-end">
+          <Button variant="chip" className="toflip" onClick={onFlip} aria-label="めくって見る">
+            <BookGlyph />
+            <span className="hidden min-[360px]:inline">めくる</span>
+          </Button>
+        </span>
       </div>
 
       {/* What the rest of the book is, from inside one section of it. */}
@@ -3362,6 +3820,22 @@ function ListGlyph() {
         {[0.5, 7.5].map(x => [0.5, 5, 9.5].map(y => (
           <rect key={`${x}-${y}`} x={x} y={y} width={5} height={3} rx={0.5} />
         )))}
+      </g>
+    </svg>
+  );
+}
+
+// An open book, drawn rather than named -- two leaves lifting away from the
+// rings in the middle. Same trick as the list: the button and the screen it
+// opens are the same picture, so nothing has to be written to say where it
+// goes, and the way back out wears it too.
+function BookGlyph() {
+  return (
+    <svg width="16" height="13" viewBox="0 0 16 13" aria-hidden="true" className="block">
+      <g fill="none" stroke="currentColor" strokeWidth={1} strokeLinejoin="round" strokeLinecap="round">
+        <path d="M8 3.1C6.4 1.9 4 1.5 1 1.8v8.6c3-.3 5.4.1 7 1.3" />
+        <path d="M8 3.1c1.6-1.2 4-1.6 7-1.3v8.6c-3-.3-5.4.1-7 1.3" />
+        <path d="M8 3.1v8.6" />
       </g>
     </svg>
   );

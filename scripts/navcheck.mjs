@@ -27,6 +27,7 @@ const check = (ok, what) => { console.log(ok ? 'ok  ' : 'NG  ', what); if (!ok) 
 // Which screen is on. Order matters: the contents draws thumbnails, not pages;
 // the editor is the only one with a tray.
 const where = async () => {
+  if (await page.locator('.bookview').count()) return '手帳';
   if (await page.locator('.contents-list').count()) return '一覧';
   if (await page.locator('.stamp').count()) return '編集';
   if (await page.locator('.card').count()) return '構成';
@@ -117,6 +118,35 @@ await page.waitForTimeout(400);
 await page.locator('button[aria-label="閉じる"]').first().click().catch(() => {});
 await settle();
 check(await where() === '編集', '拡大を閉じると編集へ帰る');
+
+// ---- 7. めくって見る：閉じても、ページを押しても帰れるか ------------------
+// 見る道は2つあり、どちらも編集から入って編集へ帰る。📖はそのうえで
+// 「ページを押す→そのページの編集→閉じると📖のそのページ」という
+// 往復を持つので、往路と復路の両方をここで踏む。
+await page.locator('.toflip').click();
+await settle();
+check(await where() === '手帳', `編集からめくって見るへ入れる（いま ${await where()}）`);
+await page.locator('.bookclose').click();
+await settle();
+check(await where() === '編集', `めくって見るを閉じると編集へ帰る（いま ${await where()}）`);
+
+await page.locator('.toflip').click();
+await settle();
+const wasOn = await page.locator('.bookno').innerText();
+await page.locator('.bookpage').first().click();
+await page.locator('.page').first().waitFor();
+check(await where() === '編集', 'めくって見るでページを押すと、そのページの編集へ');
+const backToBook = await page.locator('.tobook').count();
+check(backToBook > 0, `めくって見るから入った編集に、帰る道がある（いま ${backToBook} 個）`);
+await page.locator('.tobook').click();
+await settle();
+check(await where() === '手帳', `その編集を閉じると、めくって見るへ帰る（いま ${await where()}）`);
+check(
+  (await page.locator('.bookno').innerText()) === wasOn,
+  `帰った先は、見ていたページのまま（${wasOn} → ${await page.locator('.bookno').innerText()}）`,
+);
+await page.locator('.bookclose').click();
+await settle();
 
 console.log(`\n${bad === 0 ? '行き止まりなし' : `仕様（5章 戻る構造）と食い違うところ ${bad} か所`}`);
 await browser.close();

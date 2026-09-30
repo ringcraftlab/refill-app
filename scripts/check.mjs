@@ -28,6 +28,7 @@ const CHECKS = [
   { id: 'shoot', script: 'shoot.mjs', out: 'shots/shoot', what: '主要35場面' },
   { id: 'pc', script: 'pccheck.mjs', out: 'shots/pc', what: 'PCの2カラムとホバー' },
   { id: 'book', script: 'bookcheck.mjs', out: 'shots/book', what: '1冊の中身（順番・枚数・保存）' },
+  { id: 'flip', script: 'flipcheck.mjs', out: 'shots/flip', what: 'めくって見る（📖）' },
   { id: 'ux', script: 'uxcheck.mjs', out: 'shots/ux', what: '×と確認ダイアログ' },
   { id: 'nav', script: 'navcheck.mjs', out: null, what: '開いた場所へ帰れるか' },
   { id: 'print', script: 'printpreview.mjs', out: 'shots/print', what: '刷り上がりプレビュー' },

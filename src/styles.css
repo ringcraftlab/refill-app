@@ -75,8 +75,24 @@
 @keyframes dropFlash { 0% { opacity: 0.5 } 100% { opacity: 0 } }
 .drop-flash { animation: dropFlash 420ms ease-out forwards }
 
+/* Turning a leaf in the book. It goes over on the ring axis -- a page that
+   slides sideways is a slideshow, and what makes a planner a planner is that
+   the sheet lifted and its other side came round. The axis is the binding's:
+   sideways for rings on the left, upwards for rings along the top. The
+   duration comes from the element, because a riffle is the same turn done
+   quicker. */
+@keyframes leafFwdY { from { transform: rotateY(0) } to { transform: rotateY(-180deg) } }
+@keyframes leafBackY { from { transform: rotateY(-180deg) } to { transform: rotateY(0) } }
+@keyframes leafFwdX { from { transform: rotateX(0) } to { transform: rotateX(180deg) } }
+@keyframes leafBackX { from { transform: rotateX(180deg) } to { transform: rotateX(0) } }
+.leaf-fwd-y { animation: leafFwdY 170ms ease-in-out forwards }
+.leaf-back-y { animation: leafBackY 170ms ease-in-out forwards }
+.leaf-fwd-x { animation: leafFwdX 170ms ease-in-out forwards }
+.leaf-back-x { animation: leafBackX 170ms ease-in-out forwards }
+
 @media (prefers-reduced-motion: reduce) {
-  .turn-next, .turn-prev, .screen-in, .drop-flash { animation: none }
+  .turn-next, .turn-prev, .screen-in, .drop-flash,
+  .leaf-fwd-y, .leaf-back-y, .leaf-fwd-x, .leaf-back-x { animation: none }
 }
 
 @keyframes knobPulse {
