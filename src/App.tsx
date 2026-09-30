@@ -4122,7 +4122,11 @@ function BindingRail({ sections, at, size, print, job, onGo, onAddCover, onFillB
   };
   const body = sections.map((sec, i) => ({ sec, i })).filter(({ sec }) => !sec.cover);
   const hasCover = !!sections[0]?.cover;
-  const backBlank = all.length > 0 && all[all.length - 1].at === null;
+  // The empty cover and back are the pages a spread leaves: page 1 alone on
+  // the right, and the back of the last sheet. A book of single pages leaves
+  // neither -- its first page is already page 1 -- so it offers neither.
+  const spreads = body.some(({ sec }) => sec.spread && sec.fold <= 1);
+  const backBlank = spreads && all.length > 0 && all[all.length - 1].at === null;
   const empty = (
     <span
       className="grid place-items-center rounded-[2px] border-[1.4px] border-dashed border-act text-[15px] font-bold leading-none text-act"
@@ -4169,7 +4173,7 @@ function BindingRail({ sections, at, size, print, job, onGo, onAddCover, onFillB
         {hasCover
           ? tile('cover', at === 0, <SizeIcon size={size} color={color} scale={k} rings />,
               '表紙', 'p.1', () => onGo(0), '')
-          : tile('cover', false, empty, '表紙', 'p.1', onAddCover, 'addbefore', '表紙を入れる')}
+          : spreads && tile('cover', false, empty, '表紙', 'p.1', onAddCover, 'addbefore', '表紙を入れる')}
         {body.map(({ sec, i }) => {
           const one = body.length === 1;
           const dated = hasDatedPart(sec);
