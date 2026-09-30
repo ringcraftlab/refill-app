@@ -235,6 +235,15 @@ export interface Layout {
   // book is folded into. Marked rather than guessed from what is on it,
   // because a photograph on a sheet is not the same thing as a cover.
   cover?: boolean;
+  // One page, whatever the rest of the book is folded into -- the cover is the
+  // first example of this, and the pages that fill an odd slot are the rest.
+  // A book of spreads has single pages in it whether it likes it or not: a
+  // spread has to start on an even page, so there is a page in front of the
+  // first one, and the back of the last sheet is a page too. Only a one-page
+  // section can fill either of them; a spread put there takes two pages and
+  // leaves the same gap somewhere else. It is not read as the book's own form
+  // (`bodyOf`), for the same reason a cover is not.
+  single?: boolean;
   // How many identical sheets a section with no dates prints. A note section
   // is "ten sheets of squared paper" -- there is nothing in its content to say
   // how much of it you want, unlike a monthly, which is as long as its months.

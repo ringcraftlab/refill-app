@@ -130,11 +130,18 @@ await page.locator('.modal button[aria-label=閉じる]').click();
 await page.waitForTimeout(200);
 
 // ---- a note section: how many sheets of it ------------------------------
+// 足すものの手本は表紙から取らない。表紙は本がどう折られていても1ページ
+// なので、表紙を入れたあとに足した束が片面になっていた。
+const beforeGrid = await leaves().count();
 await page.locator('.sections .addsection').click();
 await page.locator('.modal').waitFor();
 await page.locator('.fillers button', { hasText: '方眼' }).click();
 await page.waitForTimeout(400);
 check((await names()).includes('方眼'), `足したものが中身に入る（${(await names()).join(' / ')}）`);
+check(
+  await leaves().count() === beforeGrid + 2,
+  `表紙があっても足した束は見開きのまま（${beforeGrid} → ${await leaves().count()}ページ）`,
+);
 const wasPages = await leaves().count();
 await page.locator('.sections .section', { hasText: '方眼' }).click();
 await page.locator('.modal').waitFor();

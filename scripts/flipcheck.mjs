@@ -139,6 +139,10 @@ check(startLabel.includes('表紙'), `表紙のある束では「表紙へ」（
 // 立っている端のボタンは押せない（消えるのではなく暗くなる）。
 check(await page.locator('.bookstart').isDisabled(), '最初の見開きでは「表紙へ」が押せない');
 check(await page.locator('.bookpage').count() === 1, '表紙は相手のいない1ページ');
+// 白紙のページと同じ絵にしない（4章）。まだ何も乗っていない表紙は
+// ＋のある空ページと見分けがつかないので、紙に「表紙」と出る。
+const coverFace = await page.locator('.bookpage').first().innerText();
+check(coverFace.includes('表紙'), `中身のない表紙は紙にそう書く（いま「${coverFace.trim()}」）`);
 await shot('06-表紙');
 
 // ---- 最後へ ---------------------------------------------------------------
@@ -159,15 +163,26 @@ await page.locator('.bookend').click();
 await settle();
 const blanks = await page.locator('.bookblank').count();
 check(blanks > 0, `最後の紙の裏が白紙のページとして出る（${blanks} ページ）`);
+const wasPages = Number((await page.locator('.bookno').innerText()).match(/全(\d+)/)[1]);
 await page.locator('.bookblank').first().click();
 await page.locator('.fillers').first().waitFor();
 const asked = await page.locator('.modal').first().innerText().catch(() => '');
-check(asked.includes('押したページ'), '押したページに入ると言う（末尾ではなく）');
+check(asked.includes('押した1ページ'), '押した1ページに入ると言う（末尾ではなく）');
+// 日付のものは何ページにもなるので、1ページぶんの場所では出さない。
+check(!asked.includes('マンスリー'), '1ページの場所に日付の束は出さない');
+// 表紙は先頭にしか行かないので、最後のページからは出さない。
+check(!asked.includes('先頭に入ります'), '最後のページから表紙は足せない');
 const paperTalk = ['A4', 'A3', 'B4', '面付', '両面'].filter(w => asked.includes(w));
 check(paperTalk.length === 0, `足すシートも紙の話をしない（${paperTalk.join('・') || 'なし'}）`);
 await page.locator('.fillers').first().locator('button').first().click();
 await settle();
 check(await page.locator('.bookview').count() > 0, '足したあとも手帳のまま（見て確かめられる）');
+const nowPages = Number((await page.locator('.bookno').innerText()).match(/全(\d+)/)[1]);
+check(
+  nowPages === wasPages && await page.locator('.bookblank').count() === 0,
+  `押した1ページが埋まって、空きは残らない（全${wasPages} → 全${nowPages}ページ）`,
+);
+check(await page.locator('.booknext').isDisabled(), '足したものが最後のページになる');
 await shot('08-白紙に足した');
 
 // 足したものは束の形（見開き）を継ぐ。表紙は1ページなので、表紙を
@@ -175,7 +190,7 @@ await shot('08-白紙に足した');
 await page.locator('.bookpage').first().click();
 await page.locator('.page').first().waitFor();
 const form = await page.locator('.papernow').innerText();
-check(form.includes('見開き'), `足した束も見開きのまま（いま「${form.trim()}」）`);
+check(form.includes('1ページ'), `空ページから足したものは1ページの束（いま「${form.trim()}」）`);
 await page.locator('.tobook').click();
 await settle();
 

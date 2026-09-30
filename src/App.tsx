@@ -334,11 +334,15 @@ const runMonths = (daysPerSheet: number): number =>
 const pacedFor = (l: Layout): Layout =>
   (isDayPaced(l) ? { ...l, monthCount: runMonths(l.daysPerSheet) } : l);
 
-function sectionOf(kind: SectionKind, base: Layout): Layout {
+// `single` is for a section that has to be exactly one page -- what an empty
+// page in the book asks for. It is not an option on a run of dates, which is
+// as long as its dates whatever page it was asked for from.
+function sectionOf(kind: SectionKind, base: Layout, single = false): Layout {
   const sheet: Layout = {
     ...createLayout(),
     size: base.size,
-    spread: base.spread,
+    spread: single && base.fold <= 1 ? false : base.spread,
+    single: single || undefined,
     fold: base.fold,
     foldGrain: base.foldGrain,
     orientation: base.orientation,
@@ -410,7 +414,8 @@ function sectionLabel(l: Layout): string {
 // look. Never the cover, whatever order the book is in -- a cover is one page
 // however the book is folded, so it carries 片面, and a monthly added to a book
 // of spreads after a cover had been put on the front came out single-sided.
-const bodyOf = (b: Book): Layout => b.sections.find(l => !l.cover) ?? b.sections[0];
+const bodyOf = (b: Book): Layout =>
+  b.sections.find(l => !l.cover && !l.single) ?? b.sections.find(l => !l.cover) ?? b.sections[0];
 
 // A book of one empty section, which is what every refill made so far was.
 function createBook(): Book {
@@ -460,7 +465,9 @@ export function App() {
   const every = (fn: (l: Layout) => Layout) =>
     setBook(b => ({
       ...b,
-      sections: b.sections.map(l => (l.cover ? { ...fn(l), spread: l.fold > 1 ? fn(l).spread : false } : fn(l))),
+      sections: b.sections.map(l => (
+        l.cover || l.single ? { ...fn(l), spread: l.fold > 1 ? fn(l).spread : false } : fn(l)
+      )),
     }));
 
   if (stage === 'size') {
@@ -536,11 +543,18 @@ export function App() {
         // the other wants everything -- so both open in the editor; anything
         // else is already what it is, and stays here to be looked at.
         onAddAt={(where, kind) => {
+          // A cover is the outside of the stack, so it goes on the front
+          // wherever it was asked for -- from the last page of the book it was
+          // landing on the last page, which is not a cover of anything.
+          // Everything else goes where it was asked for, and is one page,
+          // because an empty page is one page: a spread put there takes two
+          // and leaves the same empty page one further on.
+          const at = kind === 'cover' ? 0 : where;
           setBook(b => ({
             ...b,
-            sections: withSection(b.sections, sectionOf(kind, bodyOf(b)), where),
+            sections: withSection(b.sections, sectionOf(kind, bodyOf(b), true), at),
           }));
-          if (kind === 'cover' || kind === 'blank') { goTo(where, 0); go('canvas'); }
+          if (kind === 'cover' || kind === 'blank') { goTo(at, 0); go('canvas'); }
         }}
       />
     );
@@ -1590,16 +1604,17 @@ function ContentsScreen({ book, setBook, print, at, nth, onOpen, onBack }: {
         <AddSection
           job={job} print={print}
           positioned={addAt !== null}
+          cover={!book.sections.some(l => l.cover) && (addAt === null || addAt === 0)}
           onPick={kind => {
-            // Pressed on an empty page: what is chosen goes at that page,
-            // which is what makes a cover land on page 1 without anything
-            // having to know what a cover is.
-            const where = addAt ?? (kind === 'cover' ? 0 : book.sections.length);
+            // A cover goes on the front from wherever it was asked for; an
+            // empty page takes what it was given, as one page (an empty page
+            // is one page); anything else goes on the end.
+            const where = kind === 'cover' ? 0 : addAt ?? book.sections.length;
             setAdding(false);
             setAddAt(null);
             setBook(b => ({
               ...b,
-              sections: withSection(b.sections, sectionOf(kind, bodyOf(b)), where),
+              sections: withSection(b.sections, sectionOf(kind, bodyOf(b), addAt !== null), where),
             }));
             if (kind === 'cover' || kind === 'blank') onOpen(where);
           }}
@@ -1978,6 +1993,12 @@ function BookView({ book, at, nth, print, onClose, onEdit, onAddAt }: {
   // away and build it again.
   const face = (leaf: Leaf, seam: 'lo' | 'hi', stack: number, live: boolean) => {
     const { page } = paperOf(leaf, seam);
+    // A cover with nothing on it yet is a white sheet, and so is a page with
+    // nothing in it: the same picture for two different things, one of which
+    // takes a press and the other of which asks for one. The cover says which
+    // it is -- 「表紙」 on the paper, the way the editor says it on its own.
+    const sec = leaf.at === null ? null : book.sections[leaf.at];
+    const naming = sec?.cover && isPlaceholder(sec) ? '表紙' : null;
     const { pw, ph, x, y } = placeOf(page, seam);
     const away = seam === 'hi' ? 1 : -1;
     const sheet = { left: x, top: y, width: pw, height: ph };
@@ -2004,6 +2025,11 @@ function BookView({ book, at, nth, print, onClose, onEdit, onAddAt }: {
             aria-label={`${noOf(shown, seam === 'hi' ? 1 : 0)}ページを直す`}
           >
             <PageSvg page={page} scale={scale} showGuides />
+            {naming && (
+              <span className="absolute inset-0 flex items-center justify-center text-[13px] text-muted">
+                {naming}
+              </span>
+            )}
           </button>
         ) : (
           // Paper with nothing in it yet. It is punched like the rest -- it is
@@ -2216,6 +2242,9 @@ function BookView({ book, at, nth, print, onClose, onEdit, onAddAt }: {
         <AddSection
           job={null} print={print}
           positioned
+          // The front page is the only place a cover goes, and there is
+          // nowhere for a second one.
+          cover={!hasCover && addAt === 0}
           onPick={kind => { const where = addAt; setAddAt(null); onAddAt(where, kind); }}
           onClose={() => setAddAt(null)}
         />
@@ -3014,7 +3043,9 @@ function CanvasScreen({
               「片面」 here -- the form of this section, truthfully -- told
               anyone standing on the cover of a book of spreads that their
               book had become single-sided. It says which page it is instead. */}
-          {' ・ '}{layout.cover ? '表紙（1ページ）' : formLabel(layout, foldNow?.grain)}
+          {' ・ '}{layout.cover ? '表紙（1ページ）'
+            : layout.single ? '1ページ'
+            : formLabel(layout, foldNow?.grain)}
         </Button>
         {/* Below 360px even these give up their words: what they were pushing
             out of the title is worth more. The icons stay, and so do the
@@ -4009,8 +4040,10 @@ type PaperJob = ReturnType<typeof usePaperJob>;
 // to fill: 表紙 is a picture on a sheet, and nobody arrives at that by
 // guessing. The dated ones come with the book's period, so a weekly is a
 // year of weeks straight away and the contents says how long that is.
-const SECTION_MENU: { title: string; kinds: SectionKind[] }[] = [
-  { title: 'カレンダー', kinds: ['monthly', 'weekhoriz', 'weekvert', 'daylist'] },
+// `run` marks the ones that are as long as their dates rather than one page,
+// which is what decides whether they can be put on a single empty page.
+const SECTION_MENU: { title: string; kinds: SectionKind[]; run?: boolean }[] = [
+  { title: 'カレンダー', kinds: ['monthly', 'weekhoriz', 'weekvert', 'daylist'], run: true },
   { title: '書くところ', kinds: ['memo', 'lines', 'grid', 'todo'] },
 ];
 
@@ -4018,20 +4051,27 @@ const SECTION_LABEL = (kind: SectionKind): string => (
   kind === 'cover' ? '表紙' : kind === 'blank' ? '白紙' : PART_LABEL[kind]
 );
 
-function AddSection({ job, print, positioned = false, onPick, onClose }: {
+function AddSection({ job, print, positioned = false, cover = true, onPick, onClose }: {
   // How much room is left on the last sheet -- or nothing at all, when the
   // screen asking is one that does not talk about paper (📖).
   job: PaperJob | null;
   print: PrintOptions;
-  // Pressed on a particular empty page, so what is chosen lands there rather
-  // than on the end of the book. Saying 「末尾に入ります」 in that case is the
-  // sheet contradicting the press that opened it.
+  // Pressed on a particular empty page. What is chosen lands there and is one
+  // page, because that is what an empty page is -- so the runs of dates are
+  // not offered here: a monthly is as long as its months, and choosing one
+  // from a single empty page would put twelve pages where one was asked for,
+  // and leave the empty page where it was. Saying 「末尾に入ります」 in this
+  // case is the sheet contradicting the press that opened it.
   positioned?: boolean;
+  // Whether a cover is worth offering: there is nowhere for a second one to
+  // go, and from an empty page in the middle of the book the answer to
+  // 「先頭に入ります」 is that this is not the front.
+  cover?: boolean;
   onPick: (kind: SectionKind) => void;
   onClose: () => void;
 }) {
   return (
-    <Modal title="中身を足す" onClose={onClose}>
+    <Modal title={positioned ? 'このページに入れる' : '中身を足す'} onClose={onClose}>
       {job && (
         <p className="picker m-0 text-[13px] text-muted">
           {job.spare > 0
@@ -4042,13 +4082,15 @@ function AddSection({ job, print, positioned = false, onPick, onClose }: {
 
       {/* A cover goes on the front, which is the only place a cover goes, so
           it is said here rather than left as five presses of ↑. */}
-      <Button variant="quiet" className="addcover justify-start" onClick={() => onPick('cover')}>
-        <span className="inline-block h-5 w-[15px] rounded-[2px] border border-line-strong bg-white" />
-        表紙
-        <em className="not-italic text-muted">白紙1ページ・先頭に入ります</em>
-      </Button>
+      {cover && (
+        <Button variant="quiet" className="addcover justify-start" onClick={() => onPick('cover')}>
+          <span className="inline-block h-5 w-[15px] rounded-[2px] border border-line-strong bg-white" />
+          表紙
+          <em className="not-italic text-muted">白紙1ページ・先頭に入ります</em>
+        </Button>
+      )}
 
-      {SECTION_MENU.map(group => (
+      {SECTION_MENU.filter(g => !positioned || !g.run).map(group => (
         <span key={group.title} className="flex flex-col gap-1">
           <strong className="text-[13px] font-normal text-muted">{group.title}</strong>
           <span className="fillers grid grid-cols-2 gap-1.5">
@@ -4067,7 +4109,7 @@ function AddSection({ job, print, positioned = false, onPick, onClose }: {
       </Button>
       <span className="text-[13px] leading-snug text-muted">
         {positioned
-          ? '押したページに入ります。順番は中身の ↑↓ で変えられます'
+          ? '押した1ページに入ります。日付のものは何ページにもなるので、一覧の「＋ 足す」から'
           : '足したものは末尾に入ります（表紙だけ先頭）。順番は中身の ↑↓ で変えられます'}
       </span>
     </Modal>
