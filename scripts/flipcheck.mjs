@@ -163,6 +163,12 @@ await page.locator('.bookend').click();
 await settle();
 const blanks = await page.locator('.bookblank').count();
 check(blanks > 0, `最後の紙の裏が白紙のページとして出る（${blanks} ページ）`);
+// 何が入るかを絵で言う。＋だけでは「何かが入る」までしか言えず、
+// 入るのが1ページなのか見開きなのかが分からない。
+check(
+  await page.locator('.bookblank .blankmark').count() === blanks,
+  '空ページには「1ページ入る」印が出る',
+);
 const wasPages = Number((await page.locator('.bookno').innerText()).match(/全(\d+)/)[1]);
 await page.locator('.bookblank').first().click();
 await page.locator('.fillers').first().waitFor();

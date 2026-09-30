@@ -2043,12 +2043,8 @@ function BookView({ book, at, nth, print, onClose, onEdit, onAddAt }: {
             aria-label="このページに中身を足す"
           >
             {page && <PageSvg page={page} scale={scale} showGuides />}
-            {/* Not a word. The same mark the empty pages of the list wear, in
-                the middle of the sheet it would fill. */}
             <span className="pointer-events-none absolute inset-0 flex items-center justify-center">
-              <span className="flex size-9 items-center justify-center rounded-full border border-line-strong bg-white text-[18px] text-muted shadow-[0_2px_6px_rgba(38,36,31,0.16)]">
-                ＋
-              </span>
+              <BlankMark flip={seam === 'lo'} />
             </span>
           </button>
         )}
@@ -3943,6 +3939,42 @@ function ListGlyph() {
         )))}
       </g>
     </svg>
+  );
+}
+
+// What a press on an empty page puts there, drawn rather than named: one
+// page, punched on the same side as the sheet it is lying on -- so on a back
+// face, which is what most empty pages are, the holes are on the right and
+// the mark reads as the back of a sheet.
+//
+// A ＋ on its own said 「something goes here」 and stopped. What was
+// surprising was not that something could go in but how much: one page, never
+// a spread -- put a spread in an empty page and it takes two and leaves the
+// same empty page one further on. The mark is the answer to that, and it is a
+// drawing of a page rather than the sentence 「1ページ入ります」.
+function BlankMark({ flip }: { flip: boolean }) {
+  // Far enough from the punched edge that the ＋ is not sitting in the
+  // margin the rings run through.
+  const cx = flip ? 15 : 19;
+  return (
+    <span className="blankmark block rounded-[3px] text-muted drop-shadow-[0_2px_6px_rgba(38,36,31,0.22)]">
+      <svg width="34" height="44" viewBox="0 0 34 44" aria-hidden="true" className="block">
+        <rect
+          x={0.6} y={0.6} width={32.8} height={42.8} rx={2.5}
+          fill="#fff" stroke="currentColor" strokeWidth={1.2}
+        />
+        {[11, 22, 33].map(y => (
+          <circle
+            key={y} cx={flip ? 28 : 6} cy={y} r={1.7}
+            fill="#fff" stroke="currentColor" strokeWidth={1}
+          />
+        ))}
+        <path
+          d={`M ${cx - 5.5} 22 h 11 M ${cx} 16.5 v 11`}
+          stroke="currentColor" strokeWidth={1.6} strokeLinecap="round"
+        />
+      </svg>
+    </span>
   );
 }
 
