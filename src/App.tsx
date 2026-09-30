@@ -2988,6 +2988,9 @@ function CanvasScreen({
     });
   });
   const teachDivider = !taught && dividerBoxes.length > 0;
+  // Nothing anywhere in the book yet -- the only moment the app still has to
+  // say how things are placed.
+  const nothingPlaced = book.sections.every(l => !l.spanning && l.surface.placed.length === 0);
 
   // The next-month calendar is part of the monthly rather than a part of its
   // own, so it gets a clear button on the sheet instead of a tray entry.
@@ -3101,12 +3104,13 @@ function CanvasScreen({
               「片面」 here -- the form of this section, truthfully -- told
               anyone standing on the cover of a book of spreads that their
               book had become single-sided. It says which page it is instead. */}
-            {/* The form used to be said here as well. It is a control of its own
-              now, one row down, so this says what the refill is and that one
-              says how it is folded -- and on a phone, where this chip
-              truncates, the form no longer falls off the end of it. A cover is
-              the exception: it has no control, because it has no choice. */}
-          {layout.cover && <>{' ・ '}表紙（1ページ）</>}
+            {/* A cover is one page whatever the book is folded into, so saying
+              「片面」 here -- the form of this section, truthfully -- told
+              anyone standing on the cover of a book of spreads that their
+              book had become single-sided. It says which page it is instead. */}
+          {' ・ '}{layout.cover ? '表紙（1ページ）'
+            : layout.single ? '1ページ'
+            : formLabel(layout, foldNow?.grain)}
         </Button>
         {/* Below 360px even these give up their words: what they were pushing
             out of the title is worth more. The icons stay, and so do the
@@ -3132,47 +3136,6 @@ function CanvasScreen({
           covers and the ground it prints on. Above the paper, because both are
           design decisions and neither belongs inside the export sheet. */}
       <div className="mb-0.5 ml-3.5 mr-3 flex shrink-0 flex-wrap items-center gap-1.5 self-start">
-        {/* How this section is folded: the whole answer, with the current one
-            filled in, so it reads without being opened and changes with one
-            press. It belongs to the section on screen, not to the book -- a
-            planner is mixed, the monthly a spread and the notes at the back
-            single sheets -- which is why it stands beside the paper it
-            describes rather than in a sheet three presses away.
-
-            A cover has no form to choose (one page whatever the book is), so
-            it gets nothing here. A folded strip does not fit two choices, so
-            the fold itself is the third, and pressing it opens the cards where
-            the panel count and the grain are. */}
-        {!layout.cover && (
-          <span className="formnow flex items-center">
-            <Segmented
-              tight
-              value={folded ? 'fold' : layout.spread ? 'spread' : 'single'}
-              options={[
-                ...(folded
-                  ? [{
-                      v: 'fold' as const,
-                      label: formLabel(layout, foldNow?.grain),
-                      icon: <FormGlyph kind="fold" panels={layout.fold} />,
-                    }]
-                  : []),
-                { v: 'spread' as const, label: '見開き', icon: <FormGlyph kind="spread" /> },
-                { v: 'single' as const, label: '片面', icon: <FormGlyph kind="single" /> },
-              ]}
-              onPick={v => {
-                if (v === 'fold') { setSheet('sheet'); return; }
-                setLayout(l => ({
-                  ...l,
-                  spread: v === 'spread',
-                  fold: 1,
-                  // Born as one page to fill an empty page; asked for a form,
-                  // it is an ordinary section from now on.
-                  single: undefined,
-                }));
-              }}
-            />
-          </span>
-        )}
       {dated && (
         <button
           className="range flex shrink-0 items-center gap-2 rounded-full border border-line-strong bg-white px-3 py-1.5 text-[13px] text-ink"
@@ -3443,6 +3406,28 @@ function CanvasScreen({
         </div>
       </div>
 
+      {/* What the app has to say while you work, in the air under the paper
+          rather than in a row of its own. A row costs 26px of the column
+          forever; this costs nothing, because the paper is as wide as the
+          screen lets it be and the room underneath is already empty.
+
+          The line about how to place things only stands while the book is
+          empty. It is an explanation, and an explanation that never goes away
+          is a design that never finished -- the drawing is supposed to say it
+          (仕様4章). The other two are not explanations: they are what just
+          happened. */}
+      {(teachDivider || traySelected.length > 0 || nothingPlaced) && (
+        <p className={`saying pointer-events-none absolute inset-x-0 bottom-1 m-0 px-3.5 text-center text-[13px] ${
+          teachDivider || traySelected.length > 0 ? 'text-accent-text' : 'text-muted'
+        }`}>
+          {teachDivider
+            ? 'つまみをドラッグすると、パーツの広さを変えられます'
+            : traySelected.length > 0
+              ? `${traySelected.length}個選択中：紙をタップすると置けます`
+              : 'タップで選ぶ → 紙をタップ。ドラッグでも置けます'}
+        </p>
+      )}
+
       {/* Turning the page, and where in the book this page is, in one row
           under the paper. The two arrows keep their room and go dim at the
           ends rather than disappearing: a row that changes width as you turn
@@ -3506,15 +3491,7 @@ function CanvasScreen({
         </button>
       )}
 
-      <p className={`m-0 shrink-0 px-3.5 py-1 text-[13px] ${
-        traySelected.length > 0 || teachDivider ? 'text-accent-text' : 'text-muted'
-      }`}>
-        {teachDivider
-          ? 'つまみをドラッグすると、パーツの広さを変えられます'
-          : traySelected.length > 0
-            ? `${traySelected.length}個選択中：紙をタップすると置けます`
-            : 'タップで選ぶ → 紙をタップ。ドラッグでも置けます'}
-      </p>
+
       </div>
 
       {/* The tools. Under the paper on a phone, beside it on a desktop, and
