@@ -107,15 +107,16 @@ check(
 // Dragged once first: until someone has, the handle wears the accent by
 // itself to ask to be dragged, and a highlight that is already on says
 // nothing about hover.
-const knobColor = () => page.locator('.divider').first().locator('b')
-  .evaluate(el => getComputedStyle(el).borderTopColor);
+// The border line is faint at rest and full under the cursor.
+const knobColor = () => page.locator('.divider').first().locator('i').first()
+  .evaluate(el => getComputedStyle(el).backgroundColor);
 const grip = await centerOf(page.locator('.divider').first());
 await drag(grip, { x: grip.x, y: grip.y - 40 });
 await page.mouse.move(20, 400);
 const before = await knobColor();
 await page.locator('.divider').first().hover();
 const hovered = await knobColor();
-check(before !== hovered, `つまみはカーソルに答える（${before} → ${hovered}）`);
+check(before !== hovered, `仕切りはカーソルに答える（${before} → ${hovered}）`);
 check(
   await page.locator('.hitbox.part').first().evaluate(el => getComputedStyle(el).cursor) === 'grab',
   'パーツの上では掴むカーソル',

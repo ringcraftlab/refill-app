@@ -128,8 +128,8 @@
 }
 
 @keyframes knobPulse {
-  0%, 100% { box-shadow: 0 1px 3px rgba(0, 0, 0, 0.14), 0 0 0 0 rgba(43, 43, 43, 0.35); }
-  60% { box-shadow: 0 1px 3px rgba(0, 0, 0, 0.14), 0 0 0 8px rgba(43, 43, 43, 0); }
+  0%, 100% { box-shadow: 0 0 0 2px #fff, 0 0 0 2px rgba(90, 79, 214, 0.45); }
+  60% { box-shadow: 0 0 0 2px #fff, 0 0 0 9px rgba(90, 79, 214, 0); }
 }
 
 @layer base {

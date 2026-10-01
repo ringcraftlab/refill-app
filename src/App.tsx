@@ -2708,7 +2708,7 @@ function CanvasScreen({
         const folded = foldOf(prev, size);
         say(folded && prev.surface.placed.length >= foldMaxParts(folded.panels)
           ? `1ページに2つまでです。外してから置いてください`
-          : `${what}を置く広さがありません。つまみで空けてください`);
+          : `${what}を置く広さがありません。仕切りを動かして空けてください`);
         return prev;
       }
       if (planned.overflow > 0) say(`一度に置けるのは${MAX_PARTS}つまでです`);
@@ -3500,7 +3500,7 @@ function CanvasScreen({
           teachDivider || traySelected.length > 0 ? 'text-accent-text' : 'text-muted'
         }`}>
           {teachDivider
-            ? 'つまみをドラッグすると、パーツの広さを変えられます'
+            ? '仕切りをドラッグすると、パーツの広さを変えられます'
             : traySelected.length > 0
               ? `${traySelected.length}個選択中：紙をタップすると置けます`
               : 'タップで選ぶ → 紙をタップ。ドラッグでも置けます'}
@@ -4080,19 +4080,38 @@ function DividerHandle({ box, teach, onDown, onMove, onUp }: {
       onPointerUp={onUp}
       onPointerCancel={onUp}
     >
-      <i className={`block rounded-sm bg-line-strong group-hover:bg-accent group-active:bg-accent ${
-        horizontal ? 'h-[3px] w-full' : 'h-full w-[3px]'
+      {/* The border itself, faintly in the screen's own mark colour at rest
+          and fully while held. The mark colour is the one that never prints
+          (drop targets, page numbers), so neither the line nor the handle can
+          be mistaken for a rule on the refill. */}
+      <i className={`block rounded-sm bg-[color-mix(in_srgb,var(--color-mark)_28%,transparent)] group-hover:bg-mark group-active:bg-mark ${
+        horizontal ? 'h-[2px] w-full' : 'h-full w-[2px]'
       }`} />
-      <b className={`absolute flex items-center justify-center gap-0.5 rounded-[7px] border bg-white shadow-[0_1px_3px_rgba(38,36,31,0.18)] group-hover:border-accent group-active:border-accent ${
-        horizontal ? 'h-[13px] w-[34px] flex-col' : 'h-[34px] w-[13px]'
-      } ${teach ? 'animate-knob border-accent' : 'border-line-strong'}`}>
-        {[0, 1].map(i => (
-          <span key={i} className={`block rounded-[1px] group-hover:bg-accent group-active:bg-accent ${
-            horizontal ? 'h-[1.5px] w-[14px]' : 'h-[14px] w-[1.5px]'
-          } ${teach ? 'bg-accent' : 'bg-faint'}`} />
-        ))}
+      {/* A short bar with a chevron either side of it: which way it moves,
+          said by where the chevrons are. */}
+      <b className={`divgrip absolute flex items-center justify-center text-mark ${
+        horizontal ? 'flex-col gap-[3px]' : 'flex-row gap-[3px]'
+      }`}>
+        <Chevron dir={horizontal ? 'up' : 'left'} />
+        <span className={`block rounded-[2px] bg-mark shadow-[0_0_0_2px_#fff,0_1px_3px_rgba(90,79,214,0.35)] ${
+          horizontal ? 'h-[4px] w-[30px]' : 'h-[30px] w-[4px]'
+        } ${teach ? 'animate-knob' : ''}`} />
+        <Chevron dir={horizontal ? 'down' : 'right'} />
       </b>
     </div>
+  );
+}
+
+// One chevron of the divider's grip, haloed in white so it reads over the
+// paper's own lines.
+function Chevron({ dir }: { dir: 'up' | 'down' | 'left' | 'right' }) {
+  const d = { up: 'M1 5 L4.5 1.2 L8 5', down: 'M1 1 L4.5 4.8 L8 1', left: 'M5 1 L1.2 4.5 L5 8', right: 'M1 1 L4.8 4.5 L1 8' }[dir];
+  const across = dir === 'up' || dir === 'down';
+  return (
+    <svg width={across ? 9 : 6} height={across ? 6 : 9} viewBox={across ? '0 0 9 6' : '0 0 6 9'} aria-hidden="true"
+      className="block overflow-visible [filter:drop-shadow(0_0_1.5px_#fff)_drop-shadow(0_0_1.5px_#fff)]">
+      <path d={d} fill="none" stroke="currentColor" strokeWidth={1.4} strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
   );
 }
 
@@ -5319,7 +5338,7 @@ function PartSheet({
             )}
             <p className="m-0 text-[13px] leading-snug text-muted">
               カード1枚で1本ぶん、名刺の大きさのまま並びます。名前も説明も手で書く
-              ところなので、刷るのは枠だけです。余った紙はつまみを動かして、メモや
+              ところなので、刷るのは枠だけです。余った紙は仕切りを動かして、メモや
               方眼に分けられます
             </p>
           </>
