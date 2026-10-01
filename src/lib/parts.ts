@@ -1,4 +1,5 @@
 import type { Layout, PageKey, PartKind } from '../types';
+import { PART_FIT } from '../types';
 import type { Color, Primitive } from './draw';
 import type { Palette } from './palette';
 import { paletteOf } from './palette';
@@ -847,7 +848,12 @@ const DATE_GRIDS: Partial<Record<PartKind, (l: Layout) => DateGridSpec>> = {
 
 export function drawPart(kind: PartKind, area: Rect, layout: Layout): Primitive[] {
   const grid = DATE_GRIDS[kind];
-  if (grid) return drawDateGrid(area, layout, grid(layout));
+  if (grid) {
+    const spec = grid(layout);
+    // Too narrow for a column a day: the days go down the side instead.
+    if (kind === 'habit' && area.w < PART_FIT.habit.minWMm) spec.dates = 'rows';
+    return drawDateGrid(area, layout, spec);
+  }
 
   const pal = paletteOf(layout);
   switch (kind) {
