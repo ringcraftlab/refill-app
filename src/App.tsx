@@ -1589,6 +1589,11 @@ function ContentsScreen({ book, setBook, print, at, nth, onOpen, onBack, onImpor
   const [picked, setPicked] = useState<number | null>(null);
   const [addAt, setAddAt] = useState<number | null>(null);
   const pages = useMemo(() => pagesOf(book.sections), [book.sections]);
+  // A phone has the width for pages half as large again as a desk's column
+  // of them, and the pictures at the desk size were too small to read there.
+  const big = !useWide();
+  const box = big ? { w: 80, h: 112 } : { w: 54, h: 74 };
+  const leafW = box.w + 8;
   // The sheet each page actually is, not the section it belongs to. A run of
   // fifty-three weeks drew fifty-three pictures of its first week: the panel
   // was a list of identical thumbnails, which is not a list of anything.
@@ -1715,7 +1720,7 @@ function ContentsScreen({ book, setBook, print, at, nth, onOpen, onBack, onImpor
               {[left, right].map((leaf, half) => {
                 const no = row === 0 ? (half === 1 ? 1 : 0) : row * 2 + half;
                 if (!leaf) {
-                  return <span key={half} className="w-[62px]" />;
+                  return <span key={half} style={{ width: leafW }} />;
                 }
                 const sec = leaf.at === null ? null : book.sections[leaf.at];
                 // The sheet the editor is on -- both its pages, because a
@@ -1725,7 +1730,8 @@ function ContentsScreen({ book, setBook, print, at, nth, onOpen, onBack, onImpor
                   <button
                     key={half}
                     ref={here && half === 0 ? hereRef : undefined}
-                    className={`leaf flex w-[62px] flex-col items-center gap-0.5 p-0 ${
+                    style={{ width: leafW }}
+                    className={`leaf flex flex-col items-center gap-0.5 p-0 ${
                       sec ? '' : 'empty'
                     } ${here ? 'here' : ''}`}
                     onClick={() => (sec ? onOpen(leaf.at!, undefined, leaf.nth) : setAddAt(leaf.before))}
@@ -1733,10 +1739,10 @@ function ContentsScreen({ book, setBook, print, at, nth, onOpen, onBack, onImpor
                     {sec ? (
                       <Thumb
                         layout={sheetFor(leaf.at!, leaf.nth)} size={size} side={leaf.side}
-                        box={{ w: 54, h: 74 }} ring={here} lazy
+                        box={box} ring={here} lazy
                       />
                     ) : (
-                      <span className="flex h-[74px] w-[54px] items-center justify-center rounded-[3px] border border-dashed border-line-strong text-[16px] text-muted">
+                      <span style={{ width: box.w, height: box.h }} className="flex items-center justify-center rounded-[3px] border border-dashed border-line-strong text-[16px] text-muted">
                         ＋
                       </span>
                     )}
@@ -3243,6 +3249,7 @@ function CanvasScreen({
           onFillBack={addBackCover}
           onList={onList}
           onPaper={() => setSheet('paper')}
+          compact={!wide}
         />
   );
 
@@ -3378,7 +3385,7 @@ function CanvasScreen({
       <span className="flex flex-1 justify-end">
         <Button variant="chip" className="toflip" onClick={onFlip} aria-label="めくって見る">
           <BookGlyph />
-          <span className="hidden min-[360px]:inline">めくる</span>
+          <span className="hidden min-[400px]:inline">めくる</span>
         </Button>
       </span>
     </div>
@@ -4314,7 +4321,7 @@ function ListGlyph() {
 // edge of the paper, which also put pages in the middle of the book; putting
 // something between two months is a question about the order of the whole
 // book, and that is what 並びを整える answers.
-function BindingRail({ sections, at, size, print, job, onGo, onAddCover, onFillBack, onList, onPaper }: {
+function BindingRail({ sections, at, size, print, job, onGo, onAddCover, onFillBack, onList, onPaper, compact = false }: {
   sections: Layout[];
   at: number;
   size: SizeSpec;
@@ -4325,9 +4332,15 @@ function BindingRail({ sections, at, size, print, job, onGo, onAddCover, onFillB
   onFillBack: () => void;
   onList: () => void;
   onPaper: () => void;
+  // On a phone every pixel of height the rail takes comes off the paper, so
+  // the tiles lie on their side -- a small picture with the words beside it
+  // -- and the paper count moves up into the heading's line.
+  compact?: boolean;
 }) {
   const color = SIZE_COLOR[size.id];
-  const k = Math.min(44 / size.heightMm, 40 / size.widthMm);
+  const k = compact
+    ? Math.min(26 / size.heightMm, 20 / size.widthMm)
+    : Math.min(44 / size.heightMm, 40 / size.widthMm);
   const all = pagesOf(sections);
   const pagesFor = (i: number) => {
     const from = all.findIndex(l => l.at === i);
@@ -4360,28 +4373,46 @@ function BindingRail({ sections, at, size, print, job, onGo, onAddCover, onFillB
       style={{ width: size.widthMm * k, height: size.heightMm * k }}
     >＋</span>
   );
+  // How much paper the book comes to, and how much of the last sheet is
+  // still empty -- a fact about the whole book, so it sits under the book
+  // rather than on a chip above one page of it.
+  const paper = (
+    <button className={`paper flex min-w-0 items-center gap-1.5 py-1 text-[13px] text-muted ${compact ? 'overflow-hidden px-0.5 whitespace-nowrap' : 'px-2'}`} onClick={onPaper}>
+      <span className="text-[14px] leading-none">▭</span>
+      {print.impose
+        ? `${PAPERS[print.paper].label} ${job.sheets}枚`
+        : `${PAPERS[print.paper].label}に1枚ずつ`}
+      {print.impose && job.spare > 0 && (
+        <em className="min-w-0 truncate not-italic">（あと{job.spare}{job.unit}ぶん）</em>
+      )}
+    </button>
+  );
   const tile = (key: string, on: boolean, picture: ReactNode, name: ReactNode, pn: string,
     onClick: () => void, extra: string, label?: string, disabled = false) => (
     <button
       key={key}
       disabled={disabled}
-      className={`railtile relative flex min-w-[76px] shrink-0 grow flex-col items-center gap-1 rounded-md px-1.5 pb-1.5 pt-2 ${
+      className={`railtile relative flex shrink-0 grow rounded-md ${compact
+        ? 'items-center gap-1.5 px-2 py-1.5'
+        : 'min-w-[76px] flex-col items-center gap-1 px-1.5 pb-1.5 pt-2'} ${
         on ? 'on bg-white shadow-[0_0_0_1px_var(--color-line-strong)]' : ''} ${extra}`}
       onClick={onClick}
       aria-label={label}
       aria-current={on ? 'page' : undefined}
     >
       {on && <i className="absolute -top-px left-0 right-0 h-1 rounded-t-md bg-hi" />}
-      <span className="flex h-[46px] items-center justify-center gap-[2px]">{picture}</span>
-      <span className={`whitespace-nowrap text-[13px] font-semibold leading-none ${disabled ? 'text-faint' : 'text-ink'}`}>{name}</span>
-      <span className="text-[13px] leading-none text-muted tabular-nums">{pn}</span>
+      <span className={`flex ${compact ? 'h-[28px]' : 'h-[46px]'} items-center justify-center gap-[2px]`}>{picture}</span>
+      <span className={`flex flex-col gap-1 ${compact ? 'items-start' : 'items-center'}`}>
+        <span className={`whitespace-nowrap text-[13px] font-semibold leading-none ${disabled ? 'text-faint' : 'text-ink'}`}>{name}</span>
+        <span className="text-[13px] leading-none text-muted tabular-nums">{pn}</span>
+      </span>
     </button>
   );
   return (
     <div className="rail shrink-0 px-3 pt-1">
       <div className="sect flex items-center gap-2 px-1 pb-1 text-[13px] text-muted">
-        <span>綴じた順</span>
-        <i className="h-px flex-1 bg-line-strong" />
+        <span className="shrink-0">綴じた順</span>
+        {compact ? <span className="flex min-w-0 flex-1 justify-center">{paper}</span> : <i className="h-px flex-1 bg-line-strong" />}
         <Button variant="chip" className="torail-list" onClick={onList} aria-label="並びを整える">
           <ListGlyph />並びを整える
         </Button>
@@ -4420,20 +4451,7 @@ function BindingRail({ sections, at, size, print, job, onGo, onAddCover, onFillB
           : tile('back', false, waiting, '裏表紙', `p.${all.length}`, () => {}, 'fillback cursor-default',
               '裏表紙（見開きに何か置くと入れられます）', true))}
       </div>
-      {/* How much paper the book comes to, and how much of the last sheet is
-          still empty -- a fact about the whole book, so it sits under the
-          book rather than on a chip above one page of it. */}
-      <div className="flex justify-center pt-1">
-        <button className="paper flex items-center gap-1.5 px-2 py-1 text-[13px] text-muted" onClick={onPaper}>
-          <span className="text-[14px] leading-none">▭</span>
-          {print.impose
-            ? `${PAPERS[print.paper].label} ${job.sheets}枚`
-            : `${PAPERS[print.paper].label}に1枚ずつ`}
-          {print.impose && job.spare > 0 && (
-            <em className="not-italic">（あと{job.spare}{job.unit}ぶん）</em>
-          )}
-        </button>
-      </div>
+      {!compact && <div className="flex justify-center pt-1">{paper}</div>}
     </div>
   );
 }
