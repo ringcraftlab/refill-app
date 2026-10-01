@@ -8,7 +8,7 @@
 // checked is what someone would notice -- that the sheet says what will
 // happen (the size, how much it shrinks, how fine it prints), that the pages
 // land in the book, that a taken-in page has no tray, and that starting from
-// the size screen gives the book the file's size.
+// the size screen does not offer it at all.
 import { BASE, launch, requireApp } from './browser.mjs';
 import { mkdir } from 'node:fs/promises';
 import { PDFDocument, StandardFonts } from 'pdf-lib';
@@ -60,23 +60,8 @@ const choose = async (button, file) => {
 };
 const flat = async sel => (await page.locator(sel).first().innerText()).replace(/\s+/g, ' ').trim();
 
-// ── From the size screen: an A5 PDF starts an A5 book.
-check(await page.locator('.sizescreen .fromfile').count() === 1, 'サイズ選択の画面に「持っているリフィルを取り込む」がある');
-await choose(page.locator('.sizescreen .fromfile'), { name: 'events_A5.pdf', mimeType: 'application/pdf', buffer: a5pdf });
-const fromSize = await flat('.importsheet');
-await page.screenshot({ path: `${OUT}/01-サイズ選択から.png` });
-check(fromSize.includes('PDF 2ページ'), `PDFのページ数を言う（${fromSize.slice(0, 40)}…）`);
-check(fromSize.includes('148×210mm') && fromSize.includes('A5'), '元の大きさとA5を言う');
-check(fromSize.includes('ファイルと同じ大きさ'), 'サイズ選択から入るとファイルのサイズで作る');
-await page.locator('.importgo').click();
-await page.locator('.page').first().waitFor();
-await page.waitForTimeout(400);
-await page.screenshot({ path: `${OUT}/02-A5で取り込んだ.png` });
-check((await flat('header')).includes('A5'), `本がA5になる（${await flat('header')}）`);
-check(await page.locator('.importednote').count() === 1, '取り込んだページではトレイの代わりに説明が出る');
-check(await page.locator('.stamp:visible').count() === 0, '取り込んだページにはパーツを出さない');
-check((await flat('.rail')).includes('取り込んだリフィル'), '帯に「取り込んだリフィル」が並ぶ');
-check(await page.locator('.page image').count() >= 1, '紙に取り込んだ絵が描かれる');
+// ── The size screen has no way in: a file is brought into a book, not where one starts.
+check(await page.locator('.sizescreen .fromfile').count() === 0, 'サイズ選択の画面には取り込みの入口を出さない');
 
 // ── Into a book that is already being made: Mini6 spreads with a monthly.
 await page.goto(BASE);
@@ -94,6 +79,8 @@ await page.locator('.modal .fromfile').waitFor();
 await choose(page.locator('.modal .fromfile'), { name: 'events_A5.pdf', mimeType: 'application/pdf', buffer: a5pdf });
 const into = await flat('.importsheet');
 await page.screenshot({ path: `${OUT}/03-ミニ6に入れる.png` });
+check(into.includes('PDF 2ページ'), 'PDFのページ数を言う');
+check(into.includes('148×210mm') && into.includes('A5'), '元の大きさとA5を言う');
 check(into.includes('約54%'), `A5をミニ6に入れると縮む割合を言う（${(into.match(/約\d+%/) ?? ['なし'])[0]}）`);
 check(/約\d+dpi/.test(into), '刷ったときの細かさを言う');
 await page.getByRole('button', { name: 'いっぱいに広げる' }).click();
@@ -102,6 +89,9 @@ await page.locator('.importednote').waitFor();
 await page.waitForTimeout(400);
 await page.screenshot({ path: `${OUT}/04-取り込んだページ.png` });
 const pagesAfter = Number((await flat('.pageno')).match(/\/(\d+)/)[1]);
+check(await page.locator('.page image').count() >= 1, '紙に取り込んだ絵が描かれる');
+check(await page.locator('.stamp:visible').count() === 0, '取り込んだページにはパーツを出さない');
+check((await flat('.rail')).includes('取り込んだリフィル'), '帯に「取り込んだリフィル」が並ぶ');
 check(pagesAfter >= pagesBefore + 1, `ページが増える（${pagesBefore} → ${pagesAfter}）`);
 check((await flat('.papersettings')).includes('いっぱいに広げる'), '選んだ入れ方が「この紙の設定」に出る');
 await page.locator('.importfit').click();

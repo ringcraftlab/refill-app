@@ -512,16 +512,6 @@ function LogoMark({ className = '' }: { className?: string }) {
   );
 }
 
-// The size a file was made for, when it is one of ours: an A5 PDF is an A5
-// refill. Within a millimetre, because a PDF's page size is in points.
-function sizeOfFile(read: ImportRead): RefillSize | null {
-  const p = read.pages.find(pg => pg.wMm && pg.hMm);
-  if (!p) return null;
-  const hit = (Object.keys(SIZES) as RefillSize[]).find(id =>
-    Math.abs(SIZES[id].widthMm - p.wMm!) < 1 && Math.abs(SIZES[id].heightMm - p.hMm!) < 1);
-  return hit ?? null;
-}
-
 export function App() {
   const [stage, setStage] = useState<Stage>('size');
   // Where each screen was opened from. Not a parent -- an opener: the contents
@@ -546,13 +536,12 @@ export function App() {
   const [print, setPrint] = useState<PrintOptions>(DEFAULT_PRINT);
   // What the editor should open on when it is entered from the contents: the
   // question that was being asked there, rather than the paper again.
-  // Taking a file in. Where it was asked from decides where it goes: from the
-  // size screen it starts the book, from anywhere else it joins the end.
+  // Taking a file in. It joins the book being made; the size screen offers no
+  // way in, because bringing a file is a side road and not how a book starts.
   const fileRef = useRef<HTMLInputElement>(null);
-  const [importTo, setImportTo] = useState<'new' | 'book'>('book');
   const [importing, setImporting] = useState<ImportRead | null>(null);
   const [importBusy, setImportBusy] = useState<string | null>(null);
-  const startImport = (to: 'new' | 'book') => { setImportTo(to); fileRef.current?.click(); };
+  const startImport = () => fileRef.current?.click();
   const [openOn, setOpenOn] = useState<{ key: number; what: 'range' | 'part0' }>(
     { key: 0, what: 'range' },
   );
@@ -562,14 +551,11 @@ export function App() {
   // A cover stays one page whatever the book is folded into, so the form the
   // picker shows -- and the form it sets -- is the rest of the book's.
   const body = bodyOf(book);
-  const importSize = importing && importTo === 'new' ? (sizeOfFile(importing) ?? body.size) : body.size;
   const finishImport = (fit: 'contain' | 'cover') => {
     const read = importing!;
     setImporting(null);
-    const base = importTo === 'new' ? { ...body, size: importSize } : body;
-    const start = importTo === 'new' ? book.sections.map(l => ({ ...l, size: importSize })) : book.sections;
-    const made = read.pages.map((pg, i) => importedSection(pg, i, read, fit, base));
-    const placed = placeImported(start, made, base, read.pages[0]?.side);
+    const made = read.pages.map((pg, i) => importedSection(pg, i, read, fit, body));
+    const placed = placeImported(book.sections, made, body, read.pages[0]?.side);
     setBook(b => ({ ...b, sections: placed.sections }));
     goTo(Math.max(0, placed.sections.indexOf(made[0])), 0);
     if (stage !== 'canvas') go('canvas');
@@ -605,11 +591,9 @@ export function App() {
       {importing && (
         <ImportSheet
           read={importing}
-          size={SIZES[importSize]}
-          fromSize={importTo === 'new'}
-          sameSize={importTo === 'new' && sizeOfFile(importing) === importSize}
+          size={SIZES[body.size]}
           pad={placeImported(
-            importTo === 'new' ? book.sections.map(l => ({ ...l, size: importSize })) : book.sections,
+            book.sections,
             importing.pages.map((pg, i) => importedSection(pg, i, importing, 'contain', body)),
             body, importing.pages[0]?.side,
           ).padded}
@@ -642,7 +626,6 @@ export function App() {
       <SizeScreen
         selected={body.size}
         onPick={(size) => { every(l => ({ ...l, size })); go('sides'); }}
-        onImport={() => startImport('new')}
       />
     );
   }
@@ -682,7 +665,7 @@ export function App() {
   if (stage === 'contents') {
     return withImport(
       <ContentsScreen
-        onImport={() => startImport('book')}
+        onImport={() => startImport()}
         book={book}
         setBook={setBook}
         print={print}
@@ -733,7 +716,7 @@ export function App() {
   }
   return withImport(
     <CanvasScreen
-      onImport={() => startImport('book')}
+      onImport={() => startImport()}
       book={book}
       at={Math.min(at, book.sections.length - 1)}
       nth={nth}
@@ -1113,7 +1096,7 @@ function SizeCards({ selected, wide, onPick }: {
 // Choosing a size and going on are two presses, as they are on the form
 // screen: the card pressed stays chosen where it can be seen and changed,
 // and the move to the next screen is the button's, not the card's.
-function SizeScreen({ selected, onPick, onImport }: { selected: RefillSize; onPick: (s: RefillSize) => void; onImport: () => void }) {
+function SizeScreen({ selected, onPick }: { selected: RefillSize; onPick: (s: RefillSize) => void }) {
   const wide = useWide();
   const [chosen, setChosen] = useState<RefillSize>(selected);
   return (
@@ -1141,11 +1124,6 @@ function SizeScreen({ selected, onPick, onImport }: { selected: RefillSize; onPi
       <Button variant="cta" className="sizego shrink-0" onClick={() => onPick(chosen)}>
         {SIZE_NAME[chosen]}で作る
       </Button>
-      {/* Someone who already has a refill they made -- in PowerPoint, as a
-          PDF, as a picture -- starts from that instead. */}
-      <button className="fromfile -mt-1 shrink-0 self-center px-2 py-1 text-[13px] text-accent-text" onClick={onImport}>
-        持っているリフィルを取り込む（画像・PDF）
-      </button>
     </div>
   );
 }
@@ -4685,14 +4663,11 @@ function FileGlyph() {
 // what will happen to it on this size, and the one choice that changes how it
 // looks. Saying it here, once, is cheaper than someone finding on the paper
 // that an A5 page went into a Mini6 at half its size.
-function ImportSheet({ read, size, fromSize, sameSize, pad, onConfirm, onClose }: {
+function ImportSheet({ read, size, pad, onConfirm, onClose }: {
   read: ImportRead;
   // A blank page goes in first, so the pages land on the side they were drawn for.
   pad: boolean;
   size: SizeSpec;
-  // Started from the size screen: the book takes the file's size when it has one.
-  fromSize: boolean;
-  sameSize: boolean;
   onConfirm: (fit: 'contain' | 'cover') => void;
   onClose: () => void;
 }) {
@@ -4732,7 +4707,6 @@ function ImportSheet({ read, size, fromSize, sameSize, pad, onConfirm, onClose }
               {first && <li>元の大きさ {mm(first.wMm!)}×{mm(first.hMm!)}mm{fileSize ? `（${fileSize}）` : ''}</li>}
               <li>
                 入れる先 <span className="font-semibold text-label">{size.label} {size.widthMm}×{size.heightMm}mm</span>
-                {fromSize && (sameSize ? '・ファイルと同じ大きさ' : '・サイズは後から変えられます')}
               </li>
               {shrink !== null && shrink < 0.95 && (
                 <li className="importshrink text-danger">

@@ -46,8 +46,10 @@ const names = async () => (await page.locator('.sections .secname').allTextConte
 const paper = () => flat('.fill-note');
 const leaves = () => page.locator('.contents-list .leaf');
 const shut = async () => {
-  await page.locator('.sheet button[aria-label=閉じる]').first().click().catch(() => {});
-  await page.locator('.scrim').click({ position: { x: 10, y: 10 } }).catch(() => {});
+  // Either may be missing -- nothing open, or a sheet with no scrim -- so
+  // neither waits long; Playwright's own wait for a missing one is 30s.
+  await page.locator('.sheet button[aria-label=閉じる]').first().click({ timeout: 1000 }).catch(() => {});
+  await page.locator('.scrim').click({ position: { x: 10, y: 10 }, timeout: 1000 }).catch(() => {});
   await page.waitForTimeout(200);
 };
 const toContents = async () => {
