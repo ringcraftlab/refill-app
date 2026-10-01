@@ -84,7 +84,7 @@ export const PART_FIT: Record<PartKind, PartFit> = {
   // Seven day rows, each wide enough to write a line in.
   weekhoriz: { minWMm: 40, minHMm: 44, prefer: 'any' },
   // A column per day of the month, so it needs the width a habit grid does.
-  gantt: { minWMm: 76, minHMm: 26, prefer: 'wide' },
+  gantt: { minWMm: 76, minHMm: 26, prefer: 'wide', alt: [{ minWMm: 34, minHMm: 72 }] },
   // On a page too narrow for that it turns: the days run down the side and
   // the habits across the top, which is how a one-page tracker is printed.
   habit:   { minWMm: 76, minHMm: 18, prefer: 'wide', alt: [{ minWMm: 34, minHMm: 72 }] },
