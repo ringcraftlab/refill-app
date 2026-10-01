@@ -850,8 +850,16 @@ export function drawPart(kind: PartKind, area: Rect, layout: Layout): Primitive[
   const grid = DATE_GRIDS[kind];
   if (grid) {
     const spec = grid(layout);
-    // Too narrow for a column a day: the days go down the side instead.
-    if (kind === 'habit' && area.w < PART_FIT.habit.minWMm) spec.dates = 'rows';
+    // Too narrow for a column a day: the days go down the side instead, and
+    // what a row held becomes a column. A gantt's eight tasks would be 5mm
+    // each across a single page, too narrow to name, so it keeps as many as
+    // get 8mm.
+    if ((kind === 'habit' || kind === 'gantt') && area.w < PART_FIT[kind].minWMm) {
+      spec.dates = 'rows';
+      if (kind === 'gantt' && spec.cross.kind === 'lanes') {
+        spec.cross = { ...spec.cross, count: Math.max(3, Math.min(spec.cross.count, Math.floor((area.w - 12) / 8))) };
+      }
+    }
     return drawDateGrid(area, layout, spec);
   }
 
