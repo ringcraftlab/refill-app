@@ -32,7 +32,7 @@ async function tryCombo(combo) {
   };
 
   await page.goto(BASE);
-  await page.locator('.sizerow', { hasText: 'Mini6' }).click(); await page.locator('.sizego').click({ timeout: 1500 }).catch(() => {});
+  await page.locator('.sizerow', { hasText: 'Mini6' }).click(); if (await page.locator('.sizego').count()) await page.locator('.sizego').click();
   await page.locator('.card', { hasText: '見開き' }).click();
   await page.getByRole('button', { name: 'この構成で作る' }).click();
   await page.locator('.page').first().waitFor();

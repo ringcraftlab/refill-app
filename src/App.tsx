@@ -352,6 +352,7 @@ function sectionOf(kind: SectionKind, base: Layout, single = false): Layout {
     monthCount: base.monthCount,
     weekStart: base.weekStart,
     words: base.words,
+    hideRokuyo: base.hideRokuyo,
     tone: base.tone,
     ruleWeight: base.ruleWeight,
     pages: 1,
@@ -3841,7 +3842,7 @@ function LookSheet({ layout, setLayout }: {
   const tone = layout.tone ?? 'sepia';
   const weight = layout.ruleWeight ?? 'normal';
   const pal = paletteOf(layout);
-  const plain = words === 'mix' && tone === 'sepia' && weight === 'normal';
+  const plain = words === 'mix' && tone === 'sepia' && weight === 'normal' && !layout.hideRokuyo;
 
   return (
     <>
@@ -3850,6 +3851,14 @@ function LookSheet({ layout, setLayout }: {
           options={(['ja', 'mix', 'en'] as DateWords[]).map(v => ({ v, label: WORD_SAMPLE[v] }))}
           value={words}
           onPick={v => setLayout(l => ({ ...l, words: v as DateWords }))}
+        />
+      </Field>
+
+      <Field label="六曜">
+        <Segmented
+          options={[{ v: 'show', label: '表示する' }, { v: 'hide', label: '表示しない' }]}
+          value={layout.hideRokuyo ? 'hide' : 'show'}
+          onPick={v => setLayout(l => ({ ...l, hideRokuyo: v === 'hide' || undefined }))}
         />
       </Field>
 
@@ -3907,7 +3916,7 @@ function LookSheet({ layout, setLayout }: {
         <Button
           variant="quiet"
           className="self-start"
-          onClick={() => setLayout(l => ({ ...l, words: undefined, tone: undefined, ruleWeight: undefined }))}
+          onClick={() => setLayout(l => ({ ...l, words: undefined, hideRokuyo: undefined, tone: undefined, ruleWeight: undefined }))}
         >
           体裁を元に戻す
         </Button>

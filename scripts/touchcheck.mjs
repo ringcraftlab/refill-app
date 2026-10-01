@@ -14,7 +14,7 @@ const page = await browser.newPage({
   viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true, isMobile: true,
 });
 await page.goto(BASE);
-await page.locator('.sizerow', { hasText: '95×170mm' }).click(); await page.locator('.sizego').click({ timeout: 1500 }).catch(() => {});
+await page.locator('.sizerow', { hasText: '95×170mm' }).click(); if (await page.locator('.sizego').count()) await page.locator('.sizego').click();
 await page.locator('.card', { hasText: '片面' }).click();
 await page.getByRole('button', { name: 'この構成で作る' }).click();
 await page.locator('.page').first().waitFor();

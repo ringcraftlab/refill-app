@@ -38,7 +38,7 @@ const drop = async (label, target) => {
 
 // A book worth turning: a year of monthlies on spreads.
 await page.goto(BASE);
-await page.locator('.sizerow', { hasText: '80×128mm' }).click(); await page.locator('.sizego').click({ timeout: 1500 }).catch(() => {});
+await page.locator('.sizerow', { hasText: '80×128mm' }).click(); if (await page.locator('.sizego').count()) await page.locator('.sizego').click();
 await page.locator('.card', { hasText: '見開き' }).click();
 await page.getByRole('button', { name: 'この構成で作る' }).click();
 await page.locator('.page').first().waitFor();

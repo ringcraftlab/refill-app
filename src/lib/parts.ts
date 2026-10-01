@@ -194,7 +194,7 @@ export function drawMonthly(area: Rect, layout: Layout, slice: MonthlySlice): Pr
         type: 'text', x, y: y + 3.2, text: String(cell.getDate()),
         sizePt: 8, color: dateColor(cell, pal), align: 'left',
       });
-      if (roomForRokuyo) {
+      if (roomForRokuyo && !layout.hideRokuyo) {
         out.push({
           type: 'text', x: left + colW * (lead + c + 1) - 0.9, y: y + 3.1,
           text: rokuyoLabel(cell), sizePt: 4, color: pal.sunday, align: 'right',

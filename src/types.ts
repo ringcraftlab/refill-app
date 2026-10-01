@@ -227,6 +227,10 @@ export interface Layout {
   // 体裁。リフィル全体にかかるので、パーツではなくレイアウトが持つ。
   // どれも省略できて、省略は今までどおりの見た目になる。
   words?: DateWords;
+  // 六曜 beside each date. Shown unless switched off: plenty of planners
+  // print it, and plenty of people would rather have the room. Omitted means
+  // shown, which is what everything saved before this was.
+  hideRokuyo?: boolean;
   tone?: InkTone;
   ruleWeight?: RuleWeight;
   // Printed refills usually tuck next month's dates into the spread's index

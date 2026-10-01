@@ -19,7 +19,7 @@ const page = await ctx.newPage();
 await page.setViewportSize({ width: 390, height: 844 });
 await page.goto(BASE);
 
-await page.locator('.sizerow', { hasText: SIZE }).first().click(); await page.locator('.sizego').click({ timeout: 1500 }).catch(() => {});
+await page.locator('.sizerow', { hasText: SIZE }).first().click(); if (await page.locator('.sizego').count()) await page.locator('.sizego').click();
 await page.locator('.card', { hasText: '見開き' }).click();
 await page.getByRole('button', { name: 'この構成で作る' }).click();
 await page.locator('.page').first().waitFor();
