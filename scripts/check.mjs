@@ -34,6 +34,7 @@ const CHECKS = [
   { id: 'print', script: 'printpreview.mjs', out: 'shots/print', what: '刷り上がりプレビュー' },
   { id: 'multidrop', script: 'multidrop.mjs', out: null, what: 'まとめてドラッグ' },
   { id: 'touch', script: 'touchcheck.mjs', out: null, what: '指でのトレイ操作' },
+  { id: 'import', script: 'importcheck.mjs', out: 'shots/import', what: 'ファイルから取り込む' },
 ];
 
 const run = (cmd, argv, env) => new Promise(resolve => {

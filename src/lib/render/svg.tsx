@@ -109,8 +109,9 @@ export function PageSvg({ page, scale = 3, showGuides = true }: { page: Page; sc
       xmlns="http://www.w3.org/2000/svg"
     >
       <rect x={0} y={0} width={page.widthMm} height={page.heightMm} fill={rgb(PAPER)} />
-      {showGuides && <Primitives items={page.guides} />}
+      {showGuides && !page.guidesOnTop && <Primitives items={page.guides} />}
       <Primitives items={page.primitives} />
+      {showGuides && page.guidesOnTop && <Primitives items={page.guides} />}
     </svg>
   );
 }

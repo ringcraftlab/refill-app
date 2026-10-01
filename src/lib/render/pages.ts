@@ -26,9 +26,11 @@ export function buildPages(layout: Layout, size: SizeSpec, flipBinding = false):
     // margin: a background that stopped at the content would read as a panel
     // laid on the paper rather than as the paper itself. It is not drawn on
     // the spare faces -- those are filler, and a tint there is ink for nothing.
-    const primitives: Primitive[] = [
-      ...drawBackground(layout.background, { x: 0, y: 0, w: pg.widthMm, h: pg.heightMm }),
-    ];
+    const primitives: Primitive[] = layout.imported
+      // A taken-in page is the whole sheet as its maker drew it: the picture,
+      // fitted to the paper without being stretched, and nothing of ours.
+      ? [{ type: 'image', x: 0, y: 0, w: pg.widthMm, h: pg.heightMm, src: layout.imported.src, fit: layout.imported.fit }]
+      : [...drawBackground(layout.background, { x: 0, y: 0, w: pg.widthMm, h: pg.heightMm })];
     if (pg.spanRect) primitives.push(...drawSpanningMonthly(pg.spanRect, pg.key, layout));
 
     const slice = geo.surface.slices.find(s => s.key === pg.key);
@@ -49,11 +51,14 @@ export function buildPages(layout: Layout, size: SizeSpec, flipBinding = false):
       widthMm: pg.widthMm,
       heightMm: pg.heightMm,
       primitives,
-      guides: [
-        { type: 'rect', ...pg.ringBand, fill: RING_BAND },
-        ...pg.holes.map(h => ({ type: 'circle' as const, cx: h.cx, cy: h.cy, r: h.r, fill: RING_HOLE })),
-        ...trimEdge(pg),
-      ],
+      guides: layout.imported
+        ? pg.holes.map(h => ({ type: 'circle' as const, cx: h.cx, cy: h.cy, r: h.r, fill: RING_HOLE }))
+        : [
+          { type: 'rect', ...pg.ringBand, fill: RING_BAND },
+          ...pg.holes.map(h => ({ type: 'circle' as const, cx: h.cx, cy: h.cy, r: h.r, fill: RING_HOLE })),
+          ...trimEdge(pg),
+        ],
+      guidesOnTop: !!layout.imported,
       sheet: pg.sheet,
     };
   });

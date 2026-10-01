@@ -177,6 +177,22 @@ export interface Surface {
   fold?: FoldGroup[];
 }
 
+// What a taken-in page carries. The picture is already shrunk to what the
+// paper needs at 300dpi; the original size and pixels are kept so the editor
+// can say how much it was shrunk and how fine it will print.
+export interface ImportedPage {
+  src: string;
+  fit: 'contain' | 'cover';
+  pxW: number;
+  pxH: number;
+  wMm?: number;
+  hMm?: number;
+  // The file it came from, and which page of it.
+  file: string;
+  page: number;
+  of: number;
+}
+
 export interface Layout {
   version: number;
   id: string;
@@ -258,6 +274,10 @@ export interface Layout {
   // cover is -- a blank page for a picture, a background or nothing -- rather
   // than a note section that happens to sit at the end.
   backCover?: boolean;
+  // A page taken in from a file (an image, or a PDF page that is one image).
+  // It is one undivided face: no parts, no dividers, no background of the
+  // app's own -- the person who made it laid out the whole sheet.
+  imported?: ImportedPage;
   // How many identical sheets a section with no dates prints. A note section
   // is "ten sheets of squared paper" -- there is nothing in its content to say
   // how much of it you want, unlike a monthly, which is as long as its months.

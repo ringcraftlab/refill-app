@@ -76,6 +76,9 @@ export interface Page {
   primitives: Primitive[];
   // Non-printing guides for on-screen only (rings, punch holes).
   guides: Primitive[];
+  // Drawn over the page rather than under it: a taken-in page covers the
+  // whole sheet, and where the punch will go is exactly what to see on it.
+  guidesOnTop?: boolean;
   // The physical punched sheet this reading-space canvas prints onto.
   sheet: { widthMm: number; heightMm: number; rotation: SheetRotation };
 }

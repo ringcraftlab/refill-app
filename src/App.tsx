@@ -16,6 +16,8 @@ import type { Page } from './lib/draw';
 import { BACKGROUND_COLORS } from './lib/background';
 import { paletteOf, RULE_WEIGHT_ORDER, RULE_WEIGHTS, TONE_ORDER, TONES } from './lib/palette';
 import { importPhoto, PHOTO_WARN_BYTES, photoBytes } from './lib/photo';
+import { IMPORT_ACCEPT, printedDpi, readImportFile } from './lib/importfile';
+import type { ImportPage, ImportRead } from './lib/importfile';
 import { FOLD_PANELS, foldGrainsOf, foldPanels, foldPlan } from './lib/fold';
 import type { FoldPlan } from './lib/fold';
 import { nextMonthCell } from './lib/parts';
@@ -44,7 +46,7 @@ type SheetTarget =
   // `sheet` is the refill itself -- which size it is and what form it takes.
   // `paper` is the A4 it gets printed on. Two different pieces of paper, and
   // the confusion between them is why they are named apart here.
-  | 'sheet' | 'paper' | 'background' | 'look' | null;
+  | 'sheet' | 'paper' | 'background' | 'look' | 'import' | null;
 
 const GAP = 6;
 
@@ -392,7 +394,7 @@ function sectionOf(kind: SectionKind, base: Layout, single = false): Layout {
 // thing anyone asked to print, so the first real section takes its place
 // rather than printing beside it.
 function isPlaceholder(l: Layout): boolean {
-  return !l.spanning && l.surface.placed.length === 0 && !l.background;
+  return !l.spanning && l.surface.placed.length === 0 && !l.background && !l.imported;
 }
 
 // Where a new section goes, and what it replaces. `where` is the index it
@@ -414,6 +416,7 @@ function sectionLabel(l: Layout): string {
   // what is on it.
   if (l.cover) return '表紙';
   if (l.backCover) return '裏表紙';
+  if (l.imported) return '取り込んだリフィル';
   if (l.name && l.name !== '新しいリフィル') return l.name;
   const parts = [
     ...(l.spanning ? ['マンスリー'] : []),
@@ -454,6 +457,50 @@ function createBook(): Book {
   };
 }
 
+// One taken-in page as a section: a single page in the book's size and form,
+// carrying the picture. A file of several pages becomes several sections, in
+// the file's order, so a left page and its right page land as a pair.
+function importedSection(page: ImportPage, i: number, read: ImportRead, fit: 'contain' | 'cover', base: Layout): Layout {
+  return {
+    ...sectionOf('blank', base, true),
+    name: '取り込んだリフィル',
+    imported: { src: page.src, fit, pxW: page.pxW, pxH: page.pxH, wMm: page.wMm, hMm: page.hMm, file: read.name, page: i + 1, of: read.pages.length },
+  };
+}
+
+// The taken-in pages put into the book, with one blank page in front of them
+// when the first one would otherwise land on the wrong side. A file drawn as
+// a spread leaves the punch side free on each page -- its left page has room
+// on the right -- and landing that page on the right of the book puts the
+// holes through what is printed.
+function placeImported(sections: Layout[], made: Layout[], base: Layout, sideOfFirst: 'L' | 'R' | undefined): { sections: Layout[]; padded: boolean } {
+  // The blank goes in after the pages are placed, beside the first of them:
+  // put in on its own it would be taken for the empty starting page and
+  // replaced by the next one.
+  const put = (pad: boolean) => {
+    const all = made.reduce((acc, l) => withSection(acc, l, false), sections);
+    if (!pad) return all;
+    const at = all.indexOf(made[0]);
+    return [...all.slice(0, at), sectionOf('blank', base, true), ...all.slice(at)];
+  };
+  const plain = put(false);
+  if (!sideOfFirst) return { sections: plain, padded: false };
+  const i = pagesOf(plain).findIndex(leaf => leaf.at !== null && plain[leaf.at] === made[0]);
+  const onLeft = i % 2 === 1;
+  if ((sideOfFirst === 'L') === onLeft) return { sections: plain, padded: false };
+  return { sections: put(true), padded: true };
+}
+
+// The size a file was made for, when it is one of ours: an A5 PDF is an A5
+// refill. Within a millimetre, because a PDF's page size is in points.
+function sizeOfFile(read: ImportRead): RefillSize | null {
+  const p = read.pages.find(pg => pg.wMm && pg.hMm);
+  if (!p) return null;
+  const hit = (Object.keys(SIZES) as RefillSize[]).find(id =>
+    Math.abs(SIZES[id].widthMm - p.wMm!) < 1 && Math.abs(SIZES[id].heightMm - p.hMm!) < 1);
+  return hit ?? null;
+}
+
 export function App() {
   const [stage, setStage] = useState<Stage>('size');
   // Where each screen was opened from. Not a parent -- an opener: the contents
@@ -478,6 +525,13 @@ export function App() {
   const [print, setPrint] = useState<PrintOptions>(DEFAULT_PRINT);
   // What the editor should open on when it is entered from the contents: the
   // question that was being asked there, rather than the paper again.
+  // Taking a file in. Where it was asked from decides where it goes: from the
+  // size screen it starts the book, from anywhere else it joins the end.
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [importTo, setImportTo] = useState<'new' | 'book'>('book');
+  const [importing, setImporting] = useState<ImportRead | null>(null);
+  const [importBusy, setImportBusy] = useState<string | null>(null);
+  const startImport = (to: 'new' | 'book') => { setImportTo(to); fileRef.current?.click(); };
   const [openOn, setOpenOn] = useState<{ key: number; what: 'range' | 'part0' }>(
     { key: 0, what: 'range' },
   );
@@ -487,6 +541,64 @@ export function App() {
   // A cover stays one page whatever the book is folded into, so the form the
   // picker shows -- and the form it sets -- is the rest of the book's.
   const body = bodyOf(book);
+  const importSize = importing && importTo === 'new' ? (sizeOfFile(importing) ?? body.size) : body.size;
+  const finishImport = (fit: 'contain' | 'cover') => {
+    const read = importing!;
+    setImporting(null);
+    const base = importTo === 'new' ? { ...body, size: importSize } : body;
+    const start = importTo === 'new' ? book.sections.map(l => ({ ...l, size: importSize })) : book.sections;
+    const made = read.pages.map((pg, i) => importedSection(pg, i, read, fit, base));
+    const placed = placeImported(start, made, base, read.pages[0]?.side);
+    setBook(b => ({ ...b, sections: placed.sections }));
+    goTo(Math.max(0, placed.sections.indexOf(made[0])), 0);
+    if (stage !== 'canvas') go('canvas');
+  };
+  const importEl = (
+    <>
+      <input
+        ref={fileRef}
+        type="file"
+        accept={IMPORT_ACCEPT}
+        className="importfile hidden"
+        onChange={async e => {
+          const file = e.target.files?.[0];
+          e.target.value = '';
+          if (!file) return;
+          setImportBusy('読み込み中…');
+          try {
+            // Read for the largest size it could go to, so the picture is
+            // fine enough whichever size it ends up on.
+            const read = await readImportFile(file, { w: 148, h: 210 });
+            setImportBusy(null);
+            setImporting(read);
+          } catch (err) {
+            setImportBusy(`${err instanceof Error ? err.message : '読めませんでした'}。JPEG・PNG・PDFのファイルを選んでください`);
+          }
+        }}
+      />
+      {importBusy && (
+        <Modal title="ファイルから取り込む" onClose={() => setImportBusy(null)}>
+          <p className="importbusy m-0 text-[14px] leading-relaxed text-muted">{importBusy}</p>
+        </Modal>
+      )}
+      {importing && (
+        <ImportSheet
+          read={importing}
+          size={SIZES[importSize]}
+          fromSize={importTo === 'new'}
+          sameSize={importTo === 'new' && sizeOfFile(importing) === importSize}
+          pad={placeImported(
+            importTo === 'new' ? book.sections.map(l => ({ ...l, size: importSize })) : book.sections,
+            importing.pages.map((pg, i) => importedSection(pg, i, importing, 'contain', body)),
+            body, importing.pages[0]?.side,
+          ).padded}
+          onConfirm={finishImport}
+          onClose={() => setImporting(null)}
+        />
+      )}
+    </>
+  );
+  const withImport = (screen: ReactNode) => <>{screen}{importEl}</>;
   // The section being worked on. The form belongs to it -- a book of spreads
   // with single-sheet notes at the back is an ordinary planner -- while the
   // size belongs to the book, because a sheet punched differently does not go
@@ -505,10 +617,11 @@ export function App() {
     }));
 
   if (stage === 'size') {
-    return (
+    return withImport(
       <SizeScreen
         selected={body.size}
         onPick={(size) => { every(l => ({ ...l, size })); go('sides'); }}
+        onImport={() => startImport('new')}
       />
     );
   }
@@ -546,8 +659,9 @@ export function App() {
     );
   }
   if (stage === 'contents') {
-    return (
+    return withImport(
       <ContentsScreen
+        onImport={() => startImport('book')}
         book={book}
         setBook={setBook}
         print={print}
@@ -596,8 +710,9 @@ export function App() {
       />
     );
   }
-  return (
+  return withImport(
     <CanvasScreen
+      onImport={() => startImport('book')}
       book={book}
       at={Math.min(at, book.sections.length - 1)}
       nth={nth}
@@ -977,7 +1092,7 @@ function SizeCards({ selected, wide, onPick }: {
 // Choosing a size and going on are two presses, as they are on the form
 // screen: the card pressed stays chosen where it can be seen and changed,
 // and the move to the next screen is the button's, not the card's.
-function SizeScreen({ selected, onPick }: { selected: RefillSize; onPick: (s: RefillSize) => void }) {
+function SizeScreen({ selected, onPick, onImport }: { selected: RefillSize; onPick: (s: RefillSize) => void; onImport: () => void }) {
   const wide = useWide();
   const [chosen, setChosen] = useState<RefillSize>(selected);
   return (
@@ -1006,6 +1121,11 @@ function SizeScreen({ selected, onPick }: { selected: RefillSize; onPick: (s: Re
       <Button variant="cta" className="sizego shrink-0" onClick={() => onPick(chosen)}>
         {SIZE_NAME[chosen]}で作る
       </Button>
+      {/* Someone who already has a refill they made -- in PowerPoint, as a
+          PDF, as a picture -- starts from that instead. */}
+      <button className="fromfile -mt-1 shrink-0 self-center px-2 py-1 text-[13px] text-accent-text" onClick={onImport}>
+        持っているリフィルを取り込む（画像・PDF）
+      </button>
     </div>
   );
 }
@@ -1438,7 +1558,8 @@ interface DragState {
 // The list is a list rather than a picture on purpose: what it answers is
 // "what is in here and in what order", and a picture of the paper answers a
 // different question (which the export screen answers, with the ＋ on it).
-function ContentsScreen({ book, setBook, print, at, nth, onOpen, onBack }: {
+function ContentsScreen({ book, setBook, print, at, nth, onOpen, onBack, onImport }: {
+  onImport: () => void;
   book: Book;
   setBook: (fn: (b: Book) => Book) => void;
   print: PrintOptions;
@@ -1662,6 +1783,7 @@ function ContentsScreen({ book, setBook, print, at, nth, onOpen, onBack }: {
           job={job} print={print}
           positioned={addAt !== null}
           cover={!book.sections.some(l => l.cover) && (addAt === null || addAt === 0)}
+          onImport={addAt === null ? () => { setAdding(false); onImport(); } : undefined}
           onPick={kind => {
             // A cover goes on the front from wherever it was asked for; an
             // empty page takes what it was given, as one page (an empty page
@@ -2339,8 +2461,9 @@ function BookView({ book, at, nth, print, onClose, onEdit, onAddAt }: {
 }
 
 function CanvasScreen({
-  book, at, nth, setBook, onList, onFlip, backTo, onBack, goTo, print, setPrint, openOn,
+  book, at, nth, setBook, onList, onFlip, backTo, onBack, goTo, print, setPrint, openOn, onImport,
 }: {
+  onImport: () => void;
   book: Book; at: number; setBook: (fn: (b: Book) => Book) => void;
   // Which sheet of that section the book is turned to.
   nth: number;
@@ -2416,7 +2539,7 @@ function CanvasScreen({
   // runs on dates belongs in it -- and offering a part only to refuse it after
   // the drag is worse than not offering it: turning the pages is meant to be
   // something you do without stopping.
-  const trayParts = layout.cover || layout.backCover ? TRAY.filter(t => !isDatedKind(t.kind)) : TRAY;
+  const trayParts = layout.imported ? [] : layout.cover || layout.backCover ? TRAY.filter(t => !isDatedKind(t.kind)) : TRAY;
   const [sheet, setSheet] = useState<SheetTarget>(null);
   const [toast, setToast] = useState<ReactNode>('');
   const [ghost, setGhost] = useState<{ x: number; y: number; kinds: PartKind[] } | null>(null);
@@ -2963,7 +3086,7 @@ function CanvasScreen({
     dividerBoxes.push({ key: d.id, d, left: o.x + d.x * scale, top: o.y + d.y * scale - 11, width: d.length * scale, height: 22 });
   });
 
-  const empty = layout.surface.placed.length === 0 && !layout.spanning;
+  const empty = layout.surface.placed.length === 0 && !layout.spanning && !layout.imported;
 
   const dated = hasDatedPart(layout);
   const lastMonth = runEnd(layout);
@@ -3051,7 +3174,7 @@ function CanvasScreen({
   const teachDivider = !taught && dividerBoxes.length > 0;
   // Nothing anywhere in the book yet -- the only moment the app still has to
   // say how things are placed.
-  const nothingPlaced = book.sections.every(l => !l.spanning && l.surface.placed.length === 0);
+  const nothingPlaced = book.sections.every(l => !l.spanning && l.surface.placed.length === 0 && !l.imported);
 
   // The next-month calendar is part of the monthly rather than a part of its
   // own, so it gets a clear button on the sheet instead of a tray entry.
@@ -3089,6 +3212,7 @@ function CanvasScreen({
       // A section goes on the end of the book, which is where the empty
       // places are. Nothing is saved or named on the way: the book is one
       // thing and it is saved as one thing.
+      onImport={() => { setSheet(null); onImport(); }}
       onAddSection={kind => {
         // Copied from the book's form, not from the page you happen to be
         // standing on: standing on the cover, that was 片面.
@@ -3533,7 +3657,12 @@ function CanvasScreen({
           ran off the edge with no sign that there was more, and could not be
           swiped either. The arrow appears only on the side that has more to
           come, and goes when that side runs out. */}
-      <div className="relative shrink-0 border-t border-line bg-paper lg:border-t-0">
+      {layout.imported && (
+        <p className="importednote m-0 shrink-0 border-t border-line bg-paper px-4 py-3 text-[13px] leading-relaxed text-muted lg:border-t-0">
+          取り込んだページにはパーツを置けません。メモなどは「並びを整える」から別のページとして足してください
+        </p>
+      )}
+      <div className={`relative shrink-0 border-t border-line bg-paper lg:border-t-0 ${layout.imported ? 'hidden' : ''}`}>
         <div
           ref={el => { trayRef.current = el; readTrayEdges(); }}
           onScroll={readTrayEdges}
@@ -3615,6 +3744,17 @@ function CanvasScreen({
         <div className="sect flex items-center gap-2 px-0.5 pb-1 text-[13px] text-muted">
           この紙の設定<i className="h-px flex-1 bg-line" />
         </div>
+        {layout.imported ? (
+          <div className="grid grid-cols-2 gap-1.5">
+            <PaperSetting
+              className="importfit"
+              label="入れ方"
+              sample={<FileGlyph />}
+              value={layout.imported.fit === 'contain' ? '全体を入れる' : 'いっぱいに広げる'}
+              onClick={() => setSheet('import')}
+            />
+          </div>
+        ) : (
         <div className={`grid gap-1.5 ${dated ? 'grid-cols-3' : 'grid-cols-2'}`}>
           {dated && (
             <PaperSetting
@@ -3643,10 +3783,13 @@ function CanvasScreen({
             onClick={() => setSheet('look')}
           />
         </div>
+        )}
       </div>
 
       <div className="flex shrink-0 gap-2 bg-paper px-3 pb-3.5 pt-2 lg:sticky lg:bottom-0 lg:z-10 lg:mt-auto lg:border-t lg:border-line lg:px-4 lg:pt-3">
-        <Button onClick={() => setSheet('load')}>読み込み</Button>
+        {/* 「読み込み」 was this and is now also what taking a file in sounds
+            like; this one opens what was saved here. */}
+        <Button onClick={() => setSheet('load')} aria-label="保存したものを開く">開く</Button>
         {/* Named on the way in. Everything saved used to be called 新しい
             リフィル, which is no name at all once there are three of them --
             and putting several on one sheet of paper means reading that list
@@ -3835,6 +3978,32 @@ function PhotoField({ layout, setLayout, size, slot, nth }: {
 // It is deliberately NOT a gear: a gear says "the settings are somewhere in
 // here", and everything added later ends up inside it. The chip that opens
 // this says what it is set to.
+// A taken-in page has one thing to choose: how its picture meets this paper.
+function ImportedSheet({ layout, setLayout, size }: {
+  layout: Layout; setLayout: (fn: (l: Layout) => Layout) => void; size: SizeSpec;
+}) {
+  const im = layout.imported!;
+  const paper = { w: size.widthMm, h: size.heightMm };
+  const dpi = printedDpi(im, paper, im.fit);
+  const shrink = im.wMm && im.hMm ? Math.min(paper.w / im.wMm, paper.h / im.hMm) : null;
+  return (
+    <>
+      <Field label="入れ方">
+        <Segmented
+          options={[{ v: 'contain', label: '全体を入れる' }, { v: 'cover', label: 'いっぱいに広げる' }]}
+          value={im.fit}
+          onPick={v => setLayout(l => ({ ...l, imported: { ...l.imported!, fit: v as 'contain' | 'cover' } }))}
+        />
+      </Field>
+      <ul className="m-0 flex list-none flex-col gap-1 p-0 text-[13px] leading-relaxed text-muted">
+        <li>{im.file}{im.of > 1 ? `の${im.page}ページ目` : ''}</li>
+        {shrink !== null && shrink < 0.95 && <li>元の大きさから約{Math.round(shrink * 100)}%に縮んでいます</li>}
+        <li className={dpi < 200 ? 'text-danger' : ''}>刷ったときの細かさ 約{dpi}dpi</li>
+      </ul>
+    </>
+  );
+}
+
 function LookSheet({ layout, setLayout }: {
   layout: Layout; setLayout: (fn: (l: Layout) => Layout) => void;
 }) {
@@ -4483,6 +4652,107 @@ type PaperJob = ReturnType<typeof usePaperJob>;
 // year of weeks straight away and the contents says how long that is.
 // `run` marks the ones that are as long as their dates rather than one page,
 // which is what decides whether they can be put on a single empty page.
+// A sheet of paper with its corner turned: a file.
+function FileGlyph() {
+  return (
+    <svg width="15" height="20" viewBox="0 0 15 20" aria-hidden="true" className="block shrink-0">
+      <path d="M1 1h9l4 4v14H1z M10 1v4h4" fill="#fff" stroke="currentColor" strokeWidth={1} strokeLinejoin="round" className="text-faint" />
+    </svg>
+  );
+}
+
+// What was read from a file, before anything goes into the book: what it is,
+// what will happen to it on this size, and the one choice that changes how it
+// looks. Saying it here, once, is cheaper than someone finding on the paper
+// that an A5 page went into a Mini6 at half its size.
+function ImportSheet({ read, size, fromSize, sameSize, pad, onConfirm, onClose }: {
+  read: ImportRead;
+  // A blank page goes in first, so the pages land on the side they were drawn for.
+  pad: boolean;
+  size: SizeSpec;
+  // Started from the size screen: the book takes the file's size when it has one.
+  fromSize: boolean;
+  sameSize: boolean;
+  onConfirm: (fit: 'contain' | 'cover') => void;
+  onClose: () => void;
+}) {
+  const [fit, setFit] = useState<'contain' | 'cover'>('contain');
+  const paper = { w: size.widthMm, h: size.heightMm };
+  const first = read.pages.find(p => p.wMm && p.hMm);
+  const shrink = first ? Math.min(paper.w / first.wMm!, paper.h / first.hMm!) : null;
+  const dpi = read.pages.length ? Math.min(...read.pages.map(p => printedDpi(p, paper, fit))) : 0;
+  const mm = (v: number) => Math.round(v);
+  const fileSize = first ? (Object.values(SIZES).find(z => Math.abs(z.widthMm - first.wMm!) < 1 && Math.abs(z.heightMm - first.hMm!) < 1)?.label ?? null) : null;
+  return (
+    <Modal title="ファイルから取り込む" onClose={onClose}>
+      <div className="importsheet flex flex-col gap-3">
+        <p className="m-0 text-[13px] leading-relaxed">
+          <span className="font-semibold">{read.name}</span>
+          <span className="text-muted">
+            {read.kind === 'pdf' ? `・PDF ${read.pages.length}ページ` : '・画像'}
+          </span>
+        </p>
+        {read.pages.length > 0 && (
+          <span className="flex gap-1.5 overflow-x-auto">
+            {read.pages.slice(0, 6).map((p, i) => (
+              <img key={i} src={p.src} alt={`${i + 1}ページ目`} className="h-[86px] w-auto shrink-0 rounded-[2px] border border-line bg-white" />
+            ))}
+          </span>
+        )}
+        {read.skipped > 0 && (
+          <p className="importskip m-0 text-[13px] leading-relaxed text-danger">
+            {read.pages.length === 0
+              ? 'このPDFは線と文字でできているので、まだ取り込めません。画像だけのPDFか、画像を選んでください'
+              : `線と文字でできたページ（${read.skipped}ページ）は、まだ取り込めないので入れません`}
+          </p>
+        )}
+        {read.pages.length > 0 && (
+          <>
+            <ul className="importfacts m-0 flex list-none flex-col gap-1 p-0 text-[13px] leading-relaxed text-muted">
+              {first && <li>元の大きさ {mm(first.wMm!)}×{mm(first.hMm!)}mm{fileSize ? `（${fileSize}）` : ''}</li>}
+              <li>
+                入れる先 <span className="font-semibold text-label">{size.label} {size.widthMm}×{size.heightMm}mm</span>
+                {fromSize && (sameSize ? '・ファイルと同じ大きさ' : '・サイズは後から変えられます')}
+              </li>
+              {shrink !== null && shrink < 0.95 && (
+                <li className="importshrink text-danger">
+                  {fileSize ?? '元'}用を{size.label}に入れると、約{Math.round(shrink * 100)}%に縮みます。書き込む欄があるリフィルは、欄が狭くなります
+                </li>
+              )}
+              <li className={dpi < 200 ? 'importdpi text-danger' : 'importdpi'}>
+                刷ったときの細かさ 約{dpi}dpi{dpi < 200 ? '。線がぼやけて見えることがあります' : ''}
+              </li>
+              {read.pages[0]?.side && (
+                <li className="importside">
+                  1ページ目は見開きの{read.pages[0].side === 'L' ? '左（穴を右に空けてある）' : '右（穴を左に空けてある）'}のページです。
+                  {pad ? '穴の側が合うように、前に白紙を1ページ入れます' : 'そのままで穴の側が合います'}
+                </li>
+              )}
+              <li>ページの順に、最後（裏表紙の前）に入ります。取り込んだページにはパーツを置けません</li>
+            </ul>
+            <Field label="入れ方">
+              <Segmented
+                options={[{ v: 'contain', label: '全体を入れる' }, { v: 'cover', label: 'いっぱいに広げる' }]}
+                value={fit}
+                onPick={v => setFit(v as 'contain' | 'cover')}
+              />
+            </Field>
+            <p className="m-0 -mt-1.5 text-[13px] leading-snug text-muted">
+              {fit === 'contain' ? '縦横の比を保って全体を入れます。余白が出ることがあります' : '紙いっぱいに広げます。はみ出たところは切れます'}
+            </p>
+          </>
+        )}
+        <span className="flex gap-2">
+          <Button variant="quiet" className="flex-1" onClick={onClose}>やめる</Button>
+          {read.pages.length > 0 && (
+            <Button variant="cta" className="importgo flex-[1.4] !p-3 !text-[15px]" onClick={() => onConfirm(fit)}>取り込む</Button>
+          )}
+        </span>
+      </div>
+    </Modal>
+  );
+}
+
 const SECTION_MENU: { title: string; kinds: SectionKind[]; run?: boolean }[] = [
   { title: 'カレンダー', kinds: ['monthly', 'weekhoriz', 'weekvert', 'daylist'], run: true },
   { title: '書くところ', kinds: ['memo', 'lines', 'grid', 'todo'] },
@@ -4492,7 +4762,10 @@ const SECTION_LABEL = (kind: SectionKind): string => (
   kind === 'cover' ? '表紙' : kind === 'backcover' ? '裏表紙' : kind === 'blank' ? '白紙' : PART_LABEL[kind]
 );
 
-function AddSection({ job, print, positioned = false, cover = true, onPick, onClose }: {
+function AddSection({ job, print, positioned = false, cover = true, onPick, onClose, onImport }: {
+  // Taking a page in from a file. Not offered on a single empty page: a file
+  // is as many pages as it has.
+  onImport?: () => void;
   // How much room is left on the last sheet -- or nothing at all, when the
   // screen asking is one that does not talk about paper (📖).
   job: PaperJob | null;
@@ -4548,6 +4821,13 @@ function AddSection({ job, print, positioned = false, cover = true, onPick, onCl
       <Button variant="quiet" className="makenew justify-start" onClick={() => onPick('blank')}>
         白紙（自分で作る）
       </Button>
+      {onImport && (
+        <Button variant="quiet" className="fromfile justify-start" onClick={onImport}>
+          <FileGlyph />
+          ファイルから取り込む
+          <em className="not-italic text-muted">画像・PDF</em>
+        </Button>
+      )}
       <span className="text-[13px] leading-snug text-muted">
         {positioned
           ? '押した1ページに入ります。カレンダーは何ページにもなるので、「並びを整える」の「＋ 足す」から入れてください'
@@ -4749,8 +5029,9 @@ function Thumb({ layout, size, side = 0, box = { w: 34, h: 46 }, ring = false, l
 
 function PartSheet({
   target, book, layout, setLayout, inline, onClose, onRemove, onRemoveSpanning, onLoad, onSave,
-  size, onExport, print, setPrint, onAddSection, setBook, say, nth,
+  size, onExport, print, setPrint, onAddSection, setBook, say, nth, onImport,
 }: {
+  onImport: () => void;
   target: Exclude<SheetTarget, null>;
   // Which sheet of the run is on screen: a per-page photo belongs to it.
   nth: number;
@@ -4810,6 +5091,7 @@ function PartSheet({
     : target === 'paper' ? '用紙'
     : target === 'background' ? '紙の背景'
     : target === 'look' ? '書体と色'
+    : target === 'import' ? '取り込んだリフィル'
     : target === 'spanning' ? '見開きマンスリー'
     : kind ? PART_LABEL[kind] : 'パーツ';
 
@@ -4821,6 +5103,7 @@ function PartSheet({
         )}
 
         {target === 'look' && <LookSheet layout={layout} setLayout={setLayout} />}
+        {target === 'import' && layout.imported && <ImportedSheet layout={layout} setLayout={setLayout} size={size} />}
 
         {target === 'save' && (
           <SaveSheet book={book} size={size} grain={foldOf(layout, size)?.grain} onSave={onSave} />
@@ -4877,7 +5160,7 @@ function PartSheet({
                 A cover has no form to choose -- it is one page whatever the
                 book is -- so it gets no cards rather than cards that would
                 lie about what they change. */}
-            {!layout.cover && !layout.backCover && (
+            {!layout.cover && !layout.backCover && !layout.imported && (
               <FormCards
                 size={layout.size}
                 spread={layout.spread}
@@ -4968,6 +5251,7 @@ function PartSheet({
               <AddSection
                 job={job} print={print}
                 onPick={kind => { setPickHere(false); onAddSection(kind); }}
+                onImport={() => { setPickHere(false); onImport(); }}
                 onClose={() => setPickHere(false)}
               />
             )}

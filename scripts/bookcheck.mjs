@@ -202,7 +202,7 @@ check(
 );
 await page.getByRole('button', { name: '保存する' }).click();
 await page.waitForTimeout(300);
-await page.getByRole('button', { name: '読み込み' }).click();
+await page.getByRole('button', { name: '保存したものを開く' }).click();
 await page.locator('.sheet li').first().waitFor();
 check(
   (await flat('.sheet li')).includes('表紙 → マンスリー'),
