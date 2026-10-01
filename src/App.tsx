@@ -491,6 +491,27 @@ function placeImported(sections: Layout[], made: Layout[], base: Layout, sideOfF
   return { sections: put(true), padded: true };
 }
 
+// The logo's mark. Three rings where it is shown at a size that can hold
+// them; the browser tab (public/favicon.svg) is drawn with two, because at
+// 16px three bars run together into one.
+function LogoMark({ className = '' }: { className?: string }) {
+  const navy = '#1A3A6B';
+  const ys = [29.76, 62, 94.24];
+  return (
+    <svg viewBox="-4 -4 220 132" className={className} role="img" aria-label="RingCraftLab">
+      <rect x={0} y={0} width={100} height={124} rx={6} fill="#1D73BE" />
+      <rect x={112} y={0} width={100} height={124} rx={6} fill="#FBD212" />
+      {ys.map(y => (
+        <g key={y}>
+          <circle cx={86} cy={y} r={7.02} fill={navy} opacity={0.35} />
+          <circle cx={126} cy={y} r={7.02} fill={navy} opacity={0.35} />
+          <line x1={86} y1={y} x2={126} y2={y} stroke={navy} strokeWidth={9} strokeLinecap="round" />
+        </g>
+      ))}
+    </svg>
+  );
+}
+
 // The size a file was made for, when it is one of ours: an A5 PDF is an A5
 // refill. Within a millimetre, because a PDF's page size is in points.
 function sizeOfFile(read: ImportRead): RefillSize | null {
@@ -1097,14 +1118,13 @@ function SizeScreen({ selected, onPick, onImport }: { selected: RefillSize; onPi
   const [chosen, setChosen] = useState<RefillSize>(selected);
   return (
     <div className={`sizescreen ${PICK_SCREEN}`}>
-      <div className="relative text-[14px] font-bold tracking-[0.04em] text-muted">
-        RingCraftLab
-        {/* The one decoration in the app: two squares, one filled yellow and
-            one drawn in blue, overlapping. Only here, before anything is made. */}
-        <span aria-hidden="true" className="absolute right-0 top-0 block size-[52px]">
-          <i className="absolute left-0 top-3 size-7 bg-hi" />
-          <i className="absolute left-4 top-0 size-8 border-[1.4px] border-act" />
-        </span>
+      {/* The mark: a spread in the app's blue and yellow, held by rings seen
+          from straight above -- upright, so short rigid bars from hole to
+          hole rather than loops lying on the paper. Only here, before
+          anything is made. */}
+      <div className="brand flex items-center gap-2.5 text-[13px] font-semibold tracking-[0.22em] text-label">
+        <LogoMark className="h-[30px] w-auto" />
+        RING CRAFT LAB
       </div>
       <div>
         <h1 className="font-serif text-[22px] font-semibold">手帳のサイズを選ぶ</h1>
