@@ -1417,7 +1417,7 @@ function EdgeNote({ size, count, sheet, paper }: {
     <p className="edge-note m-0 mb-[13px] text-[13px] text-muted">
       <span className="font-semibold text-label">{tight.join('と')}は紙の端まで使います。</span>
       お使いのプリンタの余白が{onEdge.toFixed(onEdge < 4 ? 2 : 1)}mmより広いと、
-      {tight.includes('左右') ? '穴ガイドの外側' : '中身の外周'}がそのぶん欠けます
+      {tight.includes('左右') ? '穴の目印の外側' : '中身のふち'}がそのぶん欠けます
     </p>
   );
 }
@@ -1544,7 +1544,7 @@ function ContentsScreen({ book, setBook, print, at, nth, onOpen, onBack }: {
         </span>
       </header>
       <h1 className="m-0 mb-0.5 text-[20px]">
-        中身
+        ページの並び
         <span className="ml-2 align-middle text-[13px] font-normal text-muted">
           全{pages.length}ページ
         </span>
@@ -1638,9 +1638,9 @@ function ContentsScreen({ book, setBook, print, at, nth, onOpen, onBack }: {
           three screens away -- and so is the shortening. */}
       <p className="fill-note m-0 mt-auto pt-2 text-[13px] text-muted">
         {print.impose
-          ? `${PAPERS[print.paper].label} ${job.sheets}枚・この束で${job.used}${job.unit}` +
+          ? `${PAPERS[print.paper].label} ${job.sheets}枚・ぜんぶで${job.used}${job.unit}` +
             (job.spare > 0 ? `・最後の紙にあと${job.spare}${job.unit}ぶん` : '・あきはありません')
-          : `原寸 ${job.used}${job.unit}`}
+          : `1枚ずつ ${job.used}${job.unit}`}
       </p>
       {trim && (
         <span className="trim flex flex-wrap items-center gap-x-2 gap-y-1 pt-0.5">
@@ -1705,17 +1705,17 @@ function ContentsScreen({ book, setBook, print, at, nth, onOpen, onBack }: {
               ↓ 後ろへ
             </Button>
           </span>
-          <Button variant="quiet" className="open" onClick={() => onOpen(picked)}>中身を編集する</Button>
+          <Button variant="quiet" className="open" onClick={() => onOpen(picked)}>編集する</Button>
           {book.sections.length > 1 && (
             <Button variant="quiet" className="dropsec" onClick={() => { setAsk(picked); setPicked(null); }}>
-              この中身を外す
+              このリフィルを外す
             </Button>
           )}
         </Modal>
       )}
       {ask !== null && (
         <Dialog
-          message={`「${sectionLabel(book.sections[ask])}」を中身から外しますか`}
+          message={`「${sectionLabel(book.sections[ask])}」を外しますか`}
           confirmLabel="外す"
           onConfirm={() => { drop(ask); setAsk(null); }}
           onCancel={() => setAsk(null)}
@@ -2111,7 +2111,7 @@ function BookView({ book, at, nth, print, onClose, onEdit, onAddAt }: {
             style={sheet}
             disabled={!live}
             onClick={() => { if (!dragged.current) setAddAt(leaf.before); }}
-            aria-label="このページに中身を足す"
+            aria-label="このページに足す"
           >
             {page && <PageSvg page={page} scale={scale} showGuides />}
             <span className="pointer-events-none absolute inset-0">
@@ -2707,7 +2707,7 @@ function CanvasScreen({
         // where the paper bends. Either a panel is free or it is not.
         const folded = foldOf(prev, size);
         say(folded && prev.surface.placed.length >= foldMaxParts(folded.panels)
-          ? `1面に2つまでです。外してから置いてください`
+          ? `1ページに2つまでです。外してから置いてください`
           : `${what}を置く広さがありません。つまみで空けてください`);
         return prev;
       }
@@ -2900,7 +2900,7 @@ function CanvasScreen({
     setSheet(null);
     say(opts.impose
       ? `${PAPERS[opts.paper].label} ${sheets.length}枚を書き出しました`
-      : `原寸 ${sheets.length}枚を書き出しました`);
+      : `${sheets.length}枚を書き出しました`);
   };
 
   // A region crossing the gutter shows up on both pages, so one region can be
@@ -3402,7 +3402,7 @@ function CanvasScreen({
                   because the paper is what anyone is looking at. */}
               {layout.cover || layout.backCover
                 ? <span className="coverhint">{layout.cover ? '表紙' : '裏表紙'}（1ページ）<br />写真や背景を置けます</span>
-                : <>スタンプをドラッグして<br />ここに配置</>}
+                : <>下のパーツをドラッグして<br />ここに置けます</>}
             </div>
           )}
 
@@ -3846,7 +3846,7 @@ function LookSheet({ layout, setLayout }: {
 
   return (
     <>
-      <Field label="日付の言葉">
+      <Field label="月と曜日の書き方">
         <Segmented
           options={(['ja', 'mix', 'en'] as DateWords[]).map(v => ({ v, label: WORD_SAMPLE[v] }))}
           value={words}
@@ -3916,7 +3916,7 @@ function LookSheet({ layout, setLayout }: {
         disabled={plain}
         onClick={() => setLayout(l => ({ ...l, words: undefined, hideRokuyo: undefined, tone: undefined, ruleWeight: undefined }))}
       >
-        体裁を元に戻す
+        はじめの書体と色に戻す
       </Button>
     </>
   );
@@ -3956,7 +3956,7 @@ function BackgroundSheet({ layout, setLayout, size }: {
       {/* Six choices are one choice, not two: they are laid out on two rows
           because six will not fit across a phone, and exactly one of the six
           is ever lit. The rows do not each carry their own "none". */}
-      <Field label="敷くもの">
+      <Field label="背景の種類">
         <div className="flex flex-col gap-2">
           <Segmented
             options={[{ v: 'none', label: 'なし' }, { v: 'tint', label: '色' }, { v: 'image', label: '画像' }]}
@@ -4242,7 +4242,7 @@ function BindingRail({ sections, at, size, print, job, onGo, onAddCover, onFillB
           <span className="text-[14px] leading-none">▭</span>
           {print.impose
             ? `${PAPERS[print.paper].label} ${job.sheets}枚`
-            : `${PAPERS[print.paper].label} 原寸`}
+            : `${PAPERS[print.paper].label}に1枚ずつ`}
           {print.impose && job.spare > 0 && (
             <em className="not-italic">（あと{job.spare}{job.unit}ぶん）</em>
           )}
@@ -4416,7 +4416,7 @@ function SaveSheet({ book, size, grain, onSave }: {
         />
       </Field>
       <p className="m-0 text-[13px] leading-snug text-muted">
-        束はまとめて保存されます。中身の順番も、用紙も、
+        表紙から裏表紙まで、まとめて保存されます。ページの順番も、用紙も、
         <strong className="font-semibold text-label">そのまま開き直せます</strong>
       </p>
       <Button variant="cta" onClick={() => onSave(name.trim() || suggestName(book, size, grain))}>
@@ -4493,7 +4493,7 @@ function AddSection({ job, print, positioned = false, cover = true, onPick, onCl
   onClose: () => void;
 }) {
   return (
-    <Modal title={positioned ? 'このページに入れる' : '中身を足す'} onClose={onClose}>
+    <Modal title={positioned ? 'このページに入れる' : 'ページを足す'} onClose={onClose}>
       {job && (
         <p className="picker m-0 text-[13px] text-muted">
           {job.spare > 0
@@ -4531,8 +4531,8 @@ function AddSection({ job, print, positioned = false, cover = true, onPick, onCl
       </Button>
       <span className="text-[13px] leading-snug text-muted">
         {positioned
-          ? '押した1ページに入ります。日付のものは何ページにもなるので、一覧の「＋ 足す」から'
-          : '足したものは末尾に入ります（表紙だけ先頭）。順番は中身の ↑↓ で変えられます'}
+          ? '押した1ページに入ります。カレンダーは何ページにもなるので、「並びを整える」の「＋ 足す」から入れてください'
+          : '足したものは最後（裏表紙の前）に入ります。表紙だけは先頭です。順番は ↑↓ で変えられます'}
       </span>
     </Modal>
   );
@@ -4622,7 +4622,7 @@ function SpareSlots({ plan, tile, first, count, mirror, scalePercent, empty, onP
                 : 'onpaper border border-transparent hover:border-accent hover:bg-accent-soft/40'
             }`}
             style={placeStyle(plan, tile, i, mirror, scalePercent)}
-            aria-label={empty ? 'ここにリフィルを追加する' : 'この面について'}
+            aria-label={empty ? 'ここにリフィルを足す' : 'このページについて'}
             onClick={e => { e.stopPropagation(); onPress(i); }}
           >{empty ? '＋' : ''}</button>
         );
@@ -4647,7 +4647,7 @@ function PageSheet({ book, at, nth, onShorten, onDrop, onClose }: {
   return (
     <Modal title={sectionLabel(sec)} onClose={onClose}>
       <p className="pagewhat m-0 text-[13px] text-muted">
-        この面は「{sectionLabel(sec)}」の{nth + 1}枚目・{sheetLabel(sec, nth)}
+        このページは「{sectionLabel(sec)}」の{nth + 1}枚目・{sheetLabel(sec, nth)}
         （ぜんぶで{runText(sec)}）
       </p>
       {cut ? (
@@ -4661,7 +4661,7 @@ function PageSheet({ book, at, nth, onShorten, onDrop, onClose }: {
       )}
       {book.sections.length > 1 && (
         <Button variant="quiet" className="dropsec" onClick={() => onDrop(at)}>
-          この中身を外す
+          このリフィルを外す
         </Button>
       )}
       <span className="text-[13px] leading-snug text-muted">
@@ -4766,7 +4766,7 @@ function PartSheet({
   const mine = usePaperJob([layout], size, print);
   const runPaper = (
     <p className="run-paper m-0 text-[13px] text-muted">
-      この区切りで{PAPERS[print.paper].label}
+      このリフィルだけで{PAPERS[print.paper].label}
       <strong className="mx-0.5 font-semibold text-muted">{mine.sheets}枚</strong>
       （リフィル{mine.used}{mine.unit}）
     </p>
@@ -4790,7 +4790,7 @@ function PartSheet({
     : target === 'sheet' ? 'リフィル'
     : target === 'paper' ? '用紙'
     : target === 'background' ? '紙の背景'
-    : target === 'look' ? '体裁'
+    : target === 'look' ? '書体と色'
     : target === 'spanning' ? '見開きマンスリー'
     : kind ? PART_LABEL[kind] : 'パーツ';
 
@@ -4893,7 +4893,7 @@ function PartSheet({
           <>
             <Choice
               label="刷り方"
-              options={[{ v: 'tile', label: '用紙にまとめる' }, { v: 'exact', label: '原寸のまま' }]}
+              options={[{ v: 'tile', label: '用紙にまとめる' }, { v: 'exact', label: '1枚ずつ' }]}
               value={print.impose ? 'tile' : 'exact'}
               onPick={v => setPrint(p => ({ ...p, impose: v === 'tile' }))}
             />
@@ -4907,7 +4907,7 @@ function PartSheet({
                 />
                 <p className="fill-note m-0 text-[13px] text-muted">
                   {PAPERS[print.paper].label} 1枚にリフィル{perPaper}{job.unit}・
-                  この束で{job.used}{job.unit}（紙{job.sheets}枚）
+                  ぜんぶで{job.used}{job.unit}（紙{job.sheets}枚）
                   {job.spare > 0
                     ? `・最後の紙にあと${job.spare}${job.unit}ぶん`
                     : '・あきはありません'}
@@ -4915,7 +4915,7 @@ function PartSheet({
               </>
             ) : (
               <p className="m-0 text-[13px] leading-snug text-muted">
-                原寸のまま刷る設定です。用紙にまとめると、1枚の紙に何枚ぶんも
+                1枚の紙に1枚ずつ刷る設定です。用紙にまとめると、1枚の紙に何枚ぶんも
                 並べて刷れます
               </p>
             )}
@@ -4979,7 +4979,7 @@ function PartSheet({
 
             <Choice
               label="刷り方"
-              options={[{ v: 'tile', label: '用紙にまとめる' }, { v: 'exact', label: '原寸のまま' }]}
+              options={[{ v: 'tile', label: '用紙にまとめる' }, { v: 'exact', label: '1枚ずつ' }]}
               value={print.impose ? 'tile' : 'exact'}
               onPick={v => setPrint(p => ({ ...p, impose: v === 'tile' }))}
             />
@@ -5021,7 +5021,7 @@ function PartSheet({
             <span className="duplexpick block">
               <Choice
                 label="印刷"
-                options={[{ v: 'both', label: '両面' }, { v: 'one', label: '片面' }]}
+                options={[{ v: 'both', label: '両面印刷' }, { v: 'one', label: '片面印刷' }]}
                 value={print.duplex ? 'both' : 'one'}
                 onPick={v => setPrint(p => ({ ...p, duplex: v === 'both' }))}
               />
@@ -5042,7 +5042,7 @@ function PartSheet({
             )}
             {print.duplex && (
               <Choice
-                label="裏面（使わない面）"
+                label="余った裏面に刷るもの"
                 options={[
                   { v: 'blank', label: '白紙' },
                   { v: 'grid', label: '方眼' },
@@ -5054,7 +5054,7 @@ function PartSheet({
             )}
 
             <Choice
-              label="穴ガイド"
+              label="穴の位置の目印"
               options={[{ v: 'on', label: '印刷する' }, { v: 'off', label: '印刷しない' }]}
               value={print.punchGuides ? 'on' : 'off'}
               onPick={v => setPrint(p => ({ ...p, punchGuides: v === 'on' }))}
@@ -5077,7 +5077,7 @@ function PartSheet({
             )}
 
             {print.impose && (
-              <Field label="倍率補正（刷って穴位置がずれるとき）">
+              <Field label="大きさの微調整（刷ると穴の位置がずれるとき）">
                 <Stepper
                   value={`${print.scalePercent.toFixed(1)}%`}
                   onStep={n => setPrint(p => ({
@@ -5101,7 +5101,7 @@ function PartSheet({
         {layout.spread && (target === 'spanning' || kind === 'monthly')
           && (!layout.spanning || split) && (
           <Choice
-            label="マンスリーの持たせ方"
+            label="マンスリーの載せ方"
             options={[
               { v: 'span', label: '見開きで1ヶ月' },
               { v: 'page', label: '1ページに1ヶ月' },
@@ -5452,8 +5452,7 @@ function PrintPreview({ layout, size, print, also, job, onPlus, onPage }: {
       </p>
       {print.duplex && layout.spread && hasDatedPart(layout) && (
         <p className="m-0 text-[13px] leading-[1.7] text-muted">
-          見開きは左ページが必ず裏面に来るので、最初の表と最後の裏だけが余ります。
-          そのまま両面で刷って、切り取って順に重ねてください。
+          両面印刷で刷って、切り取ってから番号の順に重ねてください。
         </p>
       )}
 
