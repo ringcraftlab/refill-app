@@ -85,7 +85,9 @@ export const PART_FIT: Record<PartKind, PartFit> = {
   weekhoriz: { minWMm: 40, minHMm: 44, prefer: 'any' },
   // A column per day of the month, so it needs the width a habit grid does.
   gantt: { minWMm: 76, minHMm: 26, prefer: 'wide' },
-  habit:   { minWMm: 76, minHMm: 18, prefer: 'wide' },
+  // On a page too narrow for that it turns: the days run down the side and
+  // the habits across the top, which is how a one-page tracker is printed.
+  habit:   { minWMm: 76, minHMm: 18, prefer: 'wide', alt: [{ minWMm: 34, minHMm: 72 }] },
   // One card for one ink: a number, a rule for its name, a bottle to paint in
   // and rules to write about it on. Below this the bottle is a smudge and the
   // name has nowhere to go.
