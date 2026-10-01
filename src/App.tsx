@@ -204,21 +204,25 @@ function StampIcon({ kind }: { kind: PartKind }) {
   );
 }
 
-const TRAY: { kind: PartKind; label: string }[] = [
-  { kind: 'monthly', label: 'マンスリー' },
-  { kind: 'daylist', label: '日付リスト' },
-  { kind: 'weekvert', label: 'バーチカル' },
-  { kind: 'weekhoriz', label: 'ウィークリー' },
-  { kind: 'gantt', label: 'ガント' },
-  { kind: 'habit', label: 'ハビット' },
-  { kind: 'todo', label: 'TODO' },
-  { kind: 'goal', label: '目標' },
-  { kind: 'budget', label: '家計' },
-  { kind: 'grid', label: '方眼' },
-  { kind: 'lines', label: '罫線' },
-  { kind: 'memo', label: 'メモ' },
-  { kind: 'photo', label: '写真' },
-  { kind: 'swatch', label: 'インク見本' },
+// In three runs, each under a quiet heading: the parts that carry dates, the
+// places to write, and the rest. Tabs for these would be one more press for
+// fourteen parts; an order with names in it costs nothing.
+const TRAY_GROUP = { dated: '日付', write: '書く欄', other: 'そのほか' } as const;
+const TRAY: { kind: PartKind; label: string; group: keyof typeof TRAY_GROUP }[] = [
+  { kind: 'monthly', label: 'マンスリー', group: 'dated' },
+  { kind: 'daylist', label: '日付リスト', group: 'dated' },
+  { kind: 'weekvert', label: 'バーチカル', group: 'dated' },
+  { kind: 'weekhoriz', label: 'ウィークリー', group: 'dated' },
+  { kind: 'gantt', label: 'ガント', group: 'dated' },
+  { kind: 'habit', label: 'ハビット', group: 'dated' },
+  { kind: 'todo', label: 'TODO', group: 'write' },
+  { kind: 'goal', label: '目標', group: 'write' },
+  { kind: 'memo', label: 'メモ', group: 'write' },
+  { kind: 'lines', label: '罫線', group: 'write' },
+  { kind: 'grid', label: '方眼', group: 'write' },
+  { kind: 'budget', label: '家計', group: 'write' },
+  { kind: 'photo', label: '写真', group: 'other' },
+  { kind: 'swatch', label: 'インク見本', group: 'other' },
 ];
 
 const TAUGHT_KEY = 'ringcraft.dividerTaught';
@@ -2546,6 +2550,10 @@ function CanvasScreen({
   // chosen: several are chosen one tap at a time and put down together.
   const [dock, setDock] = useState<'parts' | 'paper'>('parts');
   const [dockShut, setDockShut] = useState(false);
+  // What belongs to the whole book rather than to the run being edited --
+  // its order, its paper, opening and saving it -- in one place of its own,
+  // so the settings tab only holds what it says it holds.
+  const [bookOpen, setBookOpen] = useState(false);
   // The tray is what this page can take. A cover is one page, so nothing that
   // runs on dates belongs in it -- and offering a part only to refuse it after
   // the drag is worse than not offering it: turning the pages is meant to be
@@ -3247,6 +3255,11 @@ function CanvasScreen({
   // Which face of the phone's sheet is showing, if it is open at all. On a
   // wide screen everything is showing: the column has the room.
   const partsShown = wide || (dock === 'parts' && !dockShut);
+  // The settings are the run's that is picked in the row above the paper, so
+  // the tab is named after it: 「見開きの設定」, 「表紙の設定」.
+  const scopeName = layout.cover ? '表紙' : layout.backCover ? '裏表紙'
+    : book.sections.filter(sec => !sec.cover && !sec.backCover).length === 1
+      ? formLabel(layout, foldNow?.grain) : sectionLabel(layout);
   const paperShown = wide || (dock === 'paper' && !dockShut);
   const railEl = (
     <BindingRail
@@ -3260,6 +3273,7 @@ function CanvasScreen({
           onFillBack={addBackCover}
           onList={onList}
           onPaper={() => setSheet('paper')}
+          onBook={() => setBookOpen(true)}
           compact={!wide}
         />
   );
@@ -3676,14 +3690,14 @@ function CanvasScreen({
           the same blocks in the same order either way. */}
       {/* On a phone the sheet is one height whichever tab is showing, so
           changing tabs never moves the paper above it. */}
-      <aside className={`flex min-h-0 shrink-0 flex-col overflow-hidden ${!wide && !dockShut ? 'h-[222px]' : ''} lg:w-[340px] lg:overflow-y-auto lg:border-l lg:border-line lg:bg-paper`}>
+      <aside className={`flex min-h-0 shrink-0 flex-col overflow-hidden ${!wide && !dockShut ? 'h-[198px]' : ''} lg:w-[340px] lg:overflow-y-auto lg:border-l lg:border-line lg:bg-paper`}>
       {wide && <div className="asidehead border-b border-line pb-2">{headerEl}{pagerEl}{alsoEl}</div>}
       {wide && <div className="border-b border-line pb-2 pt-2">{railEl}</div>}
       {!wide && (
         <div className="dock shrink-0 rounded-t-2xl border-t border-line bg-paper shadow-[0_-2px_10px_rgba(0,0,0,0.06)]">
           <DockGrip shut={dockShut} onClick={() => setDockShut(v => !v)} />
           <div className="flex items-end gap-1 px-3" role="tablist">
-            {([['parts', 'パーツ'], ['paper', '設定']] as const).map(([k, name]) => (
+            {([['parts', 'パーツ'], ['paper', `${scopeName}の設定`]] as const).map(([k, name]) => (
               <DockTab key={k} on={dock === k && !dockShut} onClick={() => { setDock(k); setDockShut(false); }}>
                 {name}
               </DockTab>
@@ -3721,15 +3735,26 @@ function CanvasScreen({
           // the button to choose a picture was below the fold.
           // Two rows on a phone, scrolled sideways: the same height as the
           // settings, so the sheet does not change size between its tabs.
-          className={`grid auto-cols-[84px] grid-flow-col grid-rows-2 gap-2 overflow-x-auto px-3 pb-2.5 pt-2 lg:grid-flow-row lg:auto-cols-auto lg:grid-rows-none lg:gap-2.5 lg:grid-cols-3 lg:overflow-x-visible lg:px-4 lg:pt-4 ${
+          className={`grid auto-cols-max grid-flow-col grid-rows-2 gap-2 overflow-x-auto px-3 pb-2.5 pt-2 lg:grid-flow-row lg:auto-cols-auto lg:grid-rows-none lg:gap-2.5 lg:grid-cols-3 lg:overflow-x-visible lg:px-4 lg:pt-4 ${
             sheetEl ? 'lg:max-h-[34vh] lg:overflow-y-auto' : ''
           }`}
         >
-        {trayParts.map(t => {
+        {trayParts.map((t, n) => {
           const idx = traySelected.indexOf(t.kind);
+          const head = n === 0 || trayParts[n - 1].group !== t.group;
           return (
+            <Fragment key={t.kind}>
+            {head && (
+              // Down the side of the two rows on a phone; across the column
+              // on a desk.
+              <span className={`trayhead flex items-center text-[12px] text-muted ${wide
+                ? 'col-span-3 gap-2 pt-1 first:pt-0'
+                : 'row-span-2 justify-center [writing-mode:vertical-rl] tracking-[0.15em]'}`}>
+                {TRAY_GROUP[t.group]}
+                {wide && <i className="h-px flex-1 bg-line" />}
+              </span>
+            )}
             <button
-              key={t.kind}
               // `pan-x`, not `none`: sideways belongs to the tray, every other
               // direction belongs to the part being lifted out of it.
               // 84, not 68: 「ウィークリー」 measures 78px at 13px, and the
@@ -3756,6 +3781,7 @@ function CanvasScreen({
               <StampIcon kind={t.kind} />
               <span>{t.label}</span>
             </button>
+            </Fragment>
           );
         })}
         </div>
@@ -3844,14 +3870,9 @@ function CanvasScreen({
           <Button variant="chip" className="magnify" onClick={() => setZoomed(true)} aria-label="大きく見る">
             <span className="text-[14px] leading-none">⤢</span>大きく
           </Button>
-          <Button variant="chip" className="paper ml-auto min-w-0 overflow-hidden whitespace-nowrap" style={{ flexShrink: 1 }} onClick={() => setSheet('paper')}>
-            <span className="text-[14px] leading-none">▭</span>
-            {print.impose ? `${PAPERS[print.paper].label} ${job.sheets}枚` : `${PAPERS[print.paper].label}に1枚ずつ`}
-            {print.impose && job.spare > 0 && <span className="min-w-0 truncate text-muted">（あと{job.spare}{job.unit}ぶん）</span>}
-          </Button>
         </div>
       )}
-      <div className={`flex shrink-0 gap-2 bg-paper px-3 pb-3.5 pt-2 ${paperShown ? '' : 'hidden'} lg:sticky lg:bottom-0 lg:z-10 lg:mt-auto lg:border-t lg:border-line lg:px-4 lg:pt-3`}>
+      <div className={`flex shrink-0 gap-2 bg-paper px-3 pb-3.5 pt-2 ${wide ? '' : 'hidden'} lg:sticky lg:bottom-0 lg:z-10 lg:mt-auto lg:border-t lg:border-line lg:px-4 lg:pt-3`}>
         {/* 「読み込み」 was this and is now also what taking a file in sounds
             like; this one opens what was saved here. */}
         <Button onClick={() => setSheet('load')} aria-label="保存したものを開く">開く</Button>
@@ -3874,6 +3895,27 @@ function CanvasScreen({
       )}
 
       {toast && <Toast>{toast}</Toast>}
+
+      {bookOpen && (
+        <Modal title="この1冊" onClose={() => setBookOpen(false)}>
+          <div className="bookmenu-body flex flex-col gap-2">
+            <Button variant="quiet" className="torail-list flex items-center gap-2 text-ink" onClick={() => { setBookOpen(false); onList(); }}>
+              <ListGlyph />並びを整える<span className="ml-auto text-muted">{paging ? `全${paging.of}ページ` : ''}</span>
+            </Button>
+            <Button variant="quiet" className="paper flex items-center gap-2 text-ink" onClick={() => { setBookOpen(false); setSheet('paper'); }}>
+              <span className="text-[14px] leading-none">▭</span>用紙
+              <span className="ml-auto text-muted">
+                {print.impose ? `${PAPERS[print.paper].label} ${job.sheets}枚` : `${PAPERS[print.paper].label}に1枚ずつ`}
+                {print.impose && job.spare > 0 && `（あと${job.spare}${job.unit}ぶん）`}
+              </span>
+            </Button>
+            <div className="flex gap-2">
+              <Button onClick={() => { setBookOpen(false); setSheet('load'); }} aria-label="保存したものを開く">開く</Button>
+              <Button onClick={() => { setBookOpen(false); setSheet('save'); }}>保存</Button>
+            </div>
+          </div>
+        </Modal>
+      )}
 
       {confirm && (
         <Dialog
@@ -4381,7 +4423,7 @@ function ListGlyph() {
 // edge of the paper, which also put pages in the middle of the book; putting
 // something between two months is a question about the order of the whole
 // book, and that is what 並びを整える answers.
-function BindingRail({ sections, at, size, print, job, onGo, onAddCover, onFillBack, onList, onPaper, compact = false }: {
+function BindingRail({ sections, at, size, print, job, onGo, onAddCover, onFillBack, onList, onPaper, onBook, compact = false }: {
   sections: Layout[];
   at: number;
   size: SizeSpec;
@@ -4392,6 +4434,7 @@ function BindingRail({ sections, at, size, print, job, onGo, onAddCover, onFillB
   onFillBack: () => void;
   onList: () => void;
   onPaper: () => void;
+  onBook?: () => void;
   // On a phone every pixel of height the rail takes comes off the paper, so
   // the tiles lie on their side -- a small picture with the words beside it
   // -- and the paper count moves up into the heading's line.
@@ -4526,10 +4569,11 @@ function BindingRail({ sections, at, size, print, job, onGo, onAddCover, onFillB
   );
   if (compact) {
     return (
-      <div className="rail flex shrink-0 items-center gap-1.5 overflow-x-auto px-3 pb-1 pt-0.5">
-        {tiles}
-        <Button variant="chip" className="torail-list ml-auto" onClick={onList} aria-label="並びを整える">
-          <ListGlyph />
+      <div className="rail flex shrink-0 items-center gap-1.5 px-3 pb-1 pt-0.5">
+        {/* The runs scroll; the way into the whole book stays put at the end. */}
+        <div className="flex min-w-0 flex-1 gap-1.5 overflow-x-auto">{tiles}</div>
+        <Button variant="chip" className="bookmenu" onClick={onBook ?? onList} aria-label="この1冊">
+          <ListGlyph />1冊
         </Button>
       </div>
     );
