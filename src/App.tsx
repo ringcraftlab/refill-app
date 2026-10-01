@@ -3907,20 +3907,17 @@ function LookSheet({ layout, setLayout }: {
         ))}
       </div>
 
-      <p className="m-0 text-[13px] leading-snug text-muted">
-        日曜と土曜の色は体裁では変わりません。日曜が赤いのは好みではなく決まりごとなので、
-        色みに合わせて変えると意味がなくなります
-      </p>
-
-      {!plain && (
-        <Button
-          variant="quiet"
-          className="self-start"
-          onClick={() => setLayout(l => ({ ...l, words: undefined, hideRokuyo: undefined, tone: undefined, ruleWeight: undefined }))}
-        >
-          体裁を元に戻す
-        </Button>
-      )}
+      {/* Always there, only unpressable while nothing has been changed: a
+          button that appeared with the first change made the sheet taller
+          under the finger, and everything in it jumped. */}
+      <Button
+        variant="quiet"
+        className="self-start disabled:opacity-40"
+        disabled={plain}
+        onClick={() => setLayout(l => ({ ...l, words: undefined, hideRokuyo: undefined, tone: undefined, ruleWeight: undefined }))}
+      >
+        体裁を元に戻す
+      </Button>
     </>
   );
 }
