@@ -35,6 +35,9 @@ const where = async () => {
   return '（不明）';
 };
 const settle = () => page.waitForTimeout(350);
+// On a phone the paper's settings are behind the sheet's 「この紙」 tab, and
+// the parts behind 「パーツ」. A wide screen shows both and has no tabs.
+const dockTab = async (name) => { const t = page.getByRole('tab', { name }); if (await t.count()) await t.click(); };
 
 const start = async () => {
   await page.goto(BASE);
@@ -98,6 +101,7 @@ for (const [name, sel] of [
   ['リフィル（サイズと形）', '.papernow'], ['期間', '.range'], ['用紙', '.paper'],
   ['背景', 'button:has-text("背景")'], ['体裁', '.look'],
 ]) {
+  if (sel !== '.papernow') await dockTab('この紙');
   await page.locator(sel).first().click();
   await settle();
   const opened = await page.locator('.scrim, .sheet').count() > 0;

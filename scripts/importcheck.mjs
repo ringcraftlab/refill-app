@@ -59,6 +59,9 @@ const choose = async (button, file) => {
   await page.waitForTimeout(300);
 };
 const flat = async sel => (await page.locator(sel).first().innerText()).replace(/\s+/g, ' ').trim();
+// On a phone the paper's settings are behind the sheet's 「この紙」 tab, and
+// the parts behind 「パーツ」. A wide screen shows both and has no tabs.
+const dockTab = async (name) => { const t = page.getByRole('tab', { name }); if (await t.count()) await t.click(); };
 
 // ── The size screen has no way in: a file is brought into a book, not where one starts.
 check(await page.locator('.sizescreen .fromfile').count() === 0, 'サイズ選択の画面には取り込みの入口を出さない');
@@ -93,6 +96,7 @@ check(await page.locator('.page image').count() >= 1, '紙に取り込んだ絵�
 check(await page.locator('.stamp:visible').count() === 0, '取り込んだページにはパーツを出さない');
 check((await flat('.rail')).includes('取り込んだリフィル'), '帯に「取り込んだリフィル」が並ぶ');
 check(pagesAfter >= pagesBefore + 1, `ページが増える（${pagesBefore} → ${pagesAfter}）`);
+await dockTab('この紙');
 check((await flat('.papersettings')).includes('いっぱいに広げる'), '選んだ入れ方が「この紙の設定」に出る');
 await page.locator('.importfit').click();
 await page.getByRole('button', { name: '全体を入れる' }).click();

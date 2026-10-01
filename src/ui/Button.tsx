@@ -10,6 +10,8 @@ import type { ButtonHTMLAttributes } from 'react';
 export type ButtonVariant =
   // The one accent button on a screen: "make this", "export".
   | 'cta'
+  // The same, sized to sit in the header row beside the title.
+  | 'ctaSmall'
   // The row along the bottom of the canvas.
   | 'action'
   | 'actionWide'
@@ -31,6 +33,7 @@ const VARIANT: Record<ButtonVariant, string> = {
   // Ink with white on it: the one button on a screen that is filled. No hue,
   // so it cannot be mistaken for the size's colour on the rings.
   cta: 'rounded-lg bg-act p-3.5 text-[16px] font-bold text-white',
+  ctaSmall: 'flex shrink-0 items-center rounded-lg bg-act px-3.5 py-2 text-[14px] font-bold text-white',
   action: 'flex-1 rounded-lg border border-line-strong bg-white py-3 text-[13px] font-semibold text-label',
   // Wider and borderless, so the export button reads as the end of the row.
   actionWide: 'flex-[1.3] rounded-lg bg-act py-3 text-[13px] font-semibold text-white',

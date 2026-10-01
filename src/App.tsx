@@ -34,9 +34,10 @@ import type { PaperId } from './lib/render/impose';
 import { PageSvg, SheetSvg } from './lib/render/svg';
 import { downloadPdf, sheetsToPdf } from './lib/render/pdf';
 import { deleteBook, listBooks, newId, saveBook, storeRevision } from './lib/storage';
-import { Button } from './ui/Button';
+import { Button, PRESS } from './ui/Button';
 import { Field, Segmented, Stepper } from './ui/Field';
 import { Dialog, Modal, Sheet, Toast } from './ui/Overlay';
+import { DockGrip, DockTab } from './ui/Dock';
 
 type Stage = 'size' | 'sides' | 'contents' | 'canvas' | 'book';
 // A rectangle on screen, in the page area's own pixels.
@@ -2539,6 +2540,12 @@ function CanvasScreen({
   }, [book.sections, at, nth]);
 
   const [traySelected, setTraySelected] = useState<PartKind[]>([]);
+  // On a phone the tools are one sheet under the paper with two faces -- the
+  // parts, and this paper's settings -- and it can be pulled down to its tabs
+  // so the paper has the screen. It does not pull itself down when a part is
+  // chosen: several are chosen one tap at a time and put down together.
+  const [dock, setDock] = useState<'parts' | 'paper'>('parts');
+  const [dockShut, setDockShut] = useState(false);
   // The tray is what this page can take. A cover is one page, so nothing that
   // runs on dates belongs in it -- and offering a part only to refuse it after
   // the drag is worse than not offering it: turning the pages is meant to be
@@ -3237,6 +3244,10 @@ function CanvasScreen({
   // book's order is read before the page. On a wide screen the paper has the
   // window's height to itself and the tools stand beside it, so the order of
   // the book stands there too, at the top of the column.
+  // Which face of the phone's sheet is showing, if it is open at all. On a
+  // wide screen everything is showing: the column has the room.
+  const partsShown = wide || (dock === 'parts' && !dockShut);
+  const paperShown = wide || (dock === 'paper' && !dockShut);
   const railEl = (
     <BindingRail
           sections={book.sections}
@@ -3331,6 +3342,12 @@ function CanvasScreen({
       {/* Below 360px even these give up their words: what they were pushing
           out of the title is worth more. The icons stay, and so do the
           labels a screen reader reads. */}
+      {!wide && (
+        <Button variant="ctaSmall" className="ml-auto" onClick={() => setSheet('print')} aria-label="PDF出力プレビュー">
+          PDF出力
+        </Button>
+      )}
+      {wide && <>
       <Button variant="chip" className="rotate ml-auto" onClick={turn} aria-label="リフィルを回転">
         <span className="text-[14px] leading-none">↻</span>
         <span className="hidden min-[360px]:inline">{turnLabel}</span>
@@ -3342,6 +3359,7 @@ function CanvasScreen({
             and ⤢ reads without its word. */}
         <span className="hidden min-[420px]:inline">大きく</span>
       </Button>
+      </>}
     </header>
   );
   const pagerEl = (
@@ -3624,7 +3642,9 @@ function CanvasScreen({
           is a design that never finished -- the drawing is supposed to say it
           (仕様4章). The other two are not explanations: they are what just
           happened. */}
-      {(teachDivider || traySelected.length > 0 || nothingPlaced) && (
+      {/* On a phone the sheet under the paper has a line for this beside its
+          tabs; down here it sat on top of the sheet. */}
+      {wide && (teachDivider || traySelected.length > 0 || nothingPlaced) && (
         <p className={`saying pointer-events-none absolute inset-x-0 bottom-1 m-0 px-3.5 text-center text-[13px] ${
           teachDivider || traySelected.length > 0 ? 'text-accent-text' : 'text-muted'
         }`}>
@@ -3657,17 +3677,37 @@ function CanvasScreen({
       <aside className="flex min-h-0 shrink-0 flex-col lg:w-[340px] lg:overflow-y-auto lg:border-l lg:border-line lg:bg-paper">
       {wide && <div className="asidehead border-b border-line pb-2">{headerEl}{pagerEl}{alsoEl}</div>}
       {wide && <div className="border-b border-line pb-2 pt-2">{railEl}</div>}
+      {!wide && (
+        <div className="dock shrink-0 rounded-t-2xl border-t border-line bg-paper shadow-[0_-2px_10px_rgba(0,0,0,0.06)]">
+          <DockGrip shut={dockShut} onClick={() => setDockShut(v => !v)} />
+          <div className="flex items-end gap-1 px-3" role="tablist">
+            {([['parts', 'パーツ'], ['paper', 'この紙']] as const).map(([k, name]) => (
+              <DockTab key={k} on={dock === k && !dockShut} onClick={() => { setDock(k); setDockShut(false); }}>
+                {name}
+              </DockTab>
+            ))}
+            <span className={`saying ml-auto min-w-0 self-center truncate pb-1 text-[13px] ${
+              teachDivider || traySelected.length > 0 ? 'text-accent-text' : 'text-muted'}`}>
+              {teachDivider
+                ? '仕切りをドラッグで広さが変わります'
+                : traySelected.length > 0
+                  ? `${traySelected.length}個選択中：紙をタップ`
+                  : dock === 'parts' && !dockShut && !layout.imported ? '選ぶ → 紙をタップ' : ''}
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* The row is wider than the screen, and until now nothing said so: it
           ran off the edge with no sign that there was more, and could not be
           swiped either. The arrow appears only on the side that has more to
           come, and goes when that side runs out. */}
-      {layout.imported && (
+      {layout.imported && partsShown && (
         <p className="importednote m-0 shrink-0 border-t border-line bg-paper px-4 py-3 text-[13px] leading-relaxed text-muted lg:border-t-0">
           取り込んだページにはパーツを置けません。メモなどは「並びを整える」から別のページとして足してください
         </p>
       )}
-      <div className={`relative shrink-0 border-t border-line bg-paper lg:border-t-0 ${layout.imported ? 'hidden' : ''}`}>
+      <div className={`relative shrink-0 bg-paper lg:border-t lg:border-line lg:border-t-0 ${layout.imported || !partsShown ? 'hidden' : ''}`}>
         <div
           ref={el => { trayRef.current = el; readTrayEdges(); }}
           onScroll={readTrayEdges}
@@ -3745,8 +3785,9 @@ function CanvasScreen({
           part of it is: its months, the ground under everything, its words
           and ink. Down here, together and named, rather than as chips over
           the paper -- above the paper there is only where you are. */}
-      <div className="papersettings shrink-0 bg-paper px-3 pt-1">
-        <div className="sect flex items-center gap-2 px-0.5 pb-1 text-[13px] text-muted">
+      <div className={`papersettings shrink-0 bg-paper px-3 pt-1 ${paperShown ? '' : 'hidden'}`}>
+        {/* On a phone the tab it sits behind already says this. */}
+        <div className={`sect items-center gap-2 px-0.5 pb-1 text-[13px] text-muted ${wide ? 'flex' : 'hidden'}`}>
           この紙の設定<i className="h-px flex-1 bg-line" />
         </div>
         {layout.imported ? (
@@ -3791,7 +3832,22 @@ function CanvasScreen({
         )}
       </div>
 
-      <div className="flex shrink-0 gap-2 bg-paper px-3 pb-3.5 pt-2 lg:sticky lg:bottom-0 lg:z-10 lg:mt-auto lg:border-t lg:border-line lg:px-4 lg:pt-3">
+      {!wide && paperShown && (
+        <div className="flex shrink-0 items-center gap-2 bg-paper px-3 pt-2">
+          <Button variant="chip" className="rotate" onClick={turn} aria-label="リフィルを回転">
+            <span className="text-[14px] leading-none">↻</span>{turnLabel}
+          </Button>
+          <Button variant="chip" className="magnify" onClick={() => setZoomed(true)} aria-label="大きく見る">
+            <span className="text-[14px] leading-none">⤢</span>大きく
+          </Button>
+          <Button variant="chip" className="paper ml-auto min-w-0 overflow-hidden whitespace-nowrap" style={{ flexShrink: 1 }} onClick={() => setSheet('paper')}>
+            <span className="text-[14px] leading-none">▭</span>
+            {print.impose ? `${PAPERS[print.paper].label} ${job.sheets}枚` : `${PAPERS[print.paper].label}に1枚ずつ`}
+            {print.impose && job.spare > 0 && <span className="min-w-0 truncate text-muted">（あと{job.spare}{job.unit}ぶん）</span>}
+          </Button>
+        </div>
+      )}
+      <div className={`flex shrink-0 gap-2 bg-paper px-3 pb-3.5 pt-2 ${paperShown ? '' : 'hidden'} lg:sticky lg:bottom-0 lg:z-10 lg:mt-auto lg:border-t lg:border-line lg:px-4 lg:pt-3`}>
         {/* 「読み込み」 was this and is now also what taking a file in sounds
             like; this one opens what was saved here. */}
         <Button onClick={() => setSheet('load')} aria-label="保存したものを開く">開く</Button>
@@ -3800,7 +3856,7 @@ function CanvasScreen({
             and putting several on one sheet of paper means reading that list
             and picking. */}
         <Button onClick={() => setSheet('save')}>保存</Button>
-        <Button variant="actionWide" onClick={() => setSheet('print')}>PDF出力プレビュー</Button>
+        {wide && <Button variant="actionWide" onClick={() => setSheet('print')}>PDF出力プレビュー</Button>}
       </div>
       </aside>
 
@@ -4388,7 +4444,27 @@ function BindingRail({ sections, at, size, print, job, onGo, onAddCover, onFillB
     </button>
   );
   const tile = (key: string, on: boolean, picture: ReactNode, name: ReactNode, pn: string,
-    onClick: () => void, extra: string, label?: string, disabled = false) => (
+    onClick: () => void, extra: string, label?: string, disabled = false) => compact ? (
+    // On a phone a tab: the words and the pages, no picture. The picture is
+    // what made the rail tall, and the paper right under it is the picture.
+    <button
+      key={key}
+      disabled={disabled}
+      className={`railtile relative flex shrink-0 items-baseline gap-1 whitespace-nowrap rounded-lg border px-2.5 py-[7px] text-[13px] font-semibold ${PRESS} ${
+        on ? 'on border-line-strong bg-white shadow-[inset_0_-3px_0_var(--color-hi)]'
+          : extra.includes('addbefore') || extra.includes('fillback') && !disabled
+            ? 'border-dashed border-act text-act' : 'border-transparent bg-accent-soft'} ${
+        disabled ? 'text-faint' : ''} ${extra}`}
+      onClick={onClick}
+      aria-label={label}
+      aria-current={on ? 'page' : undefined}
+    >
+      {(extra.includes('addbefore') || extra.includes('fillback')) && <span aria-hidden="true">＋</span>}
+      {name}
+      {/* How many times a run repeats is the long version's to say. */}
+      <span className="text-[12px] font-normal text-muted tabular-nums">{pn.replace(/・\d+回$/, '')}</span>
+    </button>
+  ) : (
     <button
       key={key}
       disabled={disabled}
@@ -4408,16 +4484,8 @@ function BindingRail({ sections, at, size, print, job, onGo, onAddCover, onFillB
       </span>
     </button>
   );
-  return (
-    <div className="rail shrink-0 px-3 pt-1">
-      <div className="sect flex items-center gap-2 px-1 pb-1 text-[13px] text-muted">
-        <span className="shrink-0">綴じた順</span>
-        {compact ? <span className="flex min-w-0 flex-1 justify-center">{paper}</span> : <i className="h-px flex-1 bg-line-strong" />}
-        <Button variant="chip" className="torail-list" onClick={onList} aria-label="並びを整える">
-          <ListGlyph />並びを整える
-        </Button>
-      </div>
-      <div className="flex gap-1.5 overflow-x-auto">
+  const tiles = (
+    <>
         {hasCover
           ? tile('cover', at === 0, <SizeIcon size={size} color={color} scale={k} rings />,
               '表紙', 'p.1', () => onGo(0), '')
@@ -4450,6 +4518,29 @@ function BindingRail({ sections, at, size, print, job, onGo, onAddCover, onFillB
           ? tile('back', false, empty, '裏表紙', `p.${all.length}`, onFillBack, 'fillback', '裏表紙に入れる')
           : tile('back', false, waiting, '裏表紙', `p.${all.length}`, () => {}, 'fillback cursor-default',
               '裏表紙（見開きに何か置くと入れられます）', true))}
+    </>
+  );
+  if (compact) {
+    return (
+      <div className="rail flex shrink-0 items-center gap-1.5 overflow-x-auto px-3 pb-1 pt-0.5">
+        {tiles}
+        <Button variant="chip" className="torail-list ml-auto" onClick={onList} aria-label="並びを整える">
+          <ListGlyph />
+        </Button>
+      </div>
+    );
+  }
+  return (
+    <div className="rail shrink-0 px-3 pt-1">
+      <div className="sect flex items-center gap-2 px-1 pb-1 text-[13px] text-muted">
+        <span className="shrink-0">綴じた順</span>
+        {compact ? <span className="flex min-w-0 flex-1 justify-center">{paper}</span> : <i className="h-px flex-1 bg-line-strong" />}
+        <Button variant="chip" className="torail-list" onClick={onList} aria-label="並びを整える">
+          <ListGlyph />並びを整える
+        </Button>
+      </div>
+      <div className="flex gap-1.5 overflow-x-auto">
+        {tiles}
       </div>
       {!compact && <div className="flex justify-center pt-1">{paper}</div>}
     </div>

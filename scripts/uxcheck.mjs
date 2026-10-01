@@ -12,6 +12,9 @@ await mkdir(OUT, { recursive: true });
 const browser = await launch();
 const page = await browser.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2 });
 const shot = async (n) => { await page.screenshot({ path: `${OUT}/${n}.png` }); console.log('shot', n); };
+// On a phone the paper's settings are behind the sheet's 「この紙」 tab, and
+// the parts behind 「パーツ」. A wide screen shows both and has no tabs.
+const dockTab = async (name) => { const t = page.getByRole('tab', { name }); if (await t.count()) await t.click(); };
 const centerOf = async (l) => { const b = await l.boundingBox(); return { x: b.x + b.width / 2, y: b.y + b.height / 2 }; };
 async function drag(from, to) {
   await page.mouse.move(from.x, from.y); await page.mouse.down();
@@ -66,6 +69,7 @@ await page.locator('.scrim').click({ position: { x: 100, y: 20 } });
 
 // The month range is readable without opening anything, and tapping it goes
 // straight to where it is set.
+await dockTab('この紙');
 console.log('range says:', await page.locator('.range').textContent());
 await page.locator('.range').click();
 await shot('06-開始月と終了月');
