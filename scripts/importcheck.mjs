@@ -96,7 +96,7 @@ check(await page.locator('.page image').count() >= 1, '紙に取り込んだ絵�
 check(await page.locator('.stamp:visible').count() === 0, '取り込んだページにはパーツを出さない');
 check((await flat('.rail')).includes('取り込んだリフィル'), '帯に「取り込んだリフィル」が並ぶ');
 check(pagesAfter >= pagesBefore + 1, `ページが増える（${pagesBefore} → ${pagesAfter}）`);
-await dockTab('この紙');
+await dockTab('設定');
 check((await flat('.papersettings')).includes('いっぱいに広げる'), '選んだ入れ方が「この紙の設定」に出る');
 await page.locator('.importfit').click();
 await page.getByRole('button', { name: '全体を入れる' }).click();

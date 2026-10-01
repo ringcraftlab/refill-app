@@ -3674,14 +3674,16 @@ function CanvasScreen({
 
       {/* The tools. Under the paper on a phone, beside it on a desktop, and
           the same blocks in the same order either way. */}
-      <aside className="flex min-h-0 shrink-0 flex-col lg:w-[340px] lg:overflow-y-auto lg:border-l lg:border-line lg:bg-paper">
+      {/* On a phone the sheet is one height whichever tab is showing, so
+          changing tabs never moves the paper above it. */}
+      <aside className={`flex min-h-0 shrink-0 flex-col overflow-hidden ${!wide && !dockShut ? 'h-[222px]' : ''} lg:w-[340px] lg:overflow-y-auto lg:border-l lg:border-line lg:bg-paper`}>
       {wide && <div className="asidehead border-b border-line pb-2">{headerEl}{pagerEl}{alsoEl}</div>}
       {wide && <div className="border-b border-line pb-2 pt-2">{railEl}</div>}
       {!wide && (
         <div className="dock shrink-0 rounded-t-2xl border-t border-line bg-paper shadow-[0_-2px_10px_rgba(0,0,0,0.06)]">
           <DockGrip shut={dockShut} onClick={() => setDockShut(v => !v)} />
           <div className="flex items-end gap-1 px-3" role="tablist">
-            {([['parts', 'パーツ'], ['paper', 'この紙']] as const).map(([k, name]) => (
+            {([['parts', 'パーツ'], ['paper', '設定']] as const).map(([k, name]) => (
               <DockTab key={k} on={dock === k && !dockShut} onClick={() => { setDock(k); setDockShut(false); }}>
                 {name}
               </DockTab>
@@ -3717,7 +3719,9 @@ function CanvasScreen({
           // this the thirteen stamps took the whole column and the settings
           // were a 200px slot at the bottom -- open the photo settings and
           // the button to choose a picture was below the fold.
-          className={`flex gap-2.5 overflow-x-auto px-3 pb-2.5 pt-2 lg:grid lg:grid-cols-3 lg:overflow-x-visible lg:px-4 lg:pt-4 ${
+          // Two rows on a phone, scrolled sideways: the same height as the
+          // settings, so the sheet does not change size between its tabs.
+          className={`grid auto-cols-[84px] grid-flow-col grid-rows-2 gap-2 overflow-x-auto px-3 pb-2.5 pt-2 lg:grid-flow-row lg:auto-cols-auto lg:grid-rows-none lg:gap-2.5 lg:grid-cols-3 lg:overflow-x-visible lg:px-4 lg:pt-4 ${
             sheetEl ? 'lg:max-h-[34vh] lg:overflow-y-auto' : ''
           }`}
         >

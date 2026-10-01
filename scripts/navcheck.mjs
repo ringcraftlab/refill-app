@@ -101,7 +101,7 @@ for (const [name, sel] of [
   ['リフィル（サイズと形）', '.papernow'], ['期間', '.range'], ['用紙', '.paper'],
   ['背景', 'button:has-text("背景")'], ['体裁', '.look'],
 ]) {
-  if (sel !== '.papernow') await dockTab('この紙');
+  if (sel !== '.papernow') await dockTab('設定');
   await page.locator(sel).first().click();
   await settle();
   const opened = await page.locator('.scrim, .sheet').count() > 0;

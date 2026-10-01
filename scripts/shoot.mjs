@@ -109,7 +109,7 @@ await page.locator('.page').first().waitFor();
 const left3 = page.locator('.page').first();
 await drag(await centerOf(await stamp('マンスリー')), await centerOf(left3));
 // Turning belongs to the refill, so it is one button on the sheet area.
-await dockTab('この紙');
+await dockTab('設定');
 await page.getByRole('button', { name: 'リフィルを回転' }).click();
 await shot('10-横向きの週分割');
 
@@ -149,7 +149,7 @@ await shot('13-バーチカル');
 // so the scene shoots whatever it finds. The older build then comes out
 // showing the hours it was fixed to, and the comparison says this scene moved,
 // which is the truth.
-await dockTab('この紙');
+await dockTab('設定');
 await page.locator('.range').click();
 const hourStep = (label, glyph) =>
   page.locator('.field-label', { hasText: label }).locator('xpath=..').locator('button', { hasText: glyph });
@@ -183,7 +183,7 @@ await page.locator('.card', { hasText: '見開き' }).click();
 await page.getByRole('button', { name: 'この構成で作る' }).click();
 await page.locator('.page').first().waitFor();
 await drag(await centerOf(await stamp('バーチカル')), await centerOf(page.locator('.page').first()));
-await dockTab('この紙');
+await dockTab('設定');
 await page.locator('.range').click();
 // Older builds have one band and no such choice; the scene shoots what it finds.
 const tier2 = page.getByRole('button', { name: '2段', exact: true });
@@ -205,7 +205,7 @@ await drag(
   await centerOf(await stamp('バーチカル')),
   { x: edgeL.x + edgeL.width * 0.08, y: edgeL.y + edgeL.height * 0.5 },
 );
-await dockTab('この紙');
+await dockTab('設定');
 await page.locator('.range').click();
 const edgeTier = page.getByRole('button', { name: '2段', exact: true });
 if (await edgeTier.count()) await edgeTier.click();
@@ -223,7 +223,7 @@ await page.locator('.card', { hasText: '見開き' }).click();
 await page.getByRole('button', { name: 'この構成で作る' }).click();
 await page.locator('.page').first().waitFor();
 await drag(await centerOf(await stamp('バーチカル')), await centerOf(page.locator('.page').first()));
-await dockTab('この紙');
+await dockTab('設定');
 await page.locator('.range').click();
 const fromToday = page.getByRole('button', { name: '今日から' });
 if (await fromToday.count()) await fromToday.click();
@@ -294,7 +294,7 @@ if (await foldCard.count()) {
   await page.locator('.card', { hasText: '蛇腹3面' }).click();
   await page.getByRole('button', { name: 'この構成で作る' }).click();
   await page.locator('.page').first().waitFor();
-  await dockTab('この紙');
+  await dockTab('設定');
   await page.locator('.rotate').click();
   const turned = await page.locator('.page').first().boundingBox();
   await drag(await centerOf(await stamp('マンスリー')),
@@ -305,7 +305,7 @@ if (await foldCard.count()) {
 
   // The drawing on its own, bigger than the paper really is. A tap on the
   // paper is already taken by placing and by settings, so this is a button.
-  await dockTab('この紙');
+  await dockTab('設定');
   await page.locator('.magnify').click();
   await page.locator('.lightbox').waitFor();
   await shot('26-大きく見る');
@@ -360,7 +360,7 @@ await page.locator('.card', { hasText: '見開き' }).click();
 await page.getByRole('button', { name: 'この構成で作る' }).click();
 await page.locator('.page').first().waitFor();
 await drag(await centerOf(await stamp('マンスリー')), await centerOf(page.locator('.page').first()));
-await dockTab('この紙');
+await dockTab('設定');
 const bgChip = page.locator('button', { hasText: '背景なし' });
 if (await bgChip.count()) {
   await bgChip.click();
@@ -466,7 +466,7 @@ await page.getByRole('button', { name: 'この構成で作る' }).click();
 await page.locator('.page').first().waitFor();
 await drag(await centerOf(await stamp('マンスリー')), await centerOf(page.locator('.page').first()));
 await drag(await centerOf(await stamp('メモ')), await centerOf(page.locator('.page').nth(1)));
-await dockTab('この紙');
+await dockTab('設定');
 const lookChip = page.locator('.look');
 if (await lookChip.count()) {
   await lookChip.click();

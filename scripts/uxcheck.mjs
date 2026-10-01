@@ -69,7 +69,7 @@ await page.locator('.scrim').click({ position: { x: 100, y: 20 } });
 
 // The month range is readable without opening anything, and tapping it goes
 // straight to where it is set.
-await dockTab('この紙');
+await dockTab('設定');
 console.log('range says:', await page.locator('.range').textContent());
 await page.locator('.range').click();
 await shot('06-開始月と終了月');
