@@ -440,3 +440,35 @@ export function FileGlyph() {
     </svg>
   );
 }
+
+// A refill as a picture of a refill: a white sheet, a few faint rules, the
+// punch down its edge. Drawn to fill its box whatever the size, so the eye
+// compares shapes -- tall, square, wide -- and counts holes; how big it really
+// is, the millimetres beside it say. No colour of its own: the size's colour
+// is on the card's edge and on its hole count, and a third time was noise.
+export function SheetGlyph({ size, box = { w: 40, h: 50 } }: { size: SizeSpec; box?: { w: number; h: number } }) {
+  const { widthMm: w, heightMm: h } = size;
+  const k = Math.min(box.w / w, box.h / h);
+  // In pixels, then back to millimetres: the same hole and the same line on
+  // every card, however far that card's sheet was scaled to fill the box.
+  const px = (v: number) => v / k;
+  const holeX = Math.min(size.ringMarginMm * 0.5, w * 0.08);
+  const left = size.ringMarginMm + px(2);
+  const rules = Math.max(3, Math.round(h / 22));
+  return (
+    <svg
+      width={w * k} height={h * k} viewBox={`0 0 ${w} ${h}`} aria-hidden="true"
+      className="block shrink-0 drop-shadow-[0_1px_1px_rgba(0,0,0,0.12)]"
+    >
+      <rect x={px(0.5)} y={px(0.5)} width={w - px(1)} height={h - px(1)} rx={px(1.5)}
+        fill="#fff" stroke="#D2D2CD" strokeWidth={px(1)} />
+      {Array.from({ length: rules }, (_, i) => {
+        const y = h * (i + 1) / (rules + 1);
+        return <line key={i} x1={left} y1={y} x2={w - px(4)} y2={y} stroke="#E3E3DF" strokeWidth={px(1)} />;
+      })}
+      {holeCentres(size.holes).map((y, i) => (
+        <circle key={i} cx={holeX} cy={y} r={px(1.8)} fill="#A9A9A3" />
+      ))}
+    </svg>
+  );
+}

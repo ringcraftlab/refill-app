@@ -2,7 +2,7 @@ import { useState } from 'react';
 import type { RefillSize, SizeSpec } from '../types';
 import { SIZES } from '../lib/sizes';
 import { Button } from '../ui/Button';
-import { LogoMark, SizeIcon } from '../app/icons';
+import { LogoMark, SheetGlyph } from '../app/icons';
 import { SIZE_GROUPS, SIZE_COLOR, SIZE_WORD, SIZE_NAME, sizeMm, sizeHoles, cardSkin } from '../app/look';
 import { useWide, PICK_SCREEN } from '../app/screen';
 
@@ -41,10 +41,8 @@ export function SizeCards({ selected, wide, onPick }: {
                     style={{ background: SIZE_WORD[id] }}
                   >{sizeHoles(SIZES[id])}</span>
                   <span className="absolute inset-y-0 left-0 w-1.5" style={{ background: SIZE_COLOR[id] }} />
-                  {/* Small, but at one scale for all nine, so the sheets
-                      still compare. */}
-                  <span className="flex h-[48px] w-[40px] shrink-0 items-center justify-center">
-                    <SizeIcon size={SIZES[id]} color={SIZE_COLOR[id]} scale={0.2} rings />
+                  <span className="flex h-[52px] w-[44px] shrink-0 items-center justify-center">
+                    <SheetGlyph size={SIZES[id]} />
                   </span>
                   <span className="flex min-w-0 flex-1 flex-col gap-1">
                     {/* Room on the right for the hole count, which sits in the
