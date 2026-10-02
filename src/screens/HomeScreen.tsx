@@ -54,7 +54,7 @@ export function HomeScreen({ onStart, onOpen }: { onStart: () => void; onOpen: (
             手帳のリフィルを、<br />自分で作って家で印刷。
           </h1>
           <p className="m-0 text-[14px] leading-relaxed text-muted">
-            カレンダーやメモ欄を選んで、紙の上に置くだけ。家のプリンタで印刷できるPDFまで、スマホで作れます。
+            欲しいサイズのリフィルも、使いたいレイアウトのリフィルも、なかなか見つからない。そんなリフィルを、手帳に合わせて作れます。
           </p>
         </section>
 
