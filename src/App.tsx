@@ -14,10 +14,16 @@ import { CanvasScreen } from './screens/CanvasScreen';
 import { ContentsScreen } from './screens/ContentsScreen';
 import { SidesScreen } from './screens/SidesScreen';
 import { SizeScreen } from './screens/SizeScreen';
+import { HomeScreen } from './screens/HomeScreen';
 import { ImportSheet } from './sheets/files';
 
 export function App() {
-  const [stage, setStage] = useState<Stage>('size');
+  // The front page first, unless the link asks for the sizes: `?size` goes
+  // straight to making, which is also how the check scripts come in. A query
+  // and not a hash, because opening the same address again has to start over.
+  const [stage, setStage] = useState<Stage>(() => (
+    typeof location !== 'undefined' && /(^|[?&])size(=|&|$)/.test(location.search.slice(1)) ? 'size' : 'home'
+  ));
   // Where each screen was opened from. Not a parent -- an opener: the contents
   // reached from the editor closes back to the editor, and the editor reached
   // from the contents closes back to the contents. A fixed hierarchy cannot
@@ -125,6 +131,14 @@ export function App() {
       )),
     }));
 
+  if (stage === 'home') {
+    return withImport(
+      <HomeScreen
+        onStart={() => go('size')}
+        onOpen={b => { setBook(b); goTo(0); go('canvas'); }}
+      />
+    );
+  }
   if (stage === 'size') {
     return withImport(
       <SizeScreen

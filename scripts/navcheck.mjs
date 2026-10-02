@@ -16,7 +16,7 @@
 //
 //   npm run build && npx vite preview --port 4173 --strictPort &
 //   node scripts/navcheck.mjs
-import { BASE, launch } from './browser.mjs';
+import { BASE, ROOT, launch } from './browser.mjs';
 
 const browser = await launch();
 const page = await browser.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2 });
@@ -38,6 +38,15 @@ const settle = () => page.waitForTimeout(350);
 // On a phone the paper's settings are behind the sheet's 「この紙」 tab, and
 // the parts behind 「パーツ」. A wide screen shows both and has no tabs.
 const dockTab = async (name) => { const t = page.getByRole('tab', { name }); if (await t.count()) await t.click(); };
+
+// ---- 0. the front page: the address alone opens it, and its button is the
+// way to the sizes ------------------------------------------------------------
+await page.goto(ROOT);
+await page.locator('.homescreen').waitFor();
+check(await page.locator('.homescreen').count() === 1, 'アドレスだけで開くと最初の画面（LP）が出る');
+await page.locator('.homestart').click();
+await settle();
+check(await where() === 'サイズ', `「リフィル作りをはじめる」でサイズ選択へ（いま ${await where()}）`);
 
 const start = async () => {
   await page.goto(BASE);

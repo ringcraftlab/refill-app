@@ -7,7 +7,9 @@
 // impression of two screenshots.
 import { launch } from './browser.mjs';
 
-const [OLD, NEW] = process.argv.slice(2);
+// Straight to the sizes, past the front page; a build without one ignores it.
+const atSizes = (u) => (u.includes('?') ? u : `${u.replace(/\/$/, '')}/?size`);
+const [OLD, NEW] = process.argv.slice(2).map(atSizes);
 const SELECTORS = [
   '.sizerow', 'h1',
   '.page', '.stamp', '.stepper',

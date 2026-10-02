@@ -7,7 +7,10 @@
 import { existsSync, readdirSync } from 'node:fs';
 import { chromium } from 'playwright';
 
-export const BASE = process.env.BASE_URL ?? 'http://localhost:4173';
+// The app opens on its front page; `?size` goes straight to the sizes, which
+// is where every check starts. A build without a front page ignores it.
+export const ROOT = process.env.BASE_URL ?? 'http://localhost:4173';
+export const BASE = `${ROOT}/?size`;
 
 const POOL = '/opt/pw-browsers';
 

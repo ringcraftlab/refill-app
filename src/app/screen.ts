@@ -1,7 +1,7 @@
 import { useLayoutEffect, useState } from 'react';
 import type { Layout } from '../types';
 
-export type Stage = 'size' | 'sides' | 'contents' | 'canvas' | 'book';
+export type Stage = 'home' | 'size' | 'sides' | 'contents' | 'canvas' | 'book';
 
 // A rectangle on screen, in the page area's own pixels.
 export type Box = { key: string; left: number; top: number; width: number; height: number };
