@@ -850,14 +850,26 @@ export function drawPart(kind: PartKind, area: Rect, layout: Layout): Primitive[
   const grid = DATE_GRIDS[kind];
   if (grid) {
     const spec = grid(layout);
-    // Too narrow for a column a day: the days go down the side instead, and
-    // what a row held becomes a column. A gantt's eight tasks would be 5mm
-    // each across a single page, too narrow to name, so it keeps as many as
-    // get 8mm.
-    if ((kind === 'habit' || kind === 'gantt') && area.w < PART_FIT[kind].minWMm) {
-      spec.dates = 'rows';
-      if (kind === 'gantt' && spec.cross.kind === 'lanes') {
-        spec.cross = { ...spec.cross, count: Math.max(3, Math.min(spec.cross.count, Math.floor((area.w - 12) / 8))) };
+    // Too narrow for a column a day. With the height, the days go down the
+    // side instead and what a row held becomes a column; a gantt's eight
+    // tasks would be 5mm each across a single page, too narrow to name, so it
+    // keeps as many as get 8mm. Without the height either -- a small page
+    // turned on its side -- the days stay across and fold into two bands,
+    // the 1st to the 16th over the 17th to the end.
+    if ((kind === 'habit' || kind === 'gantt') && area.w < PART_FIT[kind].minWMm && spec.cross.kind === 'lanes') {
+      // The height a month needs to run down the page: the first of the
+      // shapes PART_FIT allows it besides its own.
+      if (area.h >= (PART_FIT[kind].alt?.[0].minHMm ?? Infinity)) {
+        spec.dates = 'rows';
+        if (kind === 'gantt') {
+          spec.cross = { ...spec.cross, count: Math.max(3, Math.min(spec.cross.count, Math.floor((area.w - 12) / 8))) };
+        }
+      } else {
+        spec.tiers = 2;
+        if (kind === 'gantt') {
+          const bandH = (area.h - TITLE_H - 4) / 2;
+          spec.cross = { ...spec.cross, count: Math.max(2, Math.min(spec.cross.count, Math.floor((bandH - AXIS_H) / 3.5))) };
+        }
       }
     }
     return drawDateGrid(area, layout, spec);
