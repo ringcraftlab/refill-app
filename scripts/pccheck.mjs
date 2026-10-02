@@ -122,20 +122,21 @@ check(
   'パーツの上では掴むカーソル',
 );
 
-// The form screen draws the one picked, large, above the list: pressing a
-// row redraws that picture and nothing else.
+// The form screen lists the choices first and says the one picked beside the
+// button: pressing a row changes that line, and the last card is not pushed
+// under the fold by anything above the list.
 await page.goto(BASE);
 await page.locator('.sizerow', { hasText: '110×210mm' }).click(); if (await page.locator('.sizego').count()) await page.locator('.sizego').click();
 await page.locator('.card').first().waitFor();
 await page.locator('.card', { hasText: '片面' }).click();
 await page.waitForTimeout(200);
-const one = await page.locator('.formpreview svg').boundingBox();
+const one = await page.locator('.formbar').innerText();
 await page.locator('.card', { hasText: '見開き' }).click();
 await page.waitForTimeout(200);
-const two = await page.locator('.formpreview svg').boundingBox();
+const two = await page.locator('.formbar').innerText();
 check(
-  two.width > one.width * 1.5,
-  `行を押すと上の絵が切り替わる（片面 ${Math.round(one.width)}px → 見開き ${Math.round(two.width)}px）`,
+  one.includes('片面') && two.includes('見開き'),
+  `行を押すと下の「選択中の構成」が変わる（${one.split('\n')[1]} → ${two.split('\n')[1]}）`,
 );
 await page.screenshot({ path: `${OUT}/04-構成の画面.png` });
 

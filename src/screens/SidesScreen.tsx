@@ -5,7 +5,7 @@ import type { FoldPlan } from '../lib/fold';
 import { Button } from '../ui/Button';
 import { Choice } from '../app/bits';
 import { FoldIcon, FormGlyph2, SheetGlyph } from '../app/icons';
-import { SIZE_COLOR, SIZE_WORD, SIZE_NAME, sizeMm, sizeHoles, nameSize, cardSkin } from '../app/look';
+import { SIZE_COLOR, SIZE_WORD, SIZE_NAME, sizeMm, sizeHoles, cardSkin } from '../app/look';
 import { useWide, PICK_SCREEN } from '../app/screen';
 
 // The same card as the size picker, one per choice: the colour of the size
@@ -54,21 +54,22 @@ export function FormCards({ size, spread, fold, foldGrain, wide, onPick }: {
       title: `${g === 'along' ? 'L字' : '蛇腹'}${n}面`,
       // Words, not millimetres: this is a choice of shape, and the numbers
       // are the editor's business once the shape is chosen.
-      note: g === 'along' ? '下へ広げる1本の帯' : '畳んで綴じ、広げて使う',
+      // What it is for, which is what the choice is made on.
+      note: g === 'along' ? '下へ広げる1本の帯' : '畳んで綴じ、広げると横長に使える。長い表や年間の予定に',
       plan,
     }];
   });
   const choices: Choice[] = [
     {
       key: 'spread', on: flat && spread, pick: { spread: true, fold: 1 },
-      title: '見開き（2ページ）', note: '左右2ページでひと組',
+      title: '見開き（2ページ）', note: '左右のページを並べて、1ヶ月分や1週間を大きく使う',
       // The left page's rings are drawn on its right: in a spread the binding
       // is the seam, which is the one thing a picture of it has to get right.
       sheets: [true, false],
     },
     {
       key: 'single', on: flat && !spread, pick: { spread: false, fold: 1 },
-      title: '片面（1ページ）', note: '1ページで完結', sheets: [false],
+      title: '片面（1ページ）', note: '1ページで完結。メモやリストに', sheets: [false],
     },
     ...foldCards('out'),
   ];
@@ -78,7 +79,6 @@ export function FormCards({ size, spread, fold, foldGrain, wide, onPick }: {
   // an ordinary alternative, and the extra cut went unsaid.
   const special = grains.includes('along') ? foldCards('along') : [];
   const all = [...choices, ...special];
-  const picked = all.find(c => c.on) ?? all[0];
   const glyph = (c: Choice, box: { w: number; h: number }) => (c.plan
     ? (c.plan.grain === 'along'
       ? <FoldIcon size={spec} color="#A9A9A3" plan={c.plan} scale={Math.min(box.w / c.plan.sheetWmm, box.h / c.plan.sheetHmm)} rings />
@@ -98,7 +98,10 @@ export function FormCards({ size, spread, fold, foldGrain, wide, onPick }: {
       <span className="flex h-[40px] w-[56px] shrink-0 items-center justify-center">{glyph(c, { w: 56, h: 40 })}</span>
       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
         <strong className="truncate text-[15px] font-semibold leading-tight">{c.title}</strong>
-        <span className="truncate text-[12px] leading-tight text-muted">{c.note}</span>
+        {/* Broken after a comma or a full stop, never inside a word. */}
+        <span className="text-[12px] leading-snug text-muted [&>span]:inline-block">
+          {c.note.split(/(?<=[、。])/).map((w, i) => <span key={i}>{w}</span>)}
+        </span>
       </span>
       <span aria-hidden="true" className="w-3 shrink-0 text-center text-[15px] leading-none" style={{ color: c.on ? SIZE_WORD[size] : 'var(--color-muted)' }}>
         {c.on ? '✓' : ''}
@@ -108,14 +111,9 @@ export function FormCards({ size, spread, fold, foldGrain, wide, onPick }: {
 
   return (
     <>
-      {/* The one picked, drawn large: pressing a row below redraws this and
-          nothing else, so the eye stays on the shape while the finger moves. */}
-      <figure className="formpreview m-0 flex flex-col items-center gap-2 rounded-xl bg-white px-3 pb-3 pt-4 shadow-[0_0_0_1px_var(--color-line)]">
-        <span className="flex h-[150px] w-full items-center justify-center">{glyph(picked, { w: wide ? 360 : 290, h: 150 })}</span>
-        <figcaption className="text-[13px] font-semibold" style={{ color: SIZE_WORD[size] }}>
-          {picked.note}
-        </figcaption>
-      </figure>
+      {/* The choices come first. A large drawing of the one picked sat above
+          them and pushed the last card under the fold; each card already
+          carries its own drawing, so the large one only repeated it. */}
       <div className={`grid gap-2 ${wide ? 'grid-cols-2' : 'grid-cols-1'}`}>
         {choices.map(row)}
       </div>
@@ -135,6 +133,14 @@ export function FormCards({ size, spread, fold, foldGrain, wide, onPick }: {
       )}
     </>
   );
+}
+
+// The name of a form, as the bar under the choices says it.
+export function formTitle(size: RefillSize, spread: boolean, fold: FoldCount, foldGrain?: FoldGrain) {
+  if (fold <= 1) return spread ? '見開き（2ページ）' : '片面（1ページ）';
+  const grains = foldGrainsOf(SIZES[size]);
+  const g = foldGrain && grains.includes(foldGrain) ? foldGrain : grains[0];
+  return `${g === 'along' ? 'L字' : '蛇腹'}${fold}面`;
 }
 
 export function SidesScreen({ size, spread, fold, foldGrain, onPick, onBack, onConfirm }: {
@@ -161,56 +167,33 @@ export function SidesScreen({ size, spread, fold, foldGrain, onPick, onBack, onC
         <h1 className="text-[20px] font-bold">ページ構成を選ぶ</h1>
         <p className="m-0 mt-1 text-[13px] text-muted">この紙を、どう開く形にしますか</p>
       </div>
-      {/* The size just chosen, carried across with its bar and its sheet: said
-          in a line of grey text instead, the second screen looked like a
-          different app, because the colour and the paper both vanished between
-          one tap and the next.
-          //
-          It is not one of the choices, though, and wearing the chosen card's
-          skin -- white card, colour border, glow -- it read as one that had
-          already been picked. So it is settled into the page instead: a grey
-          strip under a caption that says what it is, with a rule under it, and
-          the four things to choose from below that. It stays pressable,
-          because the thing to press to change the size is the size. */}
       {/* Everything between the title and the button scrolls, so nothing in it
           is squeezed to fit. As plain children of the screen's column they all
           had flex-shrink, and on a short window the strip was the first to
           give: on Micro5 it went from 97px to 18px and the name and the sheet
           were clipped away, leaving a bar with 「62×105mm」 in it. */}
       <div className="flex min-h-0 flex-1 flex-col gap-[18px] overflow-y-auto">
-      <span className="sect m-0 flex items-center gap-2 text-[13px] font-bold tracking-[0.04em] text-muted">作るリフィル</span>
+      {/* One line: what is settled stays in sight but leaves the room to the
+          choices. Grey, not a card, so it does not read as one of them. */}
       <button
-        // Full width on a phone, where everything is; on a wide window it
-        // hugs what it holds, because a strip the width of the screen with a
-        // name at one end and a sheet at the other is mostly empty room.
-        className="sizenow relative -mt-2 flex w-full min-w-0 shrink-0 items-center gap-3 overflow-hidden rounded-lg border border-line py-2 pl-3 pr-2 text-left hover:border-line-strong lg:w-auto lg:self-start lg:pr-4"
+        className="sizenow relative flex w-full min-w-0 shrink-0 items-center gap-3 overflow-hidden rounded-lg border border-line py-2 pl-4 pr-3 text-left hover:border-line-strong lg:w-auto lg:self-start lg:pr-4"
         style={{ background: 'rgba(38,36,31,0.04)' }}
         onClick={onBack}
       >
         <span className="absolute inset-y-0 left-0 w-1.5" style={{ background: color }} />
-        <span className="flex min-w-0 flex-1 flex-col gap-0.5 lg:flex-none">
-          <strong className={`truncate font-semibold leading-tight ${nameSize(SIZE_NAME[size])}`}>
-            {SIZE_NAME[size]}
-          </strong>
-          <span className="truncate text-[13px] leading-tight text-muted">{sizeMm(spec)}</span>
-          <span
-            className="truncate text-[13px] font-semibold leading-tight"
-            style={{ color: SIZE_WORD[size] }}
-          >
-            {sizeHoles(spec)}
+        <span className="flex h-[32px] w-[28px] shrink-0 items-center justify-center">
+          <SheetGlyph size={spec} box={{ w: 26, h: 32 }} />
+        </span>
+        <span className="flex min-w-0 flex-1 flex-col">
+          <span className="text-[11px] leading-tight text-muted">選択中のサイズ</span>
+          <span className="truncate leading-tight">
+            <strong className="text-[15px] font-semibold">{SIZE_NAME[size]}</strong>
+            <span className="ml-2 text-[12px] text-muted">{sizeMm(spec)}・</span>
+            <span className="text-[12px] font-semibold" style={{ color: SIZE_WORD[size] }}>{sizeHoles(spec)}</span>
           </span>
         </span>
-        {/* The same scale as the cards below. At the picker's scale it was the
-            same sheet drawn twice on one screen at two sizes -- and on a wide
-            window, where the cards get the room to draw big, the one up here
-            read as a thinner paper than the one being chosen. */}
-        <span className="flex h-[44px] w-[40px] shrink-0 items-center justify-center">
-          <SheetGlyph size={spec} box={{ w: 36, h: 44 }} />
-        </span>
-        <span className="shrink-0 pr-0.5 text-[13px] text-accent-text">変更</span>
+        <span className="shrink-0 text-[13px] text-accent-text">変更</span>
       </button>
-      {/* The line between what is already decided and what is being asked. */}
-      <hr className="m-0 w-full shrink-0 border-0 border-t border-line" />
       {/* Side by side, on the same two-column grid as the picker. A comparison
           reads across, not down: stacked, these were the same drawing seen
           twice in a row instead of one beside the other. Which also settles
@@ -230,7 +213,15 @@ export function SidesScreen({ size, spread, fold, foldGrain, onPick, onBack, onC
           not for choosing a form -- and the picture of a strip cut into
           numbered panels is what the choice is made on. */}
       </div>
-      <Button variant="cta" className="mt-auto shrink-0" onClick={onConfirm}>この構成で作る</Button>
+      {/* What is picked, beside the button that goes with it: the list scrolls,
+          and the choice should not scroll away with it. */}
+      <div className="formbar mt-auto flex shrink-0 items-center gap-3">
+        <span className="flex min-w-0 flex-1 flex-col">
+          <span className="text-[11px] leading-tight text-muted">選択中の構成</span>
+          <strong className="truncate text-[15px] font-semibold leading-tight">{formTitle(size, spread, fold, foldGrain)}</strong>
+        </span>
+        <Button variant="cta" className="shrink-0 px-6" onClick={onConfirm}>この構成で作る</Button>
+      </div>
     </div>
   );
 }
