@@ -162,7 +162,10 @@ Tailwindに移したときは、これで4つのズレが見つかった。prefl
 
 | | |
 |---|---|
-| `src/App.tsx` | 画面のすべて（サイズ→構成→もくじ→編集＋設定シート＋プレビュー） |
+| `src/App.tsx` | 画面の切り替えと、ファイルからの取り込み。画面そのものは持たない |
+| `src/screens/` | 画面ごとに1ファイル（サイズ選択・構成・ページの並び・めくる・編集）。編集画面 `CanvasScreen.tsx` はまだ1つの大きな部品 |
+| `src/sheets/` | 設定シートとプレビュー（パーツの設定・背景・書体と色・保存・取り込み・刷り上がり・拡大） |
+| `src/app/` | 画面をまたいで使うもの。本の組み立て（`book.ts`）、サイズの色と寸法（`look.ts`）、画面の枠と `useWide`（`screen.ts`）、絵（`icons.tsx`）、小部品（`bits.tsx`）。Reactを知ってよい |
 | `src/ui/` | 共通部品。Button / Field / Segmented / Stepper / Sheet / Dialog / Toast |
 | `src/styles.css` | Tailwindの読み込み、`@theme` の色、base のみ |
 | `src/lib/render/svg.tsx` | mmの図形をSVGに（画面用） |
