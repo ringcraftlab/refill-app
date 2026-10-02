@@ -50,14 +50,14 @@ export function HomeScreen({ onStart, onOpen }: { onStart: () => void; onOpen: (
           <span className="self-start rounded-full bg-white px-3 py-1 text-[12px] font-semibold text-accent-text shadow-[0_0_0_1px_var(--color-line)]">
             システム手帳のリフィルづくり
           </span>
-          <h1 className="m-0 font-serif text-[24px] font-semibold leading-snug [text-wrap:balance]">
-            手帳のリフィルを、<br />自分で作って家で印刷。
-          </h1>
-          {/* Broken only between phrases: a phone otherwise splits リ／フィル. */}
-          <p className="m-0 text-[14px] leading-relaxed text-muted [&>span]:inline-block">
-            <span>欲しいサイズのリフィルも、</span><span>使いたいレイアウトのリフィルも、</span><span>なかなか見つからない。</span>
+          {/* Broken only between phrases: a phone otherwise splits a word in two. */}
+          <h1 className="m-0 font-serif text-[22px] font-semibold leading-snug [&>span]:inline-block">
+            <span>欲しいサイズも、</span><span>使いたいレイアウトも、</span><span>なかなか見つからない。</span>
             <br />
             <span>そんなリフィルを、</span><span>手帳に合わせて作れます。</span>
+          </h1>
+          <p className="m-0 text-[14px] leading-relaxed text-muted [&>span]:inline-block">
+            <span>カレンダーやメモ欄を選んで、</span><span>紙に置くだけ。</span><span>家のプリンタで印刷できます。</span>
           </p>
         </section>
 
