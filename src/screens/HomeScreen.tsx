@@ -53,8 +53,11 @@ export function HomeScreen({ onStart, onOpen }: { onStart: () => void; onOpen: (
           <h1 className="m-0 font-serif text-[24px] font-semibold leading-snug [text-wrap:balance]">
             手帳のリフィルを、<br />自分で作って家で印刷。
           </h1>
-          <p className="m-0 text-[14px] leading-relaxed text-muted">
-            欲しいサイズのリフィルも、使いたいレイアウトのリフィルも、なかなか見つからない。そんなリフィルを、手帳に合わせて作れます。
+          {/* Broken only between phrases: a phone otherwise splits リ／フィル. */}
+          <p className="m-0 text-[14px] leading-relaxed text-muted [&>span]:inline-block">
+            <span>欲しいサイズのリフィルも、</span><span>使いたいレイアウトのリフィルも、</span><span>なかなか見つからない。</span>
+            <br />
+            <span>そんなリフィルを、</span><span>手帳に合わせて作れます。</span>
           </p>
         </section>
 
