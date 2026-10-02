@@ -21,7 +21,7 @@ import { Filmstrip } from './Filmstrip';
 import { AddSection } from '../sheets/AddSection';
 import { formLabel, PART_LABEL, pacedFor, sectionOf, isPlaceholder, withSection, sectionLabel, bodyOf, pagesOf, backSideOf, usePaperJob, SECTION_LABEL, sectionSpan } from '../app/book';
 import type { PaperJob } from '../app/book';
-import { StampIcon, SizeIcon, Chevron, ListGlyph, FormGlyph, CalendarGlyph, BackgroundSample, BookGlyph, FileGlyph } from '../app/icons';
+import { StampIcon, SizeIcon, SheetGlyph, FormGlyph2, Chevron, ListGlyph, FormGlyph, CalendarGlyph, BackgroundSample, BookGlyph, FileGlyph } from '../app/icons';
 import { WORD_SAMPLE, cssColor, BACKGROUND_LABEL, SIZE_COLOR } from '../app/look';
 import { GAP, CANVAS_SCREEN, useWide } from '../app/screen';
 import type { Box, SheetTarget } from '../app/screen';
@@ -1861,7 +1861,7 @@ export function BindingRail({ sections, at, size, print, job, onGo, onAddCover, 
   const tiles = (
     <>
         {hasCover
-          ? tile('cover', at === 0, <SizeIcon size={size} color={color} scale={k} rings />,
+          ? tile('cover', at === 0, <SheetGlyph size={size} box={{ w: 34, h: 44 }} />,
               '表紙', 'p.1', () => onGo(0), '')
           : spreads && tile('cover', false, empty, '表紙', 'p.1', onAddCover, 'addbefore', '表紙を入れる')}
         {body.map(({ sec, i }) => {
@@ -1869,11 +1869,13 @@ export function BindingRail({ sections, at, size, print, job, onGo, onAddCover, 
           const dated = hasDatedPart(sec);
           const end = dated ? runEnd(sec) : null;
           const n = sheetCount(sec);
-          const picture = sec.fold > 1 ? <span style={{ color }}><FormGlyph kind="fold" panels={sec.fold} /></span>
+          // White paper, as on the size and form screens: the shape is the
+          // form, and the size's colour is the screen's, not each picture's.
+          const plan = sec.fold > 1 ? foldOf(sec, size) : null;
+          const picture = plan ? <FormGlyph2 size={size} plan={plan} box={{ w: 72, h: 44 }} />
             : sec.spread
-              ? <><SizeIcon size={size} color={color} scale={k} rings flip /><SizeIcon size={size} color={color} scale={k} rings /></>
-              // A page on the back of a sheet has its holes on the right.
-              : <SizeIcon size={size} color={color} scale={k} rings flip={backSideOf(sections, i, 0, print.duplex)} />;
+              ? <FormGlyph2 size={size} pages={2} box={{ w: 64, h: 44 }} />
+              : <SheetGlyph size={size} box={{ w: 34, h: 44 }} />;
           const name = (
             <>
               {one ? formLabel(sec) : sectionLabel(sec)}
@@ -1886,7 +1888,7 @@ export function BindingRail({ sections, at, size, print, job, onGo, onAddCover, 
             `${pagesFor(i)}${dated && n > 1 ? `・${n}回` : ''}`, () => onGo(i), '');
         })}
         {backAt >= 0 && tile('back', at === backAt,
-          <SizeIcon size={size} color={color} scale={k} rings flip={backSideOf(sections, backAt, 0, print.duplex)} />,
+          <SheetGlyph size={size} box={{ w: 34, h: 44 }} />,
           '裏表紙', pagesFor(backAt), () => onGo(backAt), '')}
         {backAt < 0 && backBlank && (filled
           ? tile('back', false, empty, '裏表紙', `p.${all.length}`, onFillBack, 'fillback', '裏表紙に入れる')

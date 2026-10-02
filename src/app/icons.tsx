@@ -472,3 +472,66 @@ export function SheetGlyph({ size, box = { w: 40, h: 50 } }: { size: SizeSpec; b
     </svg>
   );
 }
+
+// A form, drawn the way SheetGlyph draws a size: white paper, faint rules, the
+// punch, no colour. One page, two pages meeting at the rings, or a strip
+// folded into panels with the punch on its first panel only. Fitted to its
+// box, because what it shows is the shape of the thing, not its size.
+export function FormGlyph2({ size, pages = 1, plan, box }: {
+  size: SizeSpec;
+  pages?: 1 | 2;
+  plan?: FoldPlan;
+  box: { w: number; h: number };
+}) {
+  const { widthMm: pw, heightMm: ph } = size;
+  const gap = plan ? 0 : pages === 2 ? size.ringMarginMm * 0.6 : 0;
+  const w = plan ? plan.headMm + plan.innerMm * (plan.panels - 1) : pw * pages + gap;
+  const h = ph;
+  const k = Math.min(box.w / w, box.h / h);
+  const px = (v: number) => v / k;
+  const holes = holeCentres(size.holes);
+  const holeX = Math.min(size.ringMarginMm * 0.5, pw * 0.08);
+  const rules = Math.max(3, Math.round(h / 22));
+  const sheet = (x: number, sw: number, key: string, holesAt: 'left' | 'right' | null, from = size.ringMarginMm) => (
+    <g key={key}>
+      <rect x={x + px(0.5)} y={px(0.5)} width={sw - px(1)} height={h - px(1)} rx={px(1.5)}
+        fill="#fff" stroke="#D2D2CD" strokeWidth={px(1)} />
+      {Array.from({ length: rules }, (_, i) => {
+        const y = h * (i + 1) / (rules + 1);
+        const a = holesAt === 'left' ? x + from + px(2) : x + px(4);
+        const b = holesAt === 'right' ? x + sw - from - px(2) : x + sw - px(4);
+        return <line key={i} x1={a} y1={y} x2={b} y2={y} stroke="#E3E3DF" strokeWidth={px(1)} />;
+      })}
+      {holesAt && holes.map((y, i) => (
+        <circle key={i} cx={holesAt === 'left' ? x + holeX : x + sw - holeX} cy={y} r={px(1.8)} fill="#A9A9A3" />
+      ))}
+    </g>
+  );
+  let body: React.ReactNode;
+  if (plan) {
+    const parts = [sheet(0, plan.headMm, 'head', 'left')];
+    for (let i = 1; i < plan.panels; i++) {
+      const x = plan.headMm + plan.innerMm * (i - 1);
+      parts.push(sheet(x, plan.innerMm, `p${i}`, null, 0));
+      parts.push(<line key={`f${i}`} x1={x} y1={px(2)} x2={x} y2={h - px(2)} stroke="#B9B9B3" strokeWidth={px(1)} strokeDasharray={`${px(3)} ${px(2)}`} />);
+    }
+    body = parts;
+  } else if (pages === 2) {
+    body = [
+      sheet(0, pw, 'l', 'right'),
+      sheet(pw + gap, pw, 'r', 'left'),
+      // The rings the two pages hang on, seen from above.
+      ...holes.map((y, i) => (
+        <rect key={`ring${i}`} x={pw - holeX - px(1.2)} y={y - px(1.2)} width={gap + holeX * 2 + px(2.4)} height={px(2.4)} rx={px(1.2)} fill="#8E8E88" />
+      )),
+    ];
+  } else {
+    body = sheet(0, pw, 's', 'left');
+  }
+  return (
+    <svg width={w * k} height={h * k} viewBox={`0 0 ${w} ${h}`} aria-hidden="true"
+      className="block shrink-0 drop-shadow-[0_1px_1px_rgba(0,0,0,0.12)]">
+      {body}
+    </svg>
+  );
+}

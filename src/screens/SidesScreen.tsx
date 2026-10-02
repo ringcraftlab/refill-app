@@ -1,12 +1,11 @@
-import { useLayoutEffect, useState } from 'react';
 import type { FoldCount, FoldGrain, RefillSize } from '../types';
 import { SIZES } from '../lib/sizes';
 import { FOLD_PANELS, foldGrainsOf, foldPlan } from '../lib/fold';
 import type { FoldPlan } from '../lib/fold';
 import { Button } from '../ui/Button';
 import { Choice } from '../app/bits';
-import { SizeIcon, FoldIcon } from '../app/icons';
-import { SHEET_SCALE, ringOut, SIZE_COLOR, SIZE_WORD, SIZE_NAME, sizeMm, sizeHoles, nameSize, cardSkin } from '../app/look';
+import { FoldIcon, FormGlyph2, SheetGlyph } from '../app/icons';
+import { SIZE_COLOR, SIZE_WORD, SIZE_NAME, sizeMm, sizeHoles, nameSize, cardSkin } from '../app/look';
 import { useWide, PICK_SCREEN } from '../app/screen';
 
 // The same card as the size picker, one per choice: the colour of the size
@@ -21,16 +20,13 @@ import { useWide, PICK_SCREEN } from '../app/screen';
 // screen that first asks for it, because the same cards are what the paper's
 // own chip opens afterwards: a form is not a step in a setup, it is a
 // property of the paper, and a property has to be reachable while working.
-export function FormCards({ size, spread, fold, foldGrain, wide, onPick, onScale }: {
+export function FormCards({ size, spread, fold, foldGrain, wide, onPick }: {
   size: RefillSize;
   spread: boolean;
   fold: FoldCount;
   foldGrain?: FoldGrain;
   wide: boolean;
   onPick: (v: { spread: boolean; fold: FoldCount; foldGrain?: FoldGrain }) => void;
-  // Whatever draws this paper above the cards has to draw it the same size,
-  // so the scale the cards settle on is handed back.
-  onScale?: (k: number) => void;
 }) {
   const spec = SIZES[size];
   const color = SIZE_COLOR[size];
@@ -85,97 +81,53 @@ export function FormCards({ size, spread, fold, foldGrain, wide, onPick, onScale
   // one size can do and the rest cannot. Mixed into the run above it read as
   // an ordinary alternative, and the extra cut went unsaid.
   const special = grains.includes('along') ? foldCards('along') : [];
-  // The drawing is the choice, so it gets the room: as large as the widest
-  // one on this screen can be and still fit a card, and one box only as tall
-  // as the tallest of them -- the picker's own slot is A5's, which on
-  // 横長ミニ3穴 left four rows of empty air above a 55mm strip. One scale for
-  // every card, or a folded strip and a pair of pages could not be compared.
   const all = [...choices, ...special];
-  const widestMm = Math.max(...all.map(c => (c.plan ? c.plan.sheetWmm : spec.widthMm * c.sheets!.length)));
-  const tallestMm = Math.max(...all.map(c => (c.plan ? c.plan.sheetHmm : spec.heightMm)));
-  const k = Math.min(SHEET_SCALE * 2.2, (wide ? 190 : 140) / widestMm);
-  // The box the sheets are drawn in: one constant area, the same on every
-  // card, so a sheet that fills more of it is a bigger sheet. The slot was
-  // already this ruler -- shading it makes the comparison visible instead of
-  // leaving it to be noticed. Plain grey, not ruled: a field of dots behind a
-  // ruled sheet is two grids arguing, and the one that matters is the sheet's.
-  // A margin of table around even the widest sheet: with the box cut exactly
-  // to the widest one, that card's grey never showed, and a ruler you cannot
-  // see on the longest thing you are measuring is not a ruler.
-  const field = {
-    width: (widestMm + ringOut(spec)) * k + 16,
-    height: tallestMm * k + 12,
-    backgroundColor: 'rgba(38,36,31,0.05)',
-  } as const;
-  // How wide the thing is when it is open, said under the drawing as the line
-  // anyone measuring it would draw. The L folds downward, where a line under
-  // it would be measuring the wrong edge, so it keeps to its note.
-  const span = (c: Choice) => {
-    if (c.plan) {
-      return c.plan.grain === 'along'
-        ? null
-        : { mm: c.plan.sheetWmm, text: `広げて${Math.round(c.plan.sheetWmm)}mm` };
-    }
-    // Just the number: the title above already says how many pages it is.
-    const mm = spec.widthMm * c.sheets!.length;
-    return { mm, text: `${mm}mm` };
-  };
+  const picked = all.find(c => c.on) ?? all[0];
+  // How wide the thing is when it is open -- the number someone measuring it
+  // on the table would get. The L folds downward, so it says its box instead.
+  const span = (c: Choice) => (c.plan
+    ? (c.plan.grain === 'along' ? `${Math.round(c.plan.sheetWmm)}×${Math.round(c.plan.sheetHmm)}mm` : `広げて${Math.round(c.plan.sheetWmm)}mm`)
+    : `${spec.widthMm * c.sheets!.length}mm`);
+  const glyph = (c: Choice, box: { w: number; h: number }) => (c.plan
+    ? (c.plan.grain === 'along'
+      ? <FoldIcon size={spec} color="#A9A9A3" plan={c.plan} scale={Math.min(box.w / c.plan.sheetWmm, box.h / c.plan.sheetHmm)} rings />
+      : <FormGlyph2 size={spec} plan={c.plan} box={box} />)
+    : <FormGlyph2 size={spec} pages={c.sheets!.length as 1 | 2} box={box} />);
 
-  const card = (choice: Choice) => (
+  // One row per form, read down like the sizes: a small picture, the name and
+  // what it is for, and its width at the end.
+  const row = (c: Choice) => (
     <button
-      key={choice.key}
-      className="card flex flex-col items-center gap-2 rounded-[18px] border-[1.5px] px-2 py-3 text-center"
-      style={cardSkin(choice.on, color)}
-      aria-pressed={choice.on}
-      onClick={() => onPick(choice.pick)}
+      key={c.key}
+      className="card relative flex min-w-0 items-center gap-3 overflow-hidden rounded-xl border-[1.5px] py-2.5 pl-3 pr-3 text-left"
+      style={cardSkin(c.on, color)}
+      aria-pressed={c.on}
+      onClick={() => onPick(c.pick)}
     >
-      {/* No gap between the two pages of a spread: each page's box already
-          carries the room its own rings stand out into, and what meets in the
-          middle is the one ring the two of them hang on. */}
-      <span className="ruler flex items-center justify-center rounded-[10px]" style={field}>
-        {choice.plan
-          ? <FoldIcon size={spec} color={color} plan={choice.plan} scale={k} rings />
-          : choice.sheets!.map((flip, i) => (
-            <SizeIcon
-              key={i} size={spec} color={color} flip={flip} scale={k} rings
-            />
-          ))}
+      <span className="flex h-[40px] w-[56px] shrink-0 items-center justify-center">{glyph(c, { w: 56, h: 40 })}</span>
+      <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <strong className="truncate text-[15px] font-semibold leading-tight">{c.title}</strong>
+        <span className="truncate text-[12px] leading-tight text-muted">{c.note}</span>
       </span>
-      {/* The rule keeps the size's bright colour -- a rule is a shape, not a
-          word -- and the millimetres under it take the darkened one: Bible's
-          pale blue at 11px came to 2.45:1. */}
-      {span(choice) && (
-        <span className="dim -mt-1 flex flex-col items-center" style={{ color }}>
-          <svg width={Math.round(span(choice)!.mm * k)} height={7} aria-hidden="true" className="block">
-            <g stroke="currentColor" strokeWidth={1}>
-              <line x1={0.5} y1={3.5} x2={span(choice)!.mm * k - 0.5} y2={3.5} />
-              <line x1={0.5} y1={0.5} x2={0.5} y2={6.5} />
-              <line x1={span(choice)!.mm * k - 0.5} y1={0.5} x2={span(choice)!.mm * k - 0.5} y2={6.5} />
-            </g>
-          </svg>
-          <em
-            className="not-italic text-[13px] font-semibold leading-tight"
-            style={{ color: SIZE_WORD[size] }}
-          >{span(choice)!.text}</em>
-        </span>
-      )}
-      <span className="flex flex-col gap-0.5">
-        <strong className="text-[14px] font-semibold leading-tight">{choice.title}</strong>
-        <span className="text-[13px] leading-tight text-muted">{choice.note}</span>
+      <span className="shrink-0 text-[13px] font-semibold tabular-nums" style={{ color: SIZE_WORD[size] }}>{span(c)}</span>
+      <span aria-hidden="true" className="w-3 shrink-0 text-center text-[15px] leading-none" style={{ color: c.on ? SIZE_WORD[size] : 'var(--color-muted)' }}>
+        {c.on ? '✓' : ''}
       </span>
     </button>
   );
 
-  useLayoutEffect(() => { onScale?.(k); }, [k, onScale]);
-
   return (
     <>
-      {/* Side by side. A comparison reads across, not down: stacked, these
-          were the same drawing seen twice in a row instead of one beside the
-          other. Every card keeps one box the height of the largest sheet, so
-          a folded strip and a pair of pages are drawn to the same scale. */}
-      <div className="grid grid-cols-2 gap-1.5 lg:grid-cols-4">
-        {choices.map(choice => card(choice))}
+      {/* The one picked, drawn large: pressing a row below redraws this and
+          nothing else, so the eye stays on the shape while the finger moves. */}
+      <figure className="formpreview m-0 flex flex-col items-center gap-2 rounded-xl bg-white px-3 pb-3 pt-4 shadow-[0_0_0_1px_var(--color-line)]">
+        <span className="flex h-[150px] w-full items-center justify-center">{glyph(picked, { w: wide ? 360 : 290, h: 150 })}</span>
+        <figcaption className="text-[13px] font-semibold" style={{ color: SIZE_WORD[size] }}>
+          {picked.plan?.grain === 'along' ? picked.note : `${span(picked)}・${picked.note}`}
+        </figcaption>
+      </figure>
+      <div className={`grid gap-2 ${wide ? 'grid-cols-2' : 'grid-cols-1'}`}>
+        {choices.map(row)}
       </div>
       {special.length > 0 && (
         <div className="flex flex-col gap-1.5">
@@ -186,8 +138,8 @@ export function FormCards({ size, spread, fold, foldGrain, wide, onPick, onScale
                 + `内側の面は綴じ側を${special[0].plan!.insetMm}mm切り落とします`}
             </p>
           </div>
-          <div className="grid grid-cols-2 gap-1.5 lg:grid-cols-4">
-            {special.map(choice => card(choice))}
+          <div className={`grid gap-2 ${wide ? 'grid-cols-2' : 'grid-cols-1'}`}>
+            {special.map(row)}
           </div>
         </div>
       )}
@@ -206,8 +158,6 @@ export function SidesScreen({ size, spread, fold, foldGrain, onPick, onBack, onC
   const wide = useWide();
   const spec = SIZES[size];
   const color = SIZE_COLOR[size];
-  // The cards below decide it; the sheet in the strip above has to match.
-  const [k, setK] = useState(SHEET_SCALE);
   return (
     <div className={PICK_SCREEN}>
       {/* The card below is the size and can be pressed to change it, but a way
@@ -264,11 +214,8 @@ export function SidesScreen({ size, spread, fold, foldGrain, onPick, onBack, onC
             same sheet drawn twice on one screen at two sizes -- and on a wide
             window, where the cards get the room to draw big, the one up here
             read as a thinner paper than the one being chosen. */}
-        <span
-          className="flex shrink-0 items-center justify-center"
-          style={{ width: (spec.widthMm + ringOut(spec)) * k, height: spec.heightMm * k }}
-        >
-          <SizeIcon size={spec} color={color} scale={k} rings />
+        <span className="flex h-[44px] w-[40px] shrink-0 items-center justify-center">
+          <SheetGlyph size={spec} box={{ w: 36, h: 44 }} />
         </span>
         <span className="shrink-0 pr-0.5 text-[13px] text-accent-text">変更</span>
       </button>
@@ -283,7 +230,7 @@ export function SidesScreen({ size, spread, fold, foldGrain, onPick, onBack, onC
           strip and a pair of pages are drawn to the same scale. */}
       <FormCards
         size={size} spread={spread} fold={fold} foldGrain={foldGrain}
-        wide={wide} onPick={onPick} onScale={setK}
+        wide={wide} onPick={onPick}
       />
       {/* The note that was here said three things about a fold, and the
           drawing now says two of them better: the rings are on the head panel

@@ -122,20 +122,20 @@ check(
   'パーツの上では掴むカーソル',
 );
 
-// One sheet, one scale. The picker draws the size it was given as big as the
-// window allows, and the card at the top of that screen was drawing the same
-// sheet at the small scale of the screen before -- on a wide window, where the
-// cards get the most room, A5スリム up there read as a thinner paper than the
-// one being chosen.
+// The form screen draws the one picked, large, above the list: pressing a
+// row redraws that picture and nothing else.
 await page.goto(BASE);
 await page.locator('.sizerow', { hasText: '110×210mm' }).click(); if (await page.locator('.sizego').count()) await page.locator('.sizego').click();
 await page.locator('.card').first().waitFor();
-await page.waitForTimeout(300);
-const shown = await page.locator('.sizenow svg').boundingBox();
-const single = await page.locator('.card', { hasText: '片面' }).locator('.ruler svg').boundingBox();
+await page.locator('.card', { hasText: '片面' }).click();
+await page.waitForTimeout(200);
+const one = await page.locator('.formpreview svg').boundingBox();
+await page.locator('.card', { hasText: '見開き' }).click();
+await page.waitForTimeout(200);
+const two = await page.locator('.formpreview svg').boundingBox();
 check(
-  Math.abs(shown.width - single.width) < 2,
-  `選んだサイズは、選ばせる絵と同じ縮尺（${Math.round(shown.width)}px / ${Math.round(single.width)}px）`,
+  two.width > one.width * 1.5,
+  `行を押すと上の絵が切り替わる（片面 ${Math.round(one.width)}px → 見開き ${Math.round(two.width)}px）`,
 );
 await page.screenshot({ path: `${OUT}/04-構成の画面.png` });
 
@@ -143,15 +143,21 @@ await page.screenshot({ path: `${OUT}/04-構成の画面.png` });
 // plain child of one flex column, so a window too short for it shrank them all
 // -- and the strip at the top, being the shortest, was flattened to a bar with
 // the millimetres in it and the name and the sheet clipped away.
-await page.setViewportSize({ width: 390, height: 500 });
-await page.goto(BASE);
-await page.locator('.sizerow', { hasText: '62×105mm' }).click(); if (await page.locator('.sizego').count()) await page.locator('.sizego').click();
-await page.locator('.card').first().waitFor();
-await page.waitForTimeout(300);
-const strip = await page.locator('.sizenow').boundingBox();
+// Measured against the same strip on a tall window, so the check is about
+// squeezing and not about how tall the strip happens to be drawn.
+const stripAt = async (h) => {
+  await page.setViewportSize({ width: 390, height: h });
+  await page.goto(BASE);
+  await page.locator('.sizerow', { hasText: '62×105mm' }).click(); if (await page.locator('.sizego').count()) await page.locator('.sizego').click();
+  await page.locator('.card').first().waitFor();
+  await page.waitForTimeout(300);
+  return (await page.locator('.sizenow').boundingBox()).height;
+};
+const tallStrip = await stripAt(844);
+const strip = { height: await stripAt(500) };
 check(
-  strip.height > 80,
-  `低い窓でも作るリフィルは潰れない（高さ${Math.round(strip.height)}px）`,
+  Math.abs(strip.height - tallStrip) < 1,
+  `低い窓でも作るリフィルは潰れない（高さ${Math.round(strip.height)}px・高い窓で${Math.round(tallStrip)}px）`,
 );
 check(
   await page.locator('.sizenow svg').isVisible(),
