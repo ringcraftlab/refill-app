@@ -36,6 +36,10 @@ export function SizeCards({ selected, wide, onPick }: {
                   aria-pressed={on}
                 >
                   {/* The size's colour, flush to the card's edge. */}
+                  <span
+                    className="absolute right-2.5 top-2 rounded px-1.5 py-[1px] text-[11px] font-bold leading-tight text-white"
+                    style={{ background: SIZE_WORD[id] }}
+                  >{sizeHoles(SIZES[id])}</span>
                   <span className="absolute inset-y-0 left-0 w-1.5" style={{ background: SIZE_COLOR[id] }} />
                   {/* Small, but at one scale for all nine, so the sheets
                       still compare. */}
@@ -43,13 +47,9 @@ export function SizeCards({ selected, wide, onPick }: {
                     <SizeIcon size={SIZES[id]} color={SIZE_COLOR[id]} scale={0.2} rings />
                   </span>
                   <span className="flex min-w-0 flex-1 flex-col gap-1">
-                    <span className="flex min-w-0 items-center gap-2">
-                      <strong className="truncate text-[16px] font-semibold leading-tight">{SIZE_NAME[id]}</strong>
-                      <span
-                        className="shrink-0 rounded px-1.5 py-[1px] text-[11px] font-bold leading-tight text-white"
-                        style={{ background: SIZE_WORD[id] }}
-                      >{sizeHoles(SIZES[id])}</span>
-                    </span>
+                    {/* Room on the right for the hole count, which sits in the
+                        card's corner like a tab on a sheet. */}
+                    <strong className="truncate pr-10 text-[16px] font-semibold leading-tight">{SIZE_NAME[id]}</strong>
                     <span className="text-[13px] leading-tight text-ink tabular-nums">{sizeMm(SIZES[id])}</span>
                     <span className="truncate text-[12px] leading-tight text-muted tabular-nums">{punch(SIZES[id])}</span>
                   </span>
