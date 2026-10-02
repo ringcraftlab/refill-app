@@ -33,9 +33,9 @@ export function HomeScreen({ onStart, onOpen }: { onStart: () => void; onOpen: (
   const saved = useMemo(() => (opening ? listBooks() : []), [opening]);
 
   const reasons = [
-    { t: '面を分けるだけで組める', d: 'パーツを置くと紙が分かれ、境目の仕切りをドラッグすれば広さが変わります。細かいレイアウトの操作はいりません。' },
-    { t: 'A4に並べて、両面で刷れる', d: 'リフィルをA4に並べたPDFを作ります。両面印刷のとじ方や、最後の紙に残る空きも数えて知らせます。' },
-    { t: '9つのサイズ、規格どおりの穴', d: 'マイクロ5からA5まで。穴は、サイズごとに規格で決まった位置と径で描きます。' },
+    { t: '選んで、置くだけ', d: 'カレンダーやメモ欄を選んで紙に置くと、紙が区切られます。区切りの線を指で動かせば、それぞれの広さを変えられます。' },
+    { t: '家のプリンタで、両面印刷', d: 'A4などの用紙に、リフィルを何枚かずつ並べたPDFを作ります。両面印刷のときのプリンタの設定や、用紙に残る空きの数も知らせます。' },
+    { t: '9つのサイズに対応', d: 'ミニ6やバイブルなど、9つのサイズから選べます。とじ穴も、それぞれのサイズに合った位置に描きます。' },
   ];
 
   return (
@@ -51,10 +51,10 @@ export function HomeScreen({ onStart, onOpen }: { onStart: () => void; onOpen: (
             システム手帳のリフィルづくり
           </span>
           <h1 className="m-0 font-serif text-[24px] font-semibold leading-snug [text-wrap:balance]">
-            市販にない理想のリフィルを、<br />手軽に自作・自宅で印刷。
+            手帳のリフィルを、<br />自分で作って家で印刷。
           </h1>
           <p className="m-0 text-[14px] leading-relaxed text-muted">
-            パーツを置いて、仕切りで広さを決めるだけ。家庭のプリンタで刷れるPDFまで、スマホひとつで作れます。
+            カレンダーやメモ欄を選んで、紙の上に置くだけ。家のプリンタで印刷できるPDFまで、スマホで作れます。
           </p>
         </section>
 
@@ -63,7 +63,7 @@ export function HomeScreen({ onStart, onOpen }: { onStart: () => void; onOpen: (
           <span className="flex gap-[2px] drop-shadow-[0_1px_2px_rgba(0,0,0,0.15)]">
             {spread.map((p, i) => <PageSvg key={i} page={p} scale={1.9} />)}
           </span>
-          <figcaption className="text-[12px] text-muted">ミニ6の見開き：マンスリーとメモ</figcaption>
+          <figcaption className="text-[12px] text-muted">マンスリーとメモを置いた、ミニ6の見開き</figcaption>
         </figure>
 
         <div className="flex flex-col gap-2">
@@ -78,7 +78,7 @@ export function HomeScreen({ onStart, onOpen }: { onStart: () => void; onOpen: (
           </Button>
           <Button variant="quiet" className="hometips text-left text-ink" onClick={() => setTips(true)}>
             <span className="block text-[14px] font-semibold">印刷のコツ</span>
-            <span className="block text-[12px] text-muted">両面で失敗しない</span>
+            <span className="block text-[12px] text-muted">印刷する前に</span>
           </Button>
         </div>
 
@@ -138,11 +138,11 @@ export function HomeScreen({ onStart, onOpen }: { onStart: () => void; onOpen: (
       {tips && (
         <Modal title="印刷のコツ" onClose={() => setTips(false)}>
           <ol className="m-0 flex flex-col gap-2 pl-5 text-[13px] leading-relaxed">
-            <li>PDFは<strong>拡大・縮小しないで</strong>印刷しましょう。プリンタの設定の「実際のサイズ」や「100%」を選んでください。用紙に合わせて縮むと、穴の位置がずれます。</li>
-            <li>両面印刷の<strong>とじ方（長辺とじ・短辺とじ）</strong>は、A4に並べる向きで決まるので、刷り上がりプレビューに出たとおりに設定してください。同じことが紙の隅にも刷ってあります。</li>
-            <li>刷ったら、リフィルの境目の<strong>切り取り線（点線）</strong>に沿って切り分け、番号の順に重ねます。</li>
-            <li>穴は、描いてある位置に合わせて、お使いのサイズのパンチで開けます。</li>
-            <li>はじめての紙は、1枚だけ刷って、表と裏の向きを確かめてから全部を刷ると安心です。</li>
+            <li>PDFは<strong>拡大・縮小しないで</strong>印刷しましょう。プリンタの設定の「実際のサイズ」や「100%」を選んでください。用紙に合わせて縮むと、とじ穴の位置がずれます。</li>
+            <li>両面印刷の<strong>とじ方（長辺とじ・短辺とじ）</strong>は、用紙に並べる向きで決まるので、「PDF出力」の画面に出たとおりに設定してください。同じことが用紙の隅にも印刷されます。</li>
+            <li>印刷したら、リフィルの境目の<strong>切り取り線（点線）</strong>に沿って切り分け、番号の順に重ねます。</li>
+            <li>とじ穴は、描いてある位置に合わせて、手帳のサイズに合った穴あけパンチで開けます。</li>
+            <li>はじめての用紙は、1枚だけ印刷して表と裏の向きを確かめてから、全部を印刷すると安心です。</li>
           </ol>
         </Modal>
       )}

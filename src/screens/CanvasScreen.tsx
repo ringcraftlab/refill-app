@@ -1348,7 +1348,7 @@ export function CanvasScreen({
           {teachDivider
             ? '仕切りをドラッグすると、パーツの広さを変えられます'
             : traySelected.length > 0
-              ? `${traySelected.length}個選択中：紙をタップすると置けます`
+              ? `${traySelected.length}つ選択中。紙をタップすると置けます`
               : 'タップで選ぶ → 紙をタップ。ドラッグでも置けます'}
         </p>
       )}
@@ -1388,9 +1388,9 @@ export function CanvasScreen({
             <span className={`saying ml-auto min-w-0 self-center truncate pb-1 text-[13px] ${
               teachDivider || traySelected.length > 0 ? 'text-accent-text' : 'text-muted'}`}>
               {teachDivider
-                ? '仕切りをドラッグで広さが変わります'
+                ? '仕切りを動かすと広さが変わります'
                 : traySelected.length > 0
-                  ? `${traySelected.length}個選択中：紙をタップ`
+                  ? `${traySelected.length}つ選択中。紙をタップ`
                   : dock === 'parts' && !dockShut && !layout.imported ? '選ぶ → 紙をタップ' : ''}
             </span>
           </div>

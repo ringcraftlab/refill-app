@@ -61,7 +61,7 @@ export function FormCards({ size, spread, fold, foldGrain, wide, onPick }: {
   const choices: Choice[] = [
     {
       key: 'spread', on: flat && spread, pick: { spread: true, fold: 1 },
-      title: '見開き（2ページ）', note: '左右セットで1ヶ月分',
+      title: '見開き（2ページ）', note: '左右2ページでひと組',
       // The left page's rings are drawn on its right: in a spread the binding
       // is the seam, which is the one thing a picture of it has to get right.
       sheets: [true, false],
