@@ -16,8 +16,10 @@ import { downloadPdf, sheetsToPdf } from '../lib/render/pdf';
 import { saveBook } from '../lib/storage';
 import { Button, PRESS } from '../ui/Button';
 import { Dialog, Modal, Toast } from '../ui/Overlay';
-import { DockGrip, DockTab } from '../ui/Dock';
-import { formLabel, PART_LABEL, pacedFor, sectionOf, isPlaceholder, withSection, sectionLabel, bodyOf, pagesOf, backSideOf, usePaperJob, SECTION_LABEL } from '../app/book';
+import { DockGrip, DockTab, FilterChip } from '../ui/Dock';
+import { Filmstrip } from './Filmstrip';
+import { AddSection } from '../sheets/AddSection';
+import { formLabel, PART_LABEL, pacedFor, sectionOf, isPlaceholder, withSection, sectionLabel, bodyOf, pagesOf, backSideOf, usePaperJob, SECTION_LABEL, sectionSpan } from '../app/book';
 import type { PaperJob } from '../app/book';
 import { StampIcon, SizeIcon, Chevron, ListGlyph, FormGlyph, CalendarGlyph, BackgroundSample, BookGlyph, FileGlyph } from '../app/icons';
 import { WORD_SAMPLE, cssColor, BACKGROUND_LABEL, SIZE_COLOR } from '../app/look';
@@ -26,26 +28,28 @@ import type { Box, SheetTarget } from '../app/screen';
 import { PartSheet } from '../sheets/PartSheet';
 import { ZoomView } from '../sheets/ZoomView';
 
-// In three runs, each under a quiet heading: the parts that carry dates, the
-// places to write, and the rest. Tabs for these would be one more press for
-// fourteen parts; an order with names in it costs nothing.
-export const TRAY_GROUP = { dated: '日付', write: '書く欄', other: 'そのほか' } as const;
+// Four kinds, and a word under each name saying what it is for: the tray is
+// a shelf someone browses, and 「ガント」 says nothing to most people. The kinds
+// filter rather than head a run on a phone -- a tab per kind would be one more
+// press for fourteen parts, a chip is the same press that picks the kind.
+export const TRAY_GROUP = { dated: '日付・暦', list: '書く欄・リスト', note: '方眼・ノート', other: '写真など' } as const;
+export type TrayGroup = keyof typeof TRAY_GROUP;
 
-export const TRAY: { kind: PartKind; label: string; group: keyof typeof TRAY_GROUP }[] = [
-  { kind: 'monthly', label: 'マンスリー', group: 'dated' },
-  { kind: 'daylist', label: '日付リスト', group: 'dated' },
-  { kind: 'weekvert', label: 'バーチカル', group: 'dated' },
-  { kind: 'weekhoriz', label: 'ウィークリー', group: 'dated' },
-  { kind: 'gantt', label: 'ガント', group: 'dated' },
-  { kind: 'habit', label: 'ハビット', group: 'dated' },
-  { kind: 'todo', label: 'TODO', group: 'write' },
-  { kind: 'goal', label: '目標', group: 'write' },
-  { kind: 'memo', label: 'メモ', group: 'write' },
-  { kind: 'lines', label: '罫線', group: 'write' },
-  { kind: 'grid', label: '方眼', group: 'write' },
-  { kind: 'budget', label: '家計', group: 'write' },
-  { kind: 'photo', label: '写真', group: 'other' },
-  { kind: 'swatch', label: 'インク見本', group: 'other' },
+export const TRAY: { kind: PartKind; label: string; note: string; group: TrayGroup }[] = [
+  { kind: 'monthly', label: 'マンスリー', note: '1ヶ月の暦', group: 'dated' },
+  { kind: 'daylist', label: '日付リスト', note: '1日1行', group: 'dated' },
+  { kind: 'weekvert', label: 'バーチカル', note: '時間の目盛り', group: 'dated' },
+  { kind: 'weekhoriz', label: 'ウィークリー', note: '1週間を7行', group: 'dated' },
+  { kind: 'gantt', label: 'ガント', note: '予定を帯で', group: 'dated' },
+  { kind: 'habit', label: 'ハビット', note: '習慣に印', group: 'dated' },
+  { kind: 'todo', label: 'TODO', note: 'チェック欄', group: 'list' },
+  { kind: 'goal', label: '目標', note: '大きな枠', group: 'list' },
+  { kind: 'budget', label: '家計', note: '金額の表', group: 'list' },
+  { kind: 'memo', label: 'メモ', note: '見出しつき', group: 'note' },
+  { kind: 'lines', label: '罫線', note: '線だけ', group: 'note' },
+  { kind: 'grid', label: '方眼', note: 'マス目', group: 'note' },
+  { kind: 'photo', label: '写真', note: '画像を貼る', group: 'other' },
+  { kind: 'swatch', label: 'インク見本', note: '色を試す', group: 'other' },
 ];
 
 export const TAUGHT_KEY = 'ringcraft.dividerTaught';
@@ -165,15 +169,25 @@ export function CanvasScreen({
   // chosen: several are chosen one tap at a time and put down together.
   const [dock, setDock] = useState<'parts' | 'paper'>('parts');
   const [dockShut, setDockShut] = useState(false);
+  const [trayKind, setTrayKind] = useState<TrayGroup | 'all'>('all');
   // What belongs to the whole book rather than to the run being edited --
   // its order, its paper, opening and saving it -- in one place of its own,
   // so the settings tab only holds what it says it holds.
   const [bookOpen, setBookOpen] = useState(false);
+  const [cautionOpen, setCautionOpen] = useState(false);
+  // Where the strip's ＋ was pressed, and which run was held.
+  const [insertAt, setInsertAt] = useState<number | null>(null);
+  const [held, setHeld] = useState<number | null>(null);
   // The tray is what this page can take. A cover is one page, so nothing that
   // runs on dates belongs in it -- and offering a part only to refuse it after
   // the drag is worse than not offering it: turning the pages is meant to be
   // something you do without stopping.
-  const trayParts = layout.imported ? [] : layout.cover || layout.backCover ? TRAY.filter(t => !isDatedKind(t.kind)) : TRAY;
+  const trayAll = layout.imported ? [] : layout.cover || layout.backCover ? TRAY.filter(t => !isDatedKind(t.kind)) : TRAY;
+  const trayKinds = (Object.keys(TRAY_GROUP) as TrayGroup[]).filter(g => trayAll.some(t => t.group === g));
+  // A kind the page cannot take -- the dated ones on a cover -- is not a kind
+  // to be left looking at an empty shelf in.
+  const shownKind = trayKind !== 'all' && trayKinds.includes(trayKind) ? trayKind : 'all';
+  const trayParts = shownKind === 'all' ? trayAll : trayAll.filter(t => t.group === shownKind);
   const [sheet, setSheet] = useState<SheetTarget>(null);
   const [toast, setToast] = useState<ReactNode>('');
   const [ghost, setGhost] = useState<{ x: number; y: number; kinds: PartKind[] } | null>(null);
@@ -897,6 +911,44 @@ export function CanvasScreen({
   // paper they stand at the top of the tools instead: a single page is
   // tall and narrow, so the height they took was the one thing it was
   // short of, while the width either side of it went unused.
+  // The book as a whole, for the phone's title and the strip under it.
+  const bookBody = bodyOf(book);
+  // Until it is named, what is in it -- the size and form are said on the
+  // line under the name already.
+  const bookName = book.name && book.name !== '新しい束' ? book.name
+    : book.sections.map(sectionLabel).slice(0, 3).join('＋');
+  const leavesAll = pagesOf(book.sections);
+  const bookSpreads = book.sections.some(sec => !sec.cover && !sec.backCover && sec.spread && sec.fold <= 1);
+  const canCover = !book.sections[0]?.cover && bookSpreads;
+  const canBack = !book.sections.some(sec => sec.backCover) && bookSpreads
+    && leavesAll.length > 0 && leavesAll[leavesAll.length - 1].at === null
+    && book.sections.some(sec => !sec.cover && !sec.backCover && !isPlaceholder(sec));
+  // What to know before printing, said once at the top rather than found on
+  // the paper afterwards.
+  const emptyRuns = book.sections.filter(sec => !sec.cover && !sec.backCover && !sec.imported
+    && sec.surface.placed.length === 0 && !sec.spanning && !sec.background);
+  const cautions: string[] = [
+    ...(emptyRuns.length ? [`何も置いていないページがあります（${emptyRuns.map(sectionLabel).join('、')}）。白紙のまま刷られます`] : []),
+    ...(print.impose && job.spare > 0
+      ? [`最後の${PAPERS[print.paper].label}に、あと${job.spare}${job.unit}ぶん空きがあります。メモなどを足すと紙が無駄になりません`] : []),
+  ];
+  // A run moves among the runs; the cover stays in front and the back cover
+  // at the end.
+  const canMove = (i: number, d: number) => {
+    const to = i + d;
+    const t = book.sections[to];
+    return !!t && !t.cover && !t.backCover;
+  };
+  const moveSection = (i: number, d: number) => setBook(b => {
+    const sections = [...b.sections];
+    [sections[i], sections[i + d]] = [sections[i + d], sections[i]];
+    return { ...b, sections };
+  });
+  const dropSection = (i: number) => {
+    setBook(b => ({ ...b, sections: b.sections.length > 1 ? b.sections.filter((_, k) => k !== i) : b.sections }));
+    goTo(Math.max(0, Math.min(i, book.sections.length - 2)), 0);
+  };
+
   const headerEl = (
     <header className="flex shrink-0 items-center gap-2 px-4 pb-2 pt-3 text-[13px] font-semibold text-label">
       {/* The way back, and only when there is one: the editor is the
@@ -926,7 +978,22 @@ export function CanvasScreen({
           a sentence explaining a door. The paper IS the door: press it and
           the sizes and the forms are there, and what you pick redraws the
           sheet behind the chip. */}
-      <Button
+      {!wide && (
+        <button className="bookmenu flex min-w-0 flex-1 flex-col items-start text-left" onClick={() => setBookOpen(true)} aria-label="この1冊">
+          <span className="flex max-w-full items-center gap-1 text-[16px] font-bold text-ink">
+            <span className="truncate">{bookName}</span><span className="text-[12px] text-muted" aria-hidden="true">▾</span>
+          </span>
+          <span className="max-w-full truncate text-[12px] font-normal text-muted">
+            {size.label}・{formLabel(bookBody, foldNow?.grain)}{paging ? `・${paging.of}ページ` : ''}
+          </span>
+        </button>
+      )}
+      {!wide && cautions.length > 0 && (
+        <Button variant="chip" className="cautions shrink-0 text-danger" onClick={() => setCautionOpen(true)} aria-label="刷る前に">
+          ⚠ {cautions.length}
+        </Button>
+      )}
+      {wide && <Button
         variant="chip"
         className="papernow min-w-0"
         // The chip variant never shrinks; this one has to, or on the cover
@@ -967,15 +1034,7 @@ export function CanvasScreen({
             choice does. */}
   </span>
         <span className="ml-1 text-[13px] leading-none text-muted" aria-hidden="true">▾</span>
-      </Button>
-      {/* Below 360px even these give up their words: what they were pushing
-          out of the title is worth more. The icons stay, and so do the
-          labels a screen reader reads. */}
-      {!wide && (
-        <Button variant="ctaSmall" className="ml-auto" onClick={() => setSheet('print')} aria-label="PDF出力プレビュー">
-          PDF出力
-        </Button>
-      )}
+      </Button>}
       {wide && <>
       <Button variant="chip" className="rotate ml-auto" onClick={turn} aria-label="リフィルを回転">
         <span className="text-[14px] leading-none">↻</span>
@@ -1063,7 +1122,16 @@ export function CanvasScreen({
         <ZoomView pages={pages} flow={geo.flow} onClose={() => setZoomed(false)} />
       )}
 
-      {!wide && railEl}
+      {!wide && (
+        <Filmstrip
+          sections={book.sections} at={at} nth={nth} size={size}
+          onGo={(i, k) => goTo(i, k)}
+          onAddCover={canCover ? addCover : undefined}
+          onAddBack={canBack ? addBackCover : undefined}
+          onInsert={before => setInsertAt(before)}
+          onHold={i => setHeld(i)}
+        />
+      )}
 
       <div className="relative flex min-h-0 grow items-center justify-center px-3 py-2" ref={boxRef}>
         {/* The book, turned. A planner is something you flip through, so the
@@ -1296,7 +1364,7 @@ export function CanvasScreen({
       {!wide && pagerEl}
 
       {/* What the rest of the book is, from inside one section of it. */}
-      {!wide && alsoEl}
+      {/* On a phone the strip above the paper is the rest of the book. */}
 
 
       </div>
@@ -1305,7 +1373,7 @@ export function CanvasScreen({
           the same blocks in the same order either way. */}
       {/* On a phone the sheet is one height whichever tab is showing, so
           changing tabs never moves the paper above it. */}
-      <aside className={`flex min-h-0 shrink-0 flex-col overflow-hidden ${!wide && !dockShut ? 'h-[198px]' : ''} lg:w-[340px] lg:overflow-y-auto lg:border-l lg:border-line lg:bg-paper`}>
+      <aside className={`flex min-h-0 shrink-0 flex-col overflow-hidden ${!wide && !dockShut ? 'h-[180px]' : ''} lg:w-[340px] lg:overflow-y-auto lg:border-l lg:border-line lg:bg-paper`}>
       {wide && <div className="asidehead border-b border-line pb-2">{headerEl}{pagerEl}{alsoEl}</div>}
       {wide && <div className="border-b border-line pb-2 pt-2">{railEl}</div>}
       {!wide && (
@@ -1339,6 +1407,12 @@ export function CanvasScreen({
         </p>
       )}
       <div className={`relative shrink-0 bg-paper lg:border-t lg:border-line lg:border-t-0 ${layout.imported || !partsShown ? 'hidden' : ''}`}>
+        <div className="traykinds flex gap-1.5 overflow-x-auto px-3 pt-1.5 lg:px-4 lg:pt-3" role="group" aria-label="パーツの種類">
+          <FilterChip on={shownKind === 'all'} onClick={() => setTrayKind('all')}>すべて</FilterChip>
+          {trayKinds.map(g => (
+            <FilterChip key={g} on={shownKind === g} onClick={() => setTrayKind(g)}>{TRAY_GROUP[g]}</FilterChip>
+          ))}
+        </div>
         <div
           ref={el => { trayRef.current = el; readTrayEdges(); }}
           onScroll={readTrayEdges}
@@ -1348,9 +1422,9 @@ export function CanvasScreen({
           // this the thirteen stamps took the whole column and the settings
           // were a 200px slot at the bottom -- open the photo settings and
           // the button to choose a picture was below the fold.
-          // Two rows on a phone, scrolled sideways: the same height as the
-          // settings, so the sheet does not change size between its tabs.
-          className={`grid auto-cols-max grid-flow-col grid-rows-2 gap-2 overflow-x-auto px-3 pb-2.5 pt-2 lg:grid-flow-row lg:auto-cols-auto lg:grid-rows-none lg:gap-2.5 lg:grid-cols-3 lg:overflow-x-visible lg:px-4 lg:pt-4 ${
+          // One row on a phone, scrolled sideways; the kinds above it are how
+          // a long shelf gets short.
+          className={`grid auto-cols-max grid-flow-col grid-rows-1 gap-2 overflow-x-auto px-3 pb-2.5 pt-2 lg:grid-flow-row lg:auto-cols-auto lg:grid-rows-none lg:gap-2.5 lg:grid-cols-3 lg:overflow-x-visible lg:px-4 lg:pt-4 ${
             sheetEl ? 'lg:max-h-[34vh] lg:overflow-y-auto' : ''
           }`}
         >
@@ -1359,14 +1433,12 @@ export function CanvasScreen({
           const head = n === 0 || trayParts[n - 1].group !== t.group;
           return (
             <Fragment key={t.kind}>
-            {head && (
+            {head && wide && shownKind === 'all' && (
               // Down the side of the two rows on a phone; across the column
               // on a desk.
-              <span className={`trayhead flex items-center text-[12px] text-muted ${wide
-                ? 'col-span-3 gap-2 pt-1 first:pt-0'
-                : 'row-span-2 justify-center [writing-mode:vertical-rl] tracking-[0.15em]'}`}>
+              <span className="trayhead col-span-3 flex items-center gap-2 pt-1 text-[12px] text-muted first:pt-0">
                 {TRAY_GROUP[t.group]}
-                {wide && <i className="h-px flex-1 bg-line" />}
+                <i className="h-px flex-1 bg-line" />
               </span>
             )}
             <button
@@ -1395,6 +1467,7 @@ export function CanvasScreen({
               )}
               <StampIcon kind={t.kind} />
               <span>{t.label}</span>
+              <span className="text-[11px] font-normal leading-none text-muted">{t.note}</span>
             </button>
             </Fragment>
           );
@@ -1500,6 +1573,16 @@ export function CanvasScreen({
       </div>
       </aside>
 
+      {/* What belongs to the whole book, at the foot of the screen on a
+          phone: the paper it is made on, keeping it, and printing it. */}
+      {!wide && (
+        <div className="bookbar flex shrink-0 gap-2 border-t border-line bg-paper px-3 pb-3 pt-2">
+          <Button className="papernow" onClick={() => setSheet('sheet')}>サイズ・穴</Button>
+          <Button onClick={() => setSheet('save')}>保存</Button>
+          <Button variant="actionWide" onClick={() => setSheet('print')} aria-label="PDF出力プレビュー">PDF出力</Button>
+        </div>
+      )}
+
       {ghost && (
         <div
           className="pointer-events-none fixed z-40 -translate-x-1/2 -translate-y-[140%] whitespace-nowrap rounded-[20px] bg-ink px-3 py-[7px] text-[13px] text-white"
@@ -1524,11 +1607,49 @@ export function CanvasScreen({
                 {print.impose && job.spare > 0 && `（あと${job.spare}${job.unit}ぶん）`}
               </span>
             </Button>
-            <div className="flex gap-2">
-              <Button onClick={() => { setBookOpen(false); setSheet('load'); }} aria-label="保存したものを開く">開く</Button>
-              <Button onClick={() => { setBookOpen(false); setSheet('save'); }}>保存</Button>
-            </div>
+            <Button variant="quiet" className="rename flex items-center gap-2 text-ink" onClick={() => { setBookOpen(false); setSheet('save'); }}>
+              名前<span className="ml-auto min-w-0 truncate text-muted">{bookName}</span>
+            </Button>
+            <Button onClick={() => { setBookOpen(false); setSheet('load'); }} aria-label="保存したものを開く">ほかの1冊を開く</Button>
           </div>
+        </Modal>
+      )}
+
+      {cautionOpen && (
+        <Modal title="刷る前に" onClose={() => setCautionOpen(false)}>
+          <ul className="m-0 flex list-none flex-col gap-2 p-0 text-[13px] leading-relaxed">
+            {cautions.map((c, i) => <li key={i} className="caution">{c}</li>)}
+          </ul>
+        </Modal>
+      )}
+
+      {insertAt !== null && (
+        <AddSection
+          job={job} print={print}
+          positioned
+          cover={false}
+          onPick={kind => {
+            const where = insertAt;
+            setInsertAt(null);
+            setBook(b => ({ ...b, sections: withSection(b.sections, sectionOf(kind, bodyOf(b)), where) }));
+            goTo(where, 0);
+          }}
+          onClose={() => setInsertAt(null)}
+        />
+      )}
+
+      {held !== null && book.sections[held] && (
+        <Modal title={sectionLabel(book.sections[held])} onClose={() => setHeld(null)}>
+          <p className="m-0 text-[13px] text-muted">{sectionSpan(book.sections[held])}</p>
+          {!book.sections[held].cover && !book.sections[held].backCover && (
+            <span className="flex gap-1.5">
+              <Button variant="quiet" className="flex-1" disabled={!canMove(held, -1)} onClick={() => { moveSection(held, -1); setHeld(held - 1); }}>← 前へ</Button>
+              <Button variant="quiet" className="flex-1" disabled={!canMove(held, 1)} onClick={() => { moveSection(held, 1); setHeld(held + 1); }}>後ろへ →</Button>
+            </span>
+          )}
+          {book.sections.length > 1 && (
+            <Button variant="quiet" className="text-danger" onClick={() => { dropSection(held); setHeld(null); }}>この{book.sections[held].cover ? '表紙' : book.sections[held].backCover ? '裏表紙' : 'まとまり'}を外す</Button>
+          )}
         </Modal>
       )}
 

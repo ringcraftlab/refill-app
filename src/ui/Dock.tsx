@@ -29,3 +29,16 @@ export function DockTab({ on, children, ...rest }: { on: boolean; children: Reac
     >{children}</button>
   );
 }
+
+// One kind of part to show on the shelf, or all of them. Picked, it is filled
+// with ink like a chosen segment, so the row reads as a choice and not as tags.
+export function FilterChip({ on, children, ...rest }: { on: boolean; children: ReactNode } & ButtonHTMLAttributes<HTMLButtonElement>) {
+  return (
+    <button
+      aria-pressed={on}
+      className={`filterchip shrink-0 whitespace-nowrap rounded-full border px-3 py-[5px] text-[13px] ${PRESS} ${
+        on ? 'border-ink bg-ink font-semibold text-white' : 'border-line-strong bg-white text-label'}`}
+      {...rest}
+    >{children}</button>
+  );
+}

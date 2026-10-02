@@ -94,7 +94,7 @@ await page.screenshot({ path: `${OUT}/04-取り込んだページ.png` });
 const pagesAfter = Number((await flat('.pageno')).match(/\/(\d+)/)[1]);
 check(await page.locator('.page image').count() >= 1, '紙に取り込んだ絵が描かれる');
 check(await page.locator('.stamp:visible').count() === 0, '取り込んだページにはパーツを出さない');
-check((await flat('.rail')).includes('取り込んだリフィル'), '帯に「取り込んだリフィル」が並ぶ');
+check((await flat('.rail, .filmstrip')).includes('取り込んだリフィル'), '帯に「取り込んだリフィル」が並ぶ');
 check(pagesAfter >= pagesBefore + 1, `ページが増える（${pagesBefore} → ${pagesAfter}）`);
 await dockTab('設定');
 check((await flat('.papersettings')).includes('いっぱいに広げる'), '選んだ入れ方が「この紙の設定」に出る');

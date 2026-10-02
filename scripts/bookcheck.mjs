@@ -32,6 +32,9 @@ const page = await ctx.newPage();
 await page.setViewportSize({ width: 1330, height: 900 });
 
 const centerOf = async (l) => {
+  // The tool column scrolls, and its bottom row is pinned over it: a stamp
+  // just inside the fold is under the buttons. Middle of the column, then.
+  await l.evaluate(el => el.scrollIntoView({ block: 'center', inline: 'center' })).catch(() => {});
   const b = await l.boundingBox();
   return { x: b.x + b.width / 2, y: b.y + b.height / 2 };
 };
