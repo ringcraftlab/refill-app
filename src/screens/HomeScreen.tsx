@@ -51,9 +51,10 @@ export function HomeScreen({ onStart, onOpen }: { onStart: () => void; onOpen: (
             システム手帳のリフィルづくり
           </span>
           {/* Broken only between phrases: a phone otherwise splits a word in two. */}
-          <h1 className="m-0 font-serif text-[22px] font-semibold leading-snug [&>span]:inline-block">
+          <p className="m-0 text-[14px] leading-relaxed text-ink [&>span]:inline-block">
             <span>欲しいサイズも、</span><span>使いたいレイアウトも、</span><span>なかなか見つからない。</span>
-            <br />
+          </p>
+          <h1 className="m-0 -mt-1 font-serif text-[24px] font-semibold leading-snug [&>span]:inline-block">
             <span>そんなリフィルを、</span><span>手帳に合わせて作れます。</span>
           </h1>
           <p className="m-0 text-[14px] leading-relaxed text-muted [&>span]:inline-block">
