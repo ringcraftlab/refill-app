@@ -52,13 +52,9 @@ export function FormCards({ size, spread, fold, foldGrain, wide, onPick }: {
       on: fold === n && grain === g,
       pick: { spread: false, fold: n as FoldCount, foldGrain: g },
       title: `${g === 'along' ? 'L字' : '蛇腹'}${n}面`,
-      // The box you would measure on the table, not the fold's own axis:
-      // folding along the binding stands the strip up.
-      // The width is on the drawing now; what is left to say is what it comes
-      // to when it is shut, which is the page it lives as in the binder.
-      note: g === 'along'
-        ? `広げて${plan.sheetWmm}×${plan.sheetHmm}mm`
-        : `畳むと${spec.widthMm}×${spec.heightMm}mm`,
+      // Words, not millimetres: this is a choice of shape, and the numbers
+      // are the editor's business once the shape is chosen.
+      note: g === 'along' ? '下へ広げる1本の帯' : '畳んで綴じ、広げて使う',
       plan,
     }];
   });
@@ -83,11 +79,6 @@ export function FormCards({ size, spread, fold, foldGrain, wide, onPick }: {
   const special = grains.includes('along') ? foldCards('along') : [];
   const all = [...choices, ...special];
   const picked = all.find(c => c.on) ?? all[0];
-  // How wide the thing is when it is open -- the number someone measuring it
-  // on the table would get. The L folds downward, so it says its box instead.
-  const span = (c: Choice) => (c.plan
-    ? (c.plan.grain === 'along' ? `${Math.round(c.plan.sheetWmm)}×${Math.round(c.plan.sheetHmm)}mm` : `広げて${Math.round(c.plan.sheetWmm)}mm`)
-    : `${spec.widthMm * c.sheets!.length}mm`);
   const glyph = (c: Choice, box: { w: number; h: number }) => (c.plan
     ? (c.plan.grain === 'along'
       ? <FoldIcon size={spec} color="#A9A9A3" plan={c.plan} scale={Math.min(box.w / c.plan.sheetWmm, box.h / c.plan.sheetHmm)} rings />
@@ -109,7 +100,6 @@ export function FormCards({ size, spread, fold, foldGrain, wide, onPick }: {
         <strong className="truncate text-[15px] font-semibold leading-tight">{c.title}</strong>
         <span className="truncate text-[12px] leading-tight text-muted">{c.note}</span>
       </span>
-      <span className="shrink-0 text-[13px] font-semibold tabular-nums" style={{ color: SIZE_WORD[size] }}>{span(c)}</span>
       <span aria-hidden="true" className="w-3 shrink-0 text-center text-[15px] leading-none" style={{ color: c.on ? SIZE_WORD[size] : 'var(--color-muted)' }}>
         {c.on ? '✓' : ''}
       </span>
@@ -123,7 +113,7 @@ export function FormCards({ size, spread, fold, foldGrain, wide, onPick }: {
       <figure className="formpreview m-0 flex flex-col items-center gap-2 rounded-xl bg-white px-3 pb-3 pt-4 shadow-[0_0_0_1px_var(--color-line)]">
         <span className="flex h-[150px] w-full items-center justify-center">{glyph(picked, { w: wide ? 360 : 290, h: 150 })}</span>
         <figcaption className="text-[13px] font-semibold" style={{ color: SIZE_WORD[size] }}>
-          {picked.plan?.grain === 'along' ? picked.note : `${span(picked)}・${picked.note}`}
+          {picked.note}
         </figcaption>
       </figure>
       <div className={`grid gap-2 ${wide ? 'grid-cols-2' : 'grid-cols-1'}`}>
@@ -135,7 +125,7 @@ export function FormCards({ size, spread, fold, foldGrain, wide, onPick }: {
             <h2 className="m-0 text-[14px] font-semibold">特殊蛇腹（L字）</h2>
             <p className="m-0 mt-0.5 text-[13px] leading-snug text-muted">
               {`${SIZE_NAME[size]}だけの形。折り目がリングと直角なので、`
-                + `内側の面は綴じ側を${special[0].plan!.insetMm}mm切り落とします`}
+                + '内側の面は綴じ側を少し切り落とします'}
             </p>
           </div>
           <div className={`grid gap-2 ${wide ? 'grid-cols-2' : 'grid-cols-1'}`}>
