@@ -45,13 +45,13 @@ async function build() {
   await drag(await centerOf(await stamp('バーチカル')), await centerOf(page.locator('.page').nth(1)));
 }
 
-// The pickers widen too, but only as far as four cards across: they are a
-// comparison, and a comparison reads across rather than down.
+// The size list widens to two columns on a desk: each card is a line of
+// numbers to read (the paper, the punch), and four across left them no room.
 await page.goto(BASE);
 const cards = await page.locator('.sizerow').all();
 const boxes = await Promise.all(cards.map(c => c.boundingBox()));
 const across = boxes.filter(b => Math.abs(b.y - boxes[0].y) < 2).length;
-check(across === 4, `よく使われる4サイズが1行に並ぶ（${across}枚）`);
+check(across === 2, `サイズは2列に並ぶ（${across}枚）`);
 check(boxes[0].width > 200, `カードは狭くならない（${Math.round(boxes[0].width)}px）`);
 await page.screenshot({ path: `${OUT}/00-サイズ選択.png` });
 

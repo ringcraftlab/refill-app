@@ -1,87 +1,70 @@
 import { useState } from 'react';
-import type { RefillSize } from '../types';
+import type { RefillSize, SizeSpec } from '../types';
 import { SIZES } from '../lib/sizes';
 import { Button } from '../ui/Button';
 import { LogoMark, SizeIcon } from '../app/icons';
-import { SIZE_GROUPS, SHEET_SLOT, SIZE_COLOR, SIZE_WORD, SIZE_NAME, sizeMm, sizeHoles, nameSize, cardSkin } from '../app/look';
+import { SIZE_GROUPS, SIZE_COLOR, SIZE_WORD, SIZE_NAME, sizeMm, sizeHoles, cardSkin } from '../app/look';
 import { useWide, PICK_SCREEN } from '../app/screen';
 
-// The nine sizes, laid out to be compared. Extracted from the screen that
-// asks for one first, because the same cards are what the paper's own chip
-// opens later -- the size is a property of the paper, not a step you passed.
+// The nine sizes as a list to read down: a small sheet, the name and its
+// hole count, then what a binder is measured by -- the paper, and the punch.
+// The punch is what decides whether a refill fits, and it is the one thing a
+// name like 「バイブル」 does not tell someone holding a binder of a brand that
+// calls it something else.
+const punch = (s: SizeSpec) => {
+  const h = s.holes;
+  return `φ${h.diameterMm}mm・${h.pitchMm}mmピッチ${h.centreGapMm ? `・中央${h.centreGapMm}mm` : ''}`;
+};
+
 export function SizeCards({ selected, wide, onPick }: {
   selected: RefillSize; wide: boolean; onPick: (s: RefillSize) => void;
 }) {
   return (
-          <div className="mb-auto flex w-full flex-col gap-3 py-0.5">
-            {SIZE_GROUPS.map(group => (
-              <section key={group.title} className="flex flex-col gap-1.5">
-                <h2 className="sect m-0 flex items-center gap-2 text-[13px] font-bold tracking-[0.04em] text-muted">{group.title}</h2>
-                {/* A grid, not nested flex rows: its columns are exactly half
-                    each, where a flex item would refuse to shrink below its own
-                    name and the longest one on a row would push the column edge
-                    over. */}
-                <div className="grid grid-cols-2 gap-1.5 lg:grid-cols-4">
-                  {(wide ? group.rows.flat() : group.rows.flatMap(row => (row.length === 1 ? [...row, null] : row))).map((id, i) => (
-                    id === null
-                      // A size with no partner leaves the rest of its row empty
-                      // rather than pulling the next pair apart.
-                      ? <span key={`empty-${i}`} aria-hidden="true" />
-                      : (
-                        <button
-                          key={id}
-                          onClick={() => onPick(id)}
-                          className={`sizerow relative flex min-w-0 items-center gap-1 overflow-hidden rounded-[18px] border-[1.5px] py-2 pl-3 pr-1 text-left`}
-                          style={cardSkin(selected === id, SIZE_COLOR[id])}
-                          aria-pressed={selected === id}
-                        >
-                          {/* A colour a glance can learn the size by, before the
-                              name is read. Flush to the card's own edge and its
-                              full height: a bar with air around it is a shape
-                              sitting on the card, and this is meant to be the
-                              card's edge. */}
-                          <span
-                            className="absolute inset-y-0 left-0 w-1.5"
-                            style={{ background: SIZE_COLOR[id] }}
-                          />
-                          <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-                            <strong className={`truncate font-semibold leading-tight ${nameSize(SIZE_NAME[id])}`}>
-                              {SIZE_NAME[id]}
-                            </strong>
-                            <span className="truncate text-[13px] leading-tight text-muted">
-                              {sizeMm(SIZES[id])}
-                            </span>
-                            {/* In the size's own colour, which is the one place
-                                that colour carries a fact rather than a label:
-                                the sizes sharing a hole count are the sizes
-                                whose sheets swap between binders. Darkened to
-                                the point where ten pixels of it can be read. */}
-                            <span
-                              className="truncate text-[13px] font-semibold leading-tight"
-                              style={{ color: SIZE_WORD[id] }}
-                            >
-                              {sizeHoles(SIZES[id])}
-                            </span>
-                          </span>
-                          <span className="flex shrink-0 items-center justify-center" style={SHEET_SLOT}>
-                            <SizeIcon size={SIZES[id]} color={SIZE_COLOR[id]} rings />
-                          </span>
-                          {/* Decoration: it says "this opens something", which
-                              the button already says, so it stays out of the
-                              name a screen reader reads -- and off a 320px
-                              screen entirely. It and its gap cost 9px of the
-                              135px card, which at that width is the difference
-                              between "148×210mm" and "148×210m…", and the
-                              millimetres are the only clue left to someone who
-                              does not know the names. */}
-                          <span aria-hidden="true" className="hidden shrink-0 text-[14px] leading-none text-muted min-[360px]:block">›</span>
-                        </button>
-                      )
-                  ))}
-                </div>
-              </section>
-            ))}
+    <div className="mb-auto flex w-full flex-col gap-4 py-0.5">
+      {SIZE_GROUPS.map(group => (
+        <section key={group.title} className="flex flex-col gap-2">
+          <h2 className="sect m-0 flex items-center gap-2 text-[13px] font-bold tracking-[0.04em] text-muted">{group.title}</h2>
+          <div className={`grid gap-2 ${wide ? 'grid-cols-2' : 'grid-cols-1'}`}>
+            {group.rows.flat().map(id => {
+              const on = selected === id;
+              return (
+                <button
+                  key={id}
+                  onClick={() => onPick(id)}
+                  className="sizerow relative flex min-w-0 items-center gap-3 overflow-hidden rounded-xl border-[1.5px] py-2.5 pl-4 pr-3 text-left"
+                  style={cardSkin(on, SIZE_COLOR[id])}
+                  aria-pressed={on}
+                >
+                  {/* The size's colour, flush to the card's edge. */}
+                  <span className="absolute inset-y-0 left-0 w-1.5" style={{ background: SIZE_COLOR[id] }} />
+                  {/* Small, but at one scale for all nine, so the sheets
+                      still compare. */}
+                  <span className="flex h-[48px] w-[40px] shrink-0 items-center justify-center">
+                    <SizeIcon size={SIZES[id]} color={SIZE_COLOR[id]} scale={0.2} rings />
+                  </span>
+                  <span className="flex min-w-0 flex-1 flex-col gap-1">
+                    <span className="flex min-w-0 items-center gap-2">
+                      <strong className="truncate text-[16px] font-semibold leading-tight">{SIZE_NAME[id]}</strong>
+                      <span
+                        className="shrink-0 rounded px-1.5 py-[1px] text-[11px] font-bold leading-tight text-white"
+                        style={{ background: SIZE_WORD[id] }}
+                      >{sizeHoles(SIZES[id])}</span>
+                    </span>
+                    <span className="text-[13px] leading-tight text-ink tabular-nums">{sizeMm(SIZES[id])}</span>
+                    <span className="truncate text-[12px] leading-tight text-muted tabular-nums">{punch(SIZES[id])}</span>
+                  </span>
+                  <span
+                    aria-hidden="true"
+                    className="shrink-0 text-[15px] leading-none"
+                    style={{ color: on ? SIZE_WORD[id] : 'var(--color-muted)' }}
+                  >{on ? '✓' : '›'}</span>
+                </button>
+              );
+            })}
           </div>
+        </section>
+      ))}
+    </div>
   );
 }
 
