@@ -293,7 +293,12 @@ export function pagesOf(sections: Layout[]): Leaf[] {
 // the right.
 export function backSideOf(sections: Layout[], at: number, nth: number, duplex: boolean): boolean {
   const sec = sections[at];
-  if (!duplex || !sec?.single || sec.fold > 1) return false;
+  if (!duplex || !sec || sec.fold > 1) return false;
+  // A run of single pages starts on a fresh front and alternates from there,
+  // so its second, fourth... sheet is a back and binds on the other edge, as
+  // it is printed. Drawn with every page bound on the left, the editor showed
+  // November with its holes where October's were; the paper had them right.
+  if (!sec.single) return !sec.spread && nth % 2 === 1;
   const i = pagesOf(sections).findIndex(l => l.at === at && l.nth === nth);
   return i >= 0 && i % 2 === 1;
 }

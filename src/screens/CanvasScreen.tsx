@@ -127,7 +127,10 @@ export function CanvasScreen({
   );
   const setLayout = (fn: (l: Layout) => Layout) => setBook(b => ({
     ...b,
-    sections: b.sections.map((sec, i) => (i === at ? fn(sec) : sec)),
+    // Which side of the paper a page is on comes from where it sits, worked
+    // out above; it is never stored, or a page drawn as a back would carry
+    // that into the section and turn every other page round with it.
+    sections: b.sections.map((sec, i) => (i === at ? { ...fn(sec), onBack: undefined } : sec)),
   }));
   const size = SIZES[layout.size];
   const geo = useMemo(() => buildGeometry(layout, size), [layout, size]);
@@ -1124,7 +1127,7 @@ export function CanvasScreen({
 
       {!wide && (
         <Filmstrip
-          sections={book.sections} at={at} nth={nth} size={size}
+          sections={book.sections} at={at} nth={nth} size={size} duplex={print.duplex}
           onGo={(i, k) => goTo(i, k)}
           onAddCover={canCover ? addCover : undefined}
           onAddBack={canBack ? addBackCover : undefined}

@@ -689,5 +689,31 @@ check(
   `混ざった束でも、数えた紙と出てくる紙が同じ（${note} → PDF ${mixed.getPageCount()}ページ＝両面）`,
 );
 
+// One-page sheets printed on both sides: every second sheet is the back of the
+// one before, so its holes are on the other edge -- on the paper, and so on
+// the screen. The editor used to draw every page bound on the left.
+await page.setViewportSize({ width: 390, height: 844 });
+await page.goto(BASE);
+await page.locator('.sizerow', { hasText: '80×128mm' }).click(); if (await page.locator('.sizego').count()) await page.locator('.sizego').click();
+await page.locator('.card', { hasText: '片面' }).click();
+await page.getByRole('button', { name: 'この構成で作る' }).click();
+await page.locator('.page').first().waitFor();
+const ringSide = () => page.locator('.page').first().evaluate(pg => {
+  const r = pg.getBoundingClientRect();
+  const c = pg.querySelector('circle')?.getBoundingClientRect();
+  return c ? (c.x + c.width / 2 < r.x + r.width / 2 ? '左' : '右') : 'なし';
+});
+{
+  const t = page.getByRole('tab', { name: 'パーツ' }); if (await t.count()) await t.click();
+  await page.locator('.stamp', { hasText: 'マンスリー' }).click();
+  await page.locator('.page').first().click();
+  await page.waitForTimeout(300);
+  const one = await ringSide();
+  await page.locator('.filmtile').nth(1).click();
+  await page.waitForTimeout(300);
+  const two = await ringSide();
+  check(one === '左' && two === '右', `片面を両面で刷るとき、2ページ目は穴が反対側（1ページ目 ${one}・2ページ目 ${two}）`);
+}
+
 await browser.close();
 if (bad) process.exitCode = 1;

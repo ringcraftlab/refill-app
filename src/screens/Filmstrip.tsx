@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import type { Layout, SizeSpec } from '../types';
 import { hasDatedPart, sheetAt, sheetCount, sheetLabel } from '../lib/render/pages';
 import { PRESS } from '../ui/Button';
-import { isPlaceholder, pagesOf, sectionLabel } from '../app/book';
+import { backSideOf, isPlaceholder, pagesOf, sectionLabel } from '../app/book';
 import { Thumb } from '../app/bits';
 
 // The book on a phone, one picture per sheet, in the order it is bound: what
@@ -10,11 +10,14 @@ import { Thumb } from '../app/bits';
 // Between two runs there is a ＋ to put something in; holding a picture asks
 // what to do with the run it belongs to (move it, take it out). A run is not
 // split by a ＋ in its middle -- there is no such thing as half a run yet.
-export function Filmstrip({ sections, at, nth, size, onGo, onAddCover, onAddBack, onInsert, onHold }: {
+export function Filmstrip({ sections, at, nth, size, duplex, onGo, onAddCover, onAddBack, onInsert, onHold }: {
   sections: Layout[];
   at: number;
   nth: number;
   size: SizeSpec;
+  // Which sheets are printed on a back, so their pictures bind on the edge
+  // the paper will.
+  duplex: boolean;
   onGo: (at: number, nth: number) => void;
   // Shown only when there is room for one: a book of spreads leaves page 1
   // alone on the right and the back of its last sheet empty.
@@ -85,7 +88,7 @@ export function Filmstrip({ sections, at, nth, size, onGo, onAddCover, onAddBack
     if (isPlaceholder(sec) && !sec.cover && !sec.backCover && sections.length > 1) return;
     const n = sheetCount(sec);
     for (let k = 0; k < n; k++) {
-      const sheet = sheetAt(sec, k);
+      const sheet = { ...sheetAt(sec, k), onBack: backSideOf(sections, i, k, duplex) };
       const sides = sec.spread && sec.fold <= 1 && !sec.cover && !sec.backCover ? [0, 1] : [0];
       const on = at === i && nth === k;
       items.push(
