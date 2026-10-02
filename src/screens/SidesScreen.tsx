@@ -1,8 +1,13 @@
-import type { FoldCount, FoldGrain, RefillSize } from '../types';
+import { useMemo } from 'react';
+import type { FoldCount, FoldGrain, Layout, RefillSize } from '../types';
 import { SIZES } from '../lib/sizes';
 import { FOLD_PANELS, foldGrainsOf, foldPlan } from '../lib/fold';
 import type { FoldPlan } from '../lib/fold';
 import { Button } from '../ui/Button';
+import { placeParts } from '../lib/layout';
+import { buildPages } from '../lib/render/pages';
+import { PageSvg } from '../lib/render/svg';
+import { createLayout } from '../app/book';
 import { Choice } from '../app/bits';
 import { FoldIcon, FormGlyph2, SheetGlyph } from '../app/icons';
 import { SIZE_COLOR, SIZE_WORD, SIZE_NAME, sizeMm, sizeHoles, cardSkin } from '../app/look';
@@ -135,6 +140,31 @@ export function FormCards({ size, spread, fold, foldGrain, wide, onPick }: {
   );
 }
 
+// The form picked, as paper: this size in this shape with a monthly on it,
+// drawn by the code that prints it. It sits under the list, so it never pushes
+// a choice out of sight, and the button stays where it is at the bottom.
+function FormSample({ size, spread, fold, foldGrain, title }: {
+  size: RefillSize; spread: boolean; fold: FoldCount; foldGrain?: FoldGrain; title: string;
+}) {
+  const spec = SIZES[size];
+  const pages = useMemo(() => {
+    const base: Layout = { ...createLayout(), size, spread, fold, foldGrain };
+    return buildPages(placeParts(base, spec, ['monthly'], null)?.layout ?? base, spec);
+  }, [size, spread, fold, foldGrain, spec]);
+  const down = fold > 1 && foldGrain === 'along';
+  const w = down ? Math.max(...pages.map(p => p.widthMm)) : pages.reduce((a, p) => a + p.widthMm, 0);
+  const h = down ? pages.reduce((a, p) => a + p.heightMm, 0) : Math.max(...pages.map(p => p.heightMm));
+  const scale = Math.min(300 / w, 150 / h);
+  return (
+    <figure className="formsample m-0 flex shrink-0 flex-col items-center gap-2 rounded-xl bg-white px-3 pb-3 pt-4 shadow-[0_0_0_1px_var(--color-line)]">
+      <span className={`flex gap-[2px] drop-shadow-[0_1px_2px_rgba(0,0,0,0.15)] ${down ? 'flex-col' : ''}`}>
+        {pages.map((p, i) => <PageSvg key={i} page={p} scale={scale} />)}
+      </span>
+      <figcaption className="text-[12px] text-muted">{`${SIZE_NAME[size]}の${title}に、マンスリーを置いた見本`}</figcaption>
+    </figure>
+  );
+}
+
 // The name of a form, as the bar under the choices says it.
 export function formTitle(size: RefillSize, spread: boolean, fold: FoldCount, foldGrain?: FoldGrain) {
   if (fold <= 1) return spread ? '見開き（2ページ）' : '片面（1ページ）';
@@ -205,6 +235,7 @@ export function SidesScreen({ size, spread, fold, foldGrain, onPick, onBack, onC
         size={size} spread={spread} fold={fold} foldGrain={foldGrain}
         wide={wide} onPick={onPick}
       />
+      <FormSample size={size} spread={spread} fold={fold} foldGrain={foldGrain} title={formTitle(size, spread, fold, foldGrain)} />
       {/* The note that was here said three things about a fold, and the
           drawing now says two of them better: the rings are on the head panel
           only because that is where they are drawn, and what it comes to when
