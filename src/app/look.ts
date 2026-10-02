@@ -20,8 +20,8 @@ export const BACKGROUND_LABEL: Record<BackgroundKind, string> = {
 // first choice harder than it is. Rows inside a group are pairs, and a size
 // with no partner leaves the rest of its row empty.
 export const SIZE_GROUPS: { title: string; rows: RefillSize[][] }[] = [
-  { title: 'よく使われるサイズ', rows: [['M5', 'M6'], ['BIBLE', 'A5']] },
-  { title: 'その他サイズ', rows: [['MINI3', 'CARD3'], ['M5SQ', 'NARROW'], ['A5SLIM']] },
+  { title: '定番サイズ', rows: [['M5', 'M6'], ['BIBLE', 'A5']] },
+  { title: 'そのほかのサイズ', rows: [['MINI3', 'CARD3'], ['M5SQ', 'NARROW'], ['A5SLIM']] },
 ];
 
 // Pixels per millimetre. One number for all nine, which is the whole trick:
