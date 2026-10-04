@@ -48,7 +48,7 @@ await page.locator('.stepper button').filter({ hasText: '＋' }).first().click()
 console.log('sheet says:', await page.locator('.print-summary').textContent());
 
 const dl = page.waitForEvent('download');
-await page.getByRole('button', { name: '書き出す', exact: true }).click();
+await page.getByRole('button', { name: '書き出す' }).click();
 const file = `${OUT}/imposed.pdf`;
 await (await dl).saveAs(file);
 
@@ -72,7 +72,7 @@ if (await papers.count()) {
   await page.waitForTimeout(300);
   console.log('A3 says:', (await page.locator('.print-summary').textContent()).trim());
   const dl3 = page.waitForEvent('download');
-  await page.getByRole('button', { name: '書き出す', exact: true }).click();
+  await page.getByRole('button', { name: '書き出す' }).click();
   const a3 = `${OUT}/a3.pdf`;
   await (await dl3).saveAs(a3);
   const doc3 = await PDFDocument.load(await readFile(a3));
@@ -81,29 +81,6 @@ if (await papers.count()) {
   console.log(`  A3 pdf: ${doc3.getPageCount()} pages, ${mm[1]}x${mm[0]} mm`);
   if (mm[0] !== 297 || mm[1] !== 420) {
     console.log('  NG A3を選んだのにA3で出ていない');
-    process.exitCode = 1;
-  }
-}
-
-// The frame for decorating elsewhere (Canva): one PDF page per page of the
-// book, each the refill's own size, whatever the paper is set to. A page that
-// came out the paper's size would land in Canva as a sheet of eight refills,
-// and Canva marks its outer 5mm as the danger zone.
-await page.getByRole('button', { name: 'PDF出力プレビュー' }).click();
-await page.locator('.preview').waitFor();
-{
-  const dlf = page.waitForEvent('download');
-  await page.locator('.frameexport').click();
-  const frames = `${OUT}/frames.pdf`;
-  await (await dlf).saveAs(frames);
-  const docf = await PDFDocument.load(await readFile(frames));
-  const sizes = new Set(docf.getPages().map(p => {
-    const { width, height } = p.getSize();
-    return `${Math.round(width * MM)}x${Math.round(height * MM)}`;
-  }));
-  console.log(`  frames pdf: ${docf.getPageCount()} pages, ${[...sizes].join(' ')} mm`);
-  if (sizes.size !== 1 || [...sizes][0].includes('297') || [...sizes][0].includes('210x')) {
-    console.log('  NG 枠だけのPDFがリフィル1枚の大きさで揃っていない');
     process.exitCode = 1;
   }
 }

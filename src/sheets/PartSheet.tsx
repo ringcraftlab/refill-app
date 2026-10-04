@@ -35,7 +35,7 @@ export const startOn = (l: Layout, d: Date): Layout => ({
 
 export function PartSheet({
   target, book, layout, setLayout, inline, onClose, onRemove, onRemoveSpanning, onLoad, onSave,
-  size, onExport, onExportFrames, print, setPrint, onAddSection, setBook, say, nth, onImport,
+  size, onExport, print, setPrint, onAddSection, setBook, say, nth, onImport,
 }: {
   onImport: () => void;
   target: Exclude<SheetTarget, null>;
@@ -55,7 +55,6 @@ export function PartSheet({
   onSave: (name: string) => void;
   size: SizeSpec;
   onExport: (opts: PrintOptions) => void;
-  onExportFrames: (opts: PrintOptions) => void;
   print: PrintOptions;
   setPrint: (fn: (p: PrintOptions) => PrintOptions) => void;
   // One more section, on the end of the book.
@@ -399,16 +398,6 @@ export function PartSheet({
             )}
 
             <Button variant="cta" onClick={() => onExport(print)}>書き出す</Button>
-            {/* For decorating in Canva and the like: the frame alone, a page
-                to a refill. Quiet, because printing is what this sheet is for. */}
-            <div className="flex flex-col gap-1">
-              <Button variant="quiet" className="frameexport" onClick={() => onExportFrames(print)}>
-                枠だけ書き出す（Canvaなどで飾る用）
-              </Button>
-              <p className="m-0 text-[13px] leading-snug text-muted">
-                1ページにリフィル1枚。穴の目印と切り取り線は入れません。とじ穴の側には絵を置かないでください
-              </p>
-            </div>
           </>
         )}
 

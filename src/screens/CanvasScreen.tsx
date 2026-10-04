@@ -8,7 +8,7 @@ import type { Divider, DropPoint, Geometry, PageGeometry } from '../lib/layout';
 import { paletteOf } from '../lib/palette';
 import { nextMonthCell } from '../lib/parts';
 import { runDates } from '../lib/dates';
-import { buildFramePages, buildPages, buildPrintSheets, datedSlotOf, hasDatedPart, isDayPaced, isDatedKind, runEnd, sheetAt, sheetCount } from '../lib/render/pages';
+import { buildPages, buildPrintSheets, datedSlotOf, hasDatedPart, isDayPaced, isDatedKind, runEnd, sheetAt, sheetCount } from '../lib/render/pages';
 import type { PrintOptions } from '../lib/render/pages';
 import { PAPERS } from '../lib/render/impose';
 import { PageSvg } from '../lib/render/svg';
@@ -677,16 +677,6 @@ export function CanvasScreen({
       : `${sheets.length}枚を書き出しました`);
   };
 
-  // The frame for decorating somewhere else: every page of the book at its
-  // own size, without what printing adds.
-  const onExportFrames = async (opts: PrintOptions) => {
-    const [first, ...rest] = book.sections;
-    const pages = buildFramePages(first, size, opts, rest);
-    downloadPdf(await sheetsToPdf(pages, book.name), `${book.name || 'refill'}-枠.pdf`);
-    setSheet(null);
-    say(`枠だけのPDFを${pages.length}ページ書き出しました`);
-  };
-
   // A region crossing the gutter shows up on both pages, so one region can be
   // more than one box on screen.
   const regionBoxes = (g: Geometry, slot: number): Box[] => {
@@ -868,7 +858,6 @@ export function CanvasScreen({
       }}
       size={size}
       onExport={onExport}
-      onExportFrames={onExportFrames}
       print={print}
       setPrint={setPrint}
       // A section goes on the end of the book, which is where the empty
