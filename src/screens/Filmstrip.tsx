@@ -39,7 +39,7 @@ export function Filmstrip({ sections, at, nth, size, duplex, onGo, onAddCover, o
     if (sec.cover) return '表紙';
     if (sec.backCover) return '裏表紙';
     if (!hasDatedPart(sec)) return n === 0 ? sectionLabel(sec) : `${n + 1}枚目`;
-    const s = sheetLabel(sec, n).replace(/^\d+年/, '');
+    const s = sheetLabel(sec, n).replace(/\d+年/g, '');
     const week = s.match(/^(\d+)月(\d+)日の週$/);
     return week ? `${week[1]}/${week[2]}〜` : s;
   };

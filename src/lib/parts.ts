@@ -254,6 +254,71 @@ function drawMiniMonth(cell: Rect, layout: Layout, step: number): Primitive[] {
   return out;
 }
 
+// Figures smaller than this cannot be read off a home print. The smallest
+// year calendar the tray offers is built to clear it; a calendar squeezed
+// below it still draws, and says so through the cautions.
+export const YEAR_FIGURE_MIN_MM = 1.6;
+const PT_PER_MM = 1 / 0.3528;
+
+// The months a year calendar is laid out in, as square a grid as the area
+// allows: each month is a label, a row of weekday initials and six weeks, and
+// the cell is whatever lets the most of that fit.
+export function yearCalGrid(area: Rect, months: number) {
+  const { left, right, top, bottom } = inset(area);
+  const w = right - left, h = bottom - top - YEAR_TITLE_H;
+  let best = { cols: 1, rows: months, cell: 0 };
+  for (let cols = 1; cols <= months; cols++) {
+    const rows = Math.ceil(months / cols);
+    const cell = Math.min((w - YEAR_GAP * (cols - 1)) / cols / 7, (h - YEAR_GAP * (rows - 1)) / rows / 8.4);
+    if (cell > best.cell) best = { cols, rows, cell };
+  }
+  return { ...best, left, top: top + YEAR_TITLE_H, figureMm: Math.min(best.cell * 0.62, 3.2) };
+}
+const YEAR_TITLE_H = 4;
+const YEAR_GAP = 2;
+
+// A run of small months: the year at a glance, the way the front of a printed
+// planner carries one. Months are counted on from the sheet's own month, so a
+// second calendar on the sheet picks up where the first stopped.
+function drawYearCal(area: Rect, layout: Layout, range?: [number, number]): Primitive[] {
+  const pal = paletteOf(layout);
+  const months = Math.max(1, layout.yearMonths ?? 6);
+  const [from, to] = range ?? [0, months];
+  const g = yearCalGrid(area, to - from);
+  const cell = g.cell;
+  const fig = g.figureMm * PT_PER_MM;
+  const first = addMonths(layout.year, layout.month, from);
+  const last = addMonths(layout.year, layout.month, to - 1);
+  const out: Primitive[] = [{
+    type: 'text', x: g.left, y: g.top - 1.2,
+    text: last.year === first.year ? `${first.year}` : `${first.year}–${last.year}`,
+    sizePt: 6, color: pal.inkSoft, align: 'left',
+  }];
+  const days = orderedWeekdays(layout.weekStart);
+  for (let i = 0; i < to - from; i++) {
+    const { year, month } = addMonths(layout.year, layout.month, from + i);
+    const ox = g.left + (i % g.cols) * (cell * 7 + YEAR_GAP);
+    const oy = g.top + Math.floor(i / g.cols) * (cell * 8.4 + YEAR_GAP);
+    out.push({
+      type: 'text', x: ox, y: oy + cell * 1.05, text: monthLabelText(month, layout.words),
+      sizePt: Math.min(fig * 1.25, 9), color: pal.ink, align: 'left',
+    });
+    days.forEach((dow, c) => out.push({
+      type: 'text', x: ox + cell * (c + 0.5), y: oy + cell * 2.1,
+      text: weekdayLabel(dow, layout.words)[0], sizePt: fig * 0.75, color: dowColor(dow, pal), align: 'center',
+    }));
+    out.push({ type: 'line', x1: ox, y1: oy + cell * 2.4, x2: ox + cell * 7, y2: oy + cell * 2.4, stroke: pal.ruleLight, strokeMm: 0.15 });
+    monthGrid(year, month, layout.weekStart).forEach((week, r) => week.forEach((d, c) => {
+      if (!d) return;
+      out.push({
+        type: 'text', x: ox + cell * (c + 0.5), y: oy + cell * (3.25 + r),
+        text: String(d.getDate()), sizePt: fig, color: dateColor(d, pal), align: 'center',
+      });
+    }));
+  }
+  return out;
+}
+
 // Where that mini calendar sits, so the editor can offer to clear it.
 export function nextMonthCell(area: Rect, layout: Layout): Rect | null {
   // The mini calendar lives in the index column, which only a spread whose
@@ -879,6 +944,7 @@ export function drawPart(kind: PartKind, area: Rect, layout: Layout): Primitive[
   switch (kind) {
     case 'monthly':
       return drawMonthly(area, layout, { cols: [0, 7], rows: [0, weekCount(layout)], monthLabel: 'show' });
+    case 'yearcal': return drawYearCal(area, layout);
     case 'daylist': return drawDayList(area, layout);
     case 'todo': return drawTodo(area, pal);
     case 'goal': return drawGoal(area, pal);
@@ -975,6 +1041,16 @@ export function drawPartAcross(
         cols: [cut, 7], rows: [0, rows], monthLabel: index ? 'none' : 'reserve',
       }),
     ];
+  }
+
+  // Whole months to each page, shared by the room each has: a month cut at
+  // the gutter is two halves of a calendar nobody can read.
+  if (kind === 'yearcal') {
+    const months = Math.max(1, layout.yearMonths ?? 6);
+    if (months < 2) return drawPart(kind, wider, layout);
+    const [aExt, bExt] = stacked ? [a.h, b.h] : [a.w, b.w];
+    const cut = Math.max(1, Math.min(months - 1, Math.round(months * aExt / (aExt + bExt))));
+    return [...drawYearCal(a, layout, [0, cut]), ...drawYearCal(b, layout, [cut, months])];
   }
 
   if (kind === 'daylist') {

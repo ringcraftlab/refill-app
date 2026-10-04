@@ -579,6 +579,15 @@ export function PartSheet({
           </>
         )}
 
+        {kind === 'yearcal' && (
+          <Choice
+            label="1つに入れる月数"
+            options={[12, 6, 4, 3, 2].map(n => ({ v: n, label: `${n}か月` }))}
+            value={layout.yearMonths ?? 6}
+            onPick={v => setLayout(l => ({ ...l, yearMonths: v as number }))}
+          />
+        )}
+
         {kind === 'habit' && (
           <Field label="習慣の数">
             <Stepper

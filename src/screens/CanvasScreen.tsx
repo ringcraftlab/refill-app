@@ -6,7 +6,7 @@ import { SIZES } from '../lib/sizes';
 import { buildGeometry, foldMaxParts, foldOf, MAX_RATIO, MIN_RATIO, eachOf, photosOf, placeParts as planPlacement, regionAt, removeFromFold, ringsOnTop, someEach } from '../lib/layout';
 import type { Divider, DropPoint, Geometry, PageGeometry } from '../lib/layout';
 import { paletteOf } from '../lib/palette';
-import { nextMonthCell } from '../lib/parts';
+import { nextMonthCell, yearCalGrid, YEAR_FIGURE_MIN_MM } from '../lib/parts';
 import { runDates } from '../lib/dates';
 import { buildPages, buildPrintSheets, datedSlotOf, hasDatedPart, isDayPaced, isDatedKind, runEnd, sheetAt, sheetCount } from '../lib/render/pages';
 import type { PrintOptions } from '../lib/render/pages';
@@ -37,6 +37,7 @@ export type TrayGroup = keyof typeof TRAY_GROUP;
 
 export const TRAY: { kind: PartKind; label: string; note: string; group: TrayGroup }[] = [
   { kind: 'monthly', label: 'マンスリー', note: '1ヶ月の暦', group: 'dated' },
+  { kind: 'yearcal', label: '年間', note: '月を並べる', group: 'dated' },
   { kind: 'daylist', label: '日付リスト', note: '1日1行', group: 'dated' },
   { kind: 'weekvert', label: 'バーチカル', note: '時間の目盛り', group: 'dated' },
   { kind: 'weekhoriz', label: 'ウィークリー', note: '1週間を7行', group: 'dated' },
@@ -930,7 +931,13 @@ export function CanvasScreen({
   // the paper afterwards.
   const emptyRuns = book.sections.filter(sec => !sec.cover && !sec.backCover && !sec.imported
     && sec.surface.placed.length === 0 && !sec.spanning && !sec.background);
+  // A year calendar squeezed until its figures cannot be read off a home
+  // print: said here rather than refused, so the months can be cut down or
+  // the part given more room.
+  const smallYear = layout.surface.placed.some((k, i) => k === 'yearcal' && geo.surface.regions[i]
+    && yearCalGrid(geo.surface.regions[i], Math.max(1, layout.yearMonths ?? 6)).figureMm < YEAR_FIGURE_MIN_MM);
   const cautions: string[] = [
+    ...(smallYear ? ['年間カレンダーの日付が小さすぎて読めません。1つに入れる月数を減らすか、広さを足してください'] : []),
     ...(emptyRuns.length ? [`何も置いていないページがあります（${emptyRuns.map(sectionLabel).join('、')}）。白紙のまま刷られます`] : []),
     ...(print.impose && job.spare > 0
       ? [`最後の${PAPERS[print.paper].label}に、あと${job.spare}${job.unit}ぶん空きがあります。メモなどを足すと紙が無駄になりません`] : []),

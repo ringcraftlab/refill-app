@@ -715,5 +715,30 @@ const ringSide = () => page.locator('.page').first().evaluate(pg => {
   check(one === '左' && two === '右', `片面を両面で刷るとき、2ページ目は穴が反対側（1ページ目 ${one}・2ページ目 ${two}）`);
 }
 
+// A year calendar holds several months, so the run steps by all of them: six
+// to a part on a single page is a year in two sheets, the second picking up
+// where the first stopped -- not twelve sheets of October to March.
+await page.setViewportSize({ width: 390, height: 844 });
+await page.goto(BASE);
+await page.locator('.sizerow', { hasText: '80×128mm' }).click(); if (await page.locator('.sizego').count()) await page.locator('.sizego').click();
+await page.locator('.card', { hasText: '片面' }).click();
+await page.getByRole('button', { name: 'この構成で作る' }).click();
+await page.locator('.page').first().waitFor();
+{
+  const t = page.getByRole('tab', { name: 'パーツ' }); if (await t.count()) await t.click();
+  await page.locator('.stamp', { hasText: '年間' }).click();
+  await page.locator('.page').first().click();
+  await page.waitForTimeout(300);
+  const names = (await page.locator('.filmtile > span:last-child').allInnerTexts()).map(s => s.trim());
+  // The months are the current ones, so the check is on how they step.
+  const m = names.map(n => (n.match(/^(\d+)月〜(\d+)月$/) ?? []).slice(1).map(Number));
+  const steps = m.length === 2 && m.every(x => x.length === 2)
+    && m[1][0] === (m[0][0] + 6 - 1) % 12 + 1 && m[0][1] === (m[0][0] + 5 - 1) % 12 + 1;
+  check(
+    steps,
+    `年間カレンダー（1つに6か月）は2枚で1年（${names.join('・')}）`,
+  );
+}
+
 await browser.close();
 if (bad) process.exitCode = 1;

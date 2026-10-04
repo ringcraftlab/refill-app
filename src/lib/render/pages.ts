@@ -98,13 +98,20 @@ function trimEdge(pg: PageGeometry): Primitive[] {
 const bandMonths = (layout: Layout, kind: PartKind): number =>
   (kind === 'monthly' && layout.spanning ? 1 : 0);
 
+// How many months one part of this kind shows. A year calendar holds several,
+// so the next one on the sheet starts that many months on, and the run steps
+// by all of them: a spread of two six-month calendars is a year.
+export const partMonths = (layout: Layout, kind: PartKind): number =>
+  (kind === 'yearcal' ? Math.max(1, layout.yearMonths ?? 6) : 1);
+
 // Two calendars on one sheet are two months, not the same month twice. The
 // count is taken within the kind, which is the whole rule: a calendar facing a
 // day list is the standard printed spread and both show September, while a
 // calendar facing a calendar is September and October.
 const monthOrdinal = (layout: Layout, i: number): number => {
   const { placed } = layout.surface;
-  return bandMonths(layout, placed[i]) + placed.slice(0, i).filter(k => k === placed[i]).length;
+  return bandMonths(layout, placed[i])
+    + placed.slice(0, i).filter(k => k === placed[i]).length * partMonths(layout, placed[i]);
 };
 
 const monthFor = (layout: Layout, i: number): Layout => {
@@ -128,7 +135,8 @@ const slotLayout = (layout: Layout, i: number): Layout => {
 // printed twice.
 export const monthsPerSheet = (layout: Layout): number => Math.max(
   1,
-  ...MONTH_PACED.map(k => bandMonths(layout, k) + layout.surface.placed.filter(p => p === k).length),
+  ...MONTH_PACED.map(k => bandMonths(layout, k)
+    + layout.surface.placed.filter(p => p === k).length * partMonths(layout, k)),
 );
 
 // A region that crosses the gutter covers two sheets. The part gets a say in
@@ -390,7 +398,7 @@ const DAY_PACED: PartKind[] = ['weekvert', 'weekhoriz'];
 // which meant a refill of day lists, or of a habit tracker, printed one sheet
 // for a whole year -- the start month's thirty rows, whatever the range said,
 // and no range shown to say otherwise.
-export const MONTH_PACED: PartKind[] = ['monthly', 'daylist', 'gantt', 'habit'];
+export const MONTH_PACED: PartKind[] = ['monthly', 'yearcal', 'daylist', 'gantt', 'habit'];
 
 export const isDayPaced = (layout: Layout): boolean =>
   layout.surface.placed.some(k => DAY_PACED.includes(k));
@@ -474,7 +482,9 @@ export function sheetLabel(layout: Layout, nth: number): string {
   const per = monthsPerSheet(layout);
   if (per > 1) {
     const last = addMonths(sheet.year, sheet.month, per - 1);
-    return `${sheet.year}年${sheet.month}月・${last.month}月`;
+    return per === 2
+      ? `${sheet.year}年${sheet.month}月・${last.month}月`
+      : `${sheet.year}年${sheet.month}月〜${last.year === sheet.year ? '' : `${last.year}年`}${last.month}月`;
   }
   return `${sheet.year}年${sheet.month}月`;
 }

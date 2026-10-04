@@ -36,6 +36,13 @@ export function StampIcon({ kind }: { kind: PartKind }) {
       line(0.75, from + ((ICON_H - from) / n) * (i + 1), ICON_W - 0.75, from + ((ICON_H - from) / n) * (i + 1), 100 + i));
 
   if (kind === 'monthly') { cells.push(...cols(7), ...rows(4, 4), line(0.75, 4, ICON_W - 0.75, 4, 9)); }
+  // Six small months in two rows: a year is many calendars, not a big one.
+  if (kind === 'yearcal') {
+    for (let i = 0; i < 6; i++) {
+      const w = (ICON_W - 1.5 - 4 * 1.2) / 3, h = (ICON_H - 1.5 - 3 * 1.2) / 2;
+      cells.push(<rect key={`y${i}`} x={0.75 + 1.2 + (i % 3) * (w + 1.2)} y={0.75 + 1.2 + Math.floor(i / 3) * (h + 1.2)} width={w} height={h} rx={0.6} />);
+    }
+  }
   // A date gutter down the side, and a line to write on for each day.
   if (kind === 'daylist') { cells.push(line(6, 0.75, 6, ICON_H - 0.75, 0), ...rows(5)); }
   // Hours down the left, a day to each column, a header band on top.

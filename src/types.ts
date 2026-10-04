@@ -50,7 +50,7 @@ export interface Background {
 export type WeekStart = 0 | 1;
 
 export type PartKind =
-  | 'monthly' | 'daylist' | 'weekvert' | 'weekhoriz' | 'gantt'
+  | 'monthly' | 'yearcal' | 'daylist' | 'weekvert' | 'weekhoriz' | 'gantt'
   | 'habit' | 'todo' | 'goal' | 'budget' | 'grid' | 'lines' | 'memo' | 'photo'
   | 'swatch';
 
@@ -72,6 +72,10 @@ export const PART_FIT: Record<PartKind, PartFit> = {
   // Seven columns at about 6mm each. Micro 5 leaves 51mm on a single page,
   // which is the tightest real refill there is; below this the dates collide.
   monthly: { minWMm: 44, minHMm: 40, prefer: 'any' },
+  // Small months side by side. The smallest it is offered at is two months
+  // of 1.6mm figures; how many months it holds is the refill's setting
+  // (`yearMonths`), and the figures grow with the room.
+  yearcal: { minWMm: 40, minHMm: 40, prefer: 'any' },
   // Thirty-one rows down one column need the height, but a wider area folds
   // them into two or three columns instead -- the shapes a printed one-month
   // list comes in. Kept in step with dayListColumns().
@@ -305,6 +309,9 @@ export interface Layout {
   swatchNo?: boolean;
   showNextMonth: boolean;
   habitCount: number;
+  // How many months one year calendar holds: 12, 6, 4, 3 or 2. Omitted means
+  // 6, which every size can read. Two of them on a spread are a year.
+  yearMonths?: number;
   updatedAt: string;
   // The first day this sheet covers. Set while a dated run is being drawn and
   // never saved: a layout in the editor has none and shows the first sheet of
