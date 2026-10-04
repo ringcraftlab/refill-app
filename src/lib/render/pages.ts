@@ -721,6 +721,21 @@ export function buildPrintSheets(
   return fronts.flatMap((f, i) => (backs[i] ? [withNote(f), withNote(backs[i])] : [withNote(f)]));
 }
 
+// The book's pages one to a PDF page, each the size of the refill, with
+// nothing the printing adds: no punch guides, no cut lines, no note in the
+// corner, no filler on the faces nobody uses. This is the frame someone takes
+// into Canva to decorate -- the guides would be in the way there, and when the
+// decorated pages come back to be printed this app puts them on again, so
+// leaving them on would print them twice. The order and the side each page
+// binds on are the printed ones, so a page that comes back lands where it was.
+export function buildFramePages(
+  layout: Layout, size: SizeSpec, opts: PrintOptions, also: Layout[] = [],
+): SheetContent[] {
+  const sections = [layout, ...also.filter(l => sameSheet(l, layout, size))];
+  const { faces, owners } = chainFaces(sections, size, { ...opts, punchGuides: false });
+  return faces.filter((_, i) => owners[i] !== null).map(p => p.sheet);
+}
+
 // How the refills will sit on the paper, for telling the user before they
 // print: how many to a sheet, and how close to the paper's edge they come.
 // The count matters -- it is what decides which way the paper is turned -- so
